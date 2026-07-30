@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Checking {{ lang.name }} words{% endblock %}
+
+{% block content %}
+{% if not queue %}
+  <section class="section">
+    <div class="wrap narrow center">
+      <p class="eyebrow">{{ lang.name }}</p>
+      <h1 style="font-size:clamp(1.7rem,5.5vw,2.3rem)">Nothing waiting right now.</h1>
+      <p class="muted">
+        You have checked {{ done_total | thousands }} words. Your next list arrives
+        by email on your next chosen day.
+      </p>
+      <p style="margin-top:20px">
+        <a class="btn ghost" href="{{ url_for('main.champions') }}">See the champions</a>
+      </p>
+    </div>
+  </section>
+{% else %}
+<div class="eval-shell" id="eval-root"
+     data-config='{{ {
+       "remaining": remaining,
+       "doneTotal": done_total,
+       "special": lang.special,
+       "longpress": lang.longpress,
+       "submitUrl": url_for("main.submit", word_id=0),
+       "doneUrl": url_for("main.done"),
+       "resendUrl": url_for("main.resend")
+     } | tojson }}'>
+
+  <div class="eval-head">
+    <span class="pill">{{ lang.name }}</span>
+    <div class="track" role="progressbar" aria-label="Progress through today's words">
+      <i id="bar" style="width:0%"></i>
+    </div>
+    <span class="pill" id="count-left">{{ remaining }} words left</span>
+  </div>
+
+  {% if working_ahead %}
+    <p class="notice" style="margin-bottom:16px">
+      You are ahead of schedule — these words are not due yet. Carry on if you
+      have time; your emails still come on your chosen days.
+    </p>
+  {% endif %}
+
+  <div class="word-card" id="word-card">
+    <p class="eyebrow">English word</p>
+    <p class="the-word" id="the-word">{{ queue[0].phrase }}</p>
+    <p class="ask">How would you say this in {{ lang.name }}?</p>
+
+    <div class="options" id="options">
+      {# Rendered by shola.js; this copy is the no-JavaScript fallback. #}
+      <noscript>
+        {% for opt in queue[0].options %}
+          <form method="post" action="{{ url_for('main.submit', word_id=queue[0].word_id) }}">
+            <input type="hidden" name="choice" value="{{ opt.id }}">
+            <button class="option" type="submit">
+              <span class="mark" aria-hidden="true">✓</span>
+              <span>{{ opt.text }}</span>
+            </button>
+          </form>
+        {% endfor %}
+        <form method="post" action="{{ url_for('main.submit', word_id=queue[0].word_id) }}">
+          <input type="hidden" name="choice" value="custom">
+          <label class="label" for="ns-own" style="margin-top:12px">Or type your own</label>
+          <input type="text" id="ns-own" name="custom_text" placeholder="Your translation">
+          <p class="keyhint">Copy any letter you need: {{ lang.special | join(' ') }}</p>
+          <button class="btn small" type="submit">Save my translation</button>
+        </form>
+      </noscript>
+    </div>
+
+    <div class="eval-foot">
+      <button class="linkish" type="button" id="skip-btn">I am not sure — skip</button>
+      <span class="faint" style="font-size:.85rem">{{ done_total | thousands }} checked in total</span>
+    </div>
+  </div>
+
+  <p class="hint center" style="margin-top:18px">
+    Tap the wording you would actually use. If none of them are right, type your own.
+  </p>
+</div>
+
+<!-- Sheet for a volunteer's own wording. One choice only: opening this replaces
+     the three options rather than adding to them. -->
+<div class="sheet-back" id="sheet-back"></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+  <h3 id="sheet-title">Type your own translation</h3>
+  <p class="for-word">for “<span id="sheet-word"></span>”</p>
+
+  <input type="text" id="own-text" autocomplete="off" autocapitalize="none"
+         spellcheck="false" placeholder="How you would say it">
+
+  <div class="keystrip" id="keystrip"></div>
+  <p class="keyhint">Tap a letter to insert it. Hold a plain letter to reach its
+     {{ lang.name }} forms.</p>
+
+  <div style="display:flex; gap:10px; margin-top:18px">
+    <button class="btn ghost" type="button" id="sheet-cancel">Cancel</button>
+    <button class="btn" type="button" id="sheet-save" style="flex:1">Save and continue</button>
+  </div>
+</div>
+<div class="popkeys" id="popkeys"></div>
+
+<form id="fallback-form" method="post" action="" hidden>
+  <input type="hidden" name="choice" value="">
+  <input type="hidden" name="custom_text" value="">
+</form>
+
+<script id="queue-data" type="application/json">{{ queue | tojson }}</script>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+  {% if queue %}
+    <script src="{{ url_for('static', filename='js/shola.js') }}" defer></script>
+  {% endif %}
+{% endblock %}

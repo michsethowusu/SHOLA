@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Join SHOLA{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap narrow">
+    <p class="eyebrow">Sign up</p>
+    <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">Put your language in the record</h1>
+    <p class="muted">One form, then a few words a day by email. You can stop whenever you like.</p>
+
+    <form method="post" enctype="multipart/form-data" style="margin-top:32px" novalidate>
+      <div class="field">
+        <label for="name">Your name</label>
+        <p class="hint">This is the name other champions will see on the leaderboard.</p>
+        <input type="text" id="name" name="name" required autocomplete="name"
+               value="{{ form.name if form }}">
+      </div>
+
+      <div class="field">
+        <label for="email">Email</label>
+        <p class="hint">Your daily list of words comes here. Nothing else.</p>
+        <input type="email" id="email" name="email" required autocomplete="email"
+               value="{{ form.email if form }}">
+      </div>
+
+      <div class="field">
+        <span class="label">Which language do you speak best?</span>
+        <p class="hint">You will only ever be asked about this one.</p>
+        <div class="choice-grid">
+          {% set chosen = (form.language if form else request.args.get('language')) %}
+          {% for code, lang in LANGUAGES.items() %}
+            <label class="choice">
+              <input type="radio" name="language" value="{{ code }}" required
+                     {% if chosen == code %}checked{% endif %}>
+              <span class="t">{{ lang.name }}</span>
+              <span class="s">{{ lang.special | join(' ') }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="label">Which days are you usually free?</span>
+        <p class="hint">Pick as many as you like. Leave all unticked and we will
+           spread the words across the whole week.</p>
+        <div class="day-row">
+          {% set picked = (form.getlist('days') if form else []) %}
+          {% for i in range(7) %}
+            <label class="day">
+              <input type="checkbox" name="days" value="{{ i }}"
+                     {% if picked and (i|string) in picked %}checked{% endif %}>
+              {{ DAY_NAMES[i][:3] }}
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="label">Roughly what time suits you?</span>
+        <p class="hint">We send the email in that stretch of the day. No need to be exact.</p>
+        <div class="choice-grid">
+          {% for code, label in TIME_WINDOWS.items() %}
+            <label class="choice">
+              <input type="radio" name="time_window" value="{{ code }}"
+                     {% if (form.time_window if form else 'anytime') == code %}checked{% endif %}>
+              <span class="t">{{ label }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="photo">A photo of you (optional)</label>
+        <p class="hint">
+          Used for one thing only: your face on the SHOLA champions leaderboard,
+          next to your name and how many words you have checked. Skip it and we
+          show your initials instead.
+        </p>
+        <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp">
+        <label class="choice" style="margin-top:12px">
+          <input type="checkbox" name="photo_consent" value="1" checked>
+          <span class="t">Show my photo on the leaderboard</span>
+          <span class="s">Untick and your photo is not published.</span>
+        </label>
+      </div>
+
+      <button class="btn wide" type="submit">Join SHOLA</button>
+      <p class="hint center" style="margin-top:14px">
+        Already signed up? <a href="{{ url_for('main.resend') }}">Get a fresh link</a>.
+      </p>
+    </form>
+  </div>
+</section>
+{% endblock %}

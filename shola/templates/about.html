@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}What SHOLA is for{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap narrow">
+    <p class="eyebrow">Share Your Language</p>
+    <h1 style="font-size:clamp(1.9rem,6vw,2.7rem)">SHOLA means share your language.</h1>
+
+    <p class="lede">
+      Ghanaian languages are missing from the tools people use every day. Not
+      because nobody speaks them — because nobody has written down enough of them
+      in a form a machine can learn from.
+    </p>
+
+    <h2 style="margin-top:40px">The problem with machine translation</h2>
+    <p>
+      We asked a language model to translate {{ stats.words | thousands }} everyday
+      English nouns into Twi, Ewe, Ga and Dagbani, three ways each. It produced
+      something for every word. Plenty of it is good. Some of it is a word-for-word
+      calque no speaker would use, and some of it is simply wrong.
+    </p>
+    <p>
+      A machine cannot tell the difference. A speaker can, in about two seconds
+      per word. That is the entire idea behind SHOLA.
+    </p>
+
+    <h2 style="margin-top:40px">How a word becomes an answer</h2>
+    <div class="steps" style="margin-top:18px">
+      <div class="step">
+        <div>
+          <h3>Three guesses go out to speakers</h3>
+          <p>Each word is shown with the three machine translations for your language.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div>
+          <h3>You pick, skip, or correct</h3>
+          <p>Tap the wording you would use. If none fit, type your own — your
+             wording counts exactly as much as the machine's.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div>
+          <h3>The same word goes to other speakers</h3>
+          <p>Every word reaches one volunteer before any word reaches a second,
+             so coverage comes first and agreement builds after.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div>
+          <h3>Agreement decides</h3>
+          <p>When two or more speakers land on the same wording, that becomes the
+             recorded translation. If speakers disagree, the word stays open.</p>
+        </div>
+      </div>
+    </div>
+
+    <h2 style="margin-top:40px">The letters that matter</h2>
+    <p>
+      These four languages need characters an ordinary phone keyboard hides:
+    </p>
+    <div class="cards" style="margin-top:16px">
+      {% for code, lang in LANGUAGES.items() %}
+        <div class="card">
+          <div style="font-weight:600">{{ lang.name }}</div>
+          <div class="faint" style="font-size:.9rem">{{ lang.note }}</div>
+          <div class="lang-letters">{{ lang.special | join(' ') }}</div>
+        </div>
+      {% endfor %}
+    </div>
+    <p style="margin-top:16px" class="muted">
+      When you type your own translation, these are one tap away, and holding a
+      plain letter like <strong>e</strong> or <strong>o</strong> reaches its
+      variants — the way your phone's own keyboard behaves.
+    </p>
+
+    <h2 style="margin-top:40px">What we ask of you</h2>
+    <p>
+      A thousand words over a year, on the days you choose. That is a handful of
+      words per day. Miss a day and nothing is lost: the words come back in your
+      next email, spread over your remaining days so you still finish.
+    </p>
+
+    <h2 style="margin-top:40px">Your details</h2>
+    <p>
+      Your email is used to send your daily list, and for nothing else. Your name
+      and photo appear on the champions leaderboard alongside your count — that is
+      the only place they are shown, and the photo is optional.
+    </p>
+
+    <p style="margin-top:36px">
+      <a class="btn" href="{{ url_for('main.join') }}">Join SHOLA</a>
+    </p>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}SHOLA progress{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap">
+    <p class="eyebrow">Progress</p>
+    <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">Where the work stands</h1>
+
+    <div class="stat-strip" style="margin-top:26px">
+      <div class="stat">
+        <span class="n">{{ stats.words | thousands }}</span>
+        <span class="k">words in the list</span>
+      </div>
+      <div class="stat">
+        <span class="n">{{ stats.covered | thousands }}</span>
+        <span class="k">seen by a speaker</span>
+      </div>
+      <div class="stat">
+        <span class="n">{{ stats.verdicts | thousands }}</span>
+        <span class="k">verdicts recorded</span>
+      </div>
+      <div class="stat">
+        <span class="n">{{ stats.volunteers | thousands }}</span>
+        <span class="k">active champions</span>
+      </div>
+    </div>
+
+    <div style="margin-top:40px">
+      <h2>By language</h2>
+      <p class="muted">
+        A word needs two speakers to agree before its translation is recorded, so
+        “agreed” is always smaller than “words seen”.
+      </p>
+      <div class="scroll-x" style="margin-top:16px">
+        <table class="plain">
+          <thead>
+            <tr>
+              <th>Language</th>
+              <th>Verdicts</th>
+              <th>Words seen</th>
+              <th>Agreed (2+ votes)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for code, lang in LANGUAGES.items() %}
+              {% set d = per_language.get(code, {'verdicts': 0, 'words': 0, 'agreed': 0}) %}
+              <tr>
+                <td>
+                  <strong>{{ lang.name }}</strong>
+                  <span class="faint">{{ lang.note }}</span>
+                </td>
+                <td>{{ d.verdicts | thousands }}</td>
+                <td>{{ d.words | thousands }}</td>
+                <td>{{ d.agreed | thousands }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:36px">
+      <h3>Getting the data out</h3>
+      <p class="muted" style="margin-bottom:10px">
+        Agreed translations are available per language, counting only words with
+        at least two matching votes.
+      </p>
+      <p style="margin:0">
+        {% for code in LANGUAGES %}
+          <a href="{{ url_for('main.api_consensus', language=code) }}"><code>/api/consensus/{{ code }}</code></a>{% if not loop.last %} · {% endif %}
+        {% endfor %}
+      </p>
+    </div>
+  </div>
+</section>
+{% endblock %}

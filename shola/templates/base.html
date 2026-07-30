@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}SHOLA — Share Your Language{% endblock %}</title>
+<meta name="description" content="SHOLA is where Ghanaian speakers check machine translations of everyday words in Twi, Ewe, Ga and Dagbani — a few words a day.">
+<meta name="theme-color" content="#faf7f2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/shola.css') }}">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='25' x='4' font-size='24' font-family='sans-serif' font-weight='bold' fill='%23c0392b'>ɔ</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="wrap">
+    <a class="brand" href="{{ url_for('main.index') }}">
+      SH<span class="glyph">Ɔ</span>LA
+    </a>
+    <nav class="topnav">
+      <a href="{{ url_for('main.champions') }}" {% if request.endpoint == 'main.champions' %}class="here"{% endif %}>Champions</a>
+      <a href="{{ url_for('main.stats') }}" {% if request.endpoint == 'main.stats' %}class="here"{% endif %}>Progress</a>
+      <a href="{{ url_for('main.about') }}" {% if request.endpoint == 'main.about' %}class="here"{% endif %}>About</a>
+      {% if session.volunteer_id %}
+        <a href="{{ url_for('main.evaluate') }}" class="btn small">My words</a>
+      {% else %}
+        <a href="{{ url_for('main.join') }}" class="btn small">Join</a>
+      {% endif %}
+    </nav>
+  </div>
+</header>
+
+<main>
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="wrap narrow" style="padding-top:20px">
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% block content %}{% endblock %}
+</main>
+
+<footer class="site-foot">
+  <div class="wrap">
+    <span>SHOLA — Share Your Language</span>
+    <span class="faint">·</span>
+    <a href="{{ url_for('main.about') }}">What this is for</a>
+    <span class="faint">·</span>
+    <a href="{{ url_for('main.champions') }}">Champions</a>
+    <span class="faint">·</span>
+    <a href="{{ url_for('main.stats') }}">Progress</a>
+    <span class="faint">·</span>
+    <a href="{{ url_for('main.resend') }}">Lost your link?</a>
+    <span style="margin-left:auto" class="faint">Built with volunteers, for Ghanaian languages.</span>
+  </div>
+</footer>
+
+{% block scripts %}{% endblock %}
+</body>
+</html>

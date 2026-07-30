@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Get a fresh SHOLA link{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap narrow">
+    <p class="eyebrow">Sign in</p>
+    <h1 style="font-size:clamp(1.8rem,6vw,2.4rem)">Send me my link</h1>
+    <p class="muted">
+      SHOLA has no password. Give us the email you signed up with and today's list
+      lands in your inbox.
+    </p>
+
+    <form method="post" style="margin-top:26px">
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required autocomplete="email">
+      </div>
+      <button class="btn wide" type="submit">Email me my words</button>
+    </form>
+
+    <p class="hint center" style="margin-top:16px">
+      Not signed up yet? <a href="{{ url_for('main.join') }}">Join SHOLA</a>.
+    </p>
+  </div>
+</section>
+{% endblock %}

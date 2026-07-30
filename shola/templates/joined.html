@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Welcome to SHOLA{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap narrow center">
+    <p class="eyebrow">You are in</p>
+    <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">Akwaaba, {{ volunteer.name.split()[0] }}.</h1>
+    <p class="lede" style="margin:0 auto 8px">
+      {{ assigned | thousands }} {{ LANGUAGES[volunteer.language].name }} words are
+      now yours to check, spread across
+      {% if volunteer.available_days %}
+        {{ volunteer.day_numbers | length }}
+        {{ 'day' if volunteer.day_numbers | length == 1 else 'days' }} a week
+      {% else %}
+        every day of the week
+      {% endif %}
+      for the year ahead.
+    </p>
+
+    <div class="card" style="margin:28px 0; text-align:left">
+      <h3>What happens next</h3>
+      <p class="muted" style="margin-bottom:0">
+        Your first email arrives tomorrow
+        {% if volunteer.time_window != 'anytime' %}
+          in the {{ TIME_WINDOWS[volunteer.time_window] | lower }}{% endif %},
+        listing the words waiting for you. Miss a day and nothing is lost — those
+        words come back in the next email.
+      </p>
+    </div>
+
+    <a class="btn" href="{{ url_for('main.evaluate') }}">Check your first words now</a>
+    <p class="hint" style="margin-top:14px">No need to wait for the email.</p>
+  </div>
+</section>
+{% endblock %}

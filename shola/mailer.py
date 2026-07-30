@@ -1,0 +1,100 @@
+"""Daily email over Gmail SMTP.
+
+Gmail needs an app password (Google Account -> Security -> App passwords); the
+normal account password will be refused. Set SHOLA_SMTP_USER and
+SHOLA_SMTP_PASSWORD and nothing else is required.
+
+The email carries the actual words for the day, not just a link, because a
+volunteer should be able to see the work before deciding to open it.
+"""
+
+import smtplib
+import ssl
+from email.message import EmailMessage
+from email.utils import formataddr
+
+from flask import current_app, render_template
+from itsdangerous import URLSafeTimedSerializer
+
+MAX_WORDS_IN_EMAIL = 25      # longer lists get a "+N more" line instead
+
+
+def serializer():
+    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"],
+                                  salt="shola-daily-link")
+
+
+def make_token(volunteer):
+    return serializer().dumps({"v": volunteer.id})
+
+
+def read_token(token):
+    """Return the volunteer id, or None if the link is invalid or expired."""
+    max_age = current_app.config["LINK_MAX_AGE_DAYS"] * 86400
+    try:
+        data = serializer().loads(token, max_age=max_age)
+    except Exception:
+        return None
+    return data.get("v")
+
+
+def daily_link(volunteer):
+    """Absolute link to today's list.
+
+    Built by hand rather than with url_for: the daily send runs from the CLI
+    with no request context, where url_for needs SERVER_NAME and otherwise
+    raises. SITE_URL is the single source of truth for the public address.
+    """
+    base = current_app.config["SITE_URL"].rstrip("/")
+    return f"{base}/start/{make_token(volunteer)}"
+
+
+def build_daily_email(volunteer, words, overdue_count=0):
+    """Return (subject, text, html) for today's list."""
+    shown = words[:MAX_WORDS_IN_EMAIL]
+    more = max(0, len(words) - len(shown))
+    link = daily_link(volunteer)
+    first = volunteer.name.split()[0] if volunteer.name else "there"
+
+    n = len(words)
+    if overdue_count and overdue_count == n:
+        subject = f"{n} words waiting for you, {first}"
+    elif n == 1:
+        subject = f"One word needs your ear, {first}"
+    else:
+        subject = f"{n} words for you today, {first}"
+
+    ctx = {"volunteer": volunteer, "words": shown, "more": more,
+           "total": n, "link": link, "first": first,
+           "overdue_count": overdue_count,
+           "language_name": current_app.config["LANGUAGES"][
+               volunteer.language]["name"]}
+    text = render_template("email/daily.txt", **ctx)
+    html = render_template("email/daily.html", **ctx)
+    return subject, text, html
+
+
+def send(to_email, subject, text, html):
+    """Send one message. Raises on failure so the caller can count it."""
+    cfg = current_app.config
+    if not cfg["SMTP_USER"] or not cfg["SMTP_PASSWORD"]:
+        raise RuntimeError("SHOLA_SMTP_USER / SHOLA_SMTP_PASSWORD are not set")
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = formataddr((cfg["MAIL_FROM_NAME"], cfg["SMTP_USER"]))
+    msg["To"] = to_email
+    msg.set_content(text)
+    msg.add_alternative(html, subtype="html")
+
+    context = ssl.create_default_context()
+    if cfg["SMTP_PORT"] == 465:
+        with smtplib.SMTP_SSL(cfg["SMTP_HOST"], cfg["SMTP_PORT"],
+                              context=context, timeout=30) as s:
+            s.login(cfg["SMTP_USER"], cfg["SMTP_PASSWORD"])
+            s.send_message(msg)
+    else:
+        with smtplib.SMTP(cfg["SMTP_HOST"], cfg["SMTP_PORT"], timeout=30) as s:
+            s.starttls(context=context)
+            s.login(cfg["SMTP_USER"], cfg["SMTP_PASSWORD"])
+            s.send_message(msg)

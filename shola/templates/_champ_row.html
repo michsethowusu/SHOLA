@@ -1,0 +1,15 @@
+{# One leaderboard row. Expects `volunteer`, `count` and optionally `loop`. #}
+<div class="champ {% if loop is defined and loop.first and count > 0 %}top1{% endif %}">
+  <div class="rank">{{ loop.index if loop is defined else '—' }}</div>
+  {% if volunteer.photo and volunteer.photo_consent %}
+    <img class="face" src="{{ url_for('main.photo', filename=volunteer.photo) }}"
+         alt="{{ volunteer.name }}" width="52" height="52" loading="lazy">
+  {% else %}
+    <div class="face" aria-hidden="true">{{ volunteer.initials }}</div>
+  {% endif %}
+  <div>
+    <div class="who">{{ volunteer.name }}</div>
+    <div class="lang">{{ LANGUAGES[volunteer.language].name }}</div>
+  </div>
+  <div class="n">{{ count | thousands }}</div>
+</div>

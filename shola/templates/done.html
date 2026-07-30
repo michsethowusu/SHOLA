@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}Done for today{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap narrow center">
+    <div class="glyph-wall" style="grid-template-columns:repeat(4,1fr); max-width:280px; margin:0 auto 28px" aria-hidden="true">
+      <div class="glyph-tile lit">ɛ</div>
+      <div class="glyph-tile">ɔ</div>
+      <div class="glyph-tile">ŋ</div>
+      <div class="glyph-tile lit">ɣ</div>
+    </div>
+
+    <p class="eyebrow">Today is clear</p>
+    <h1 style="font-size:clamp(1.8rem,6vw,2.5rem)">That is the list finished.</h1>
+    <p class="lede" style="margin:0 auto">
+      {{ done_total | thousands }} of your {{ target | thousands }} words are
+      checked. The next list comes by email on your next chosen day.
+    </p>
+
+    <div class="stat-strip" style="margin-top:32px; text-align:left">
+      <div class="stat">
+        <span class="n">{{ done_total | thousands }}</span>
+        <span class="k">words you have checked</span>
+      </div>
+      <div class="stat">
+        <span class="n">{{ (target - done_total) | thousands if target > done_total else 0 }}</span>
+        <span class="k">left in your thousand</span>
+      </div>
+      <div class="stat">
+        <span class="n">{{ '%.0f' % (done_total / target * 100 if target else 0) }}%</span>
+        <span class="k">of the way there</span>
+      </div>
+    </div>
+
+    <p style="margin-top:30px">
+      <a class="btn ghost" href="{{ url_for('main.champions') }}">See where you rank</a>
+    </p>
+  </div>
+</section>
+{% endblock %}
