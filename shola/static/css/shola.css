@@ -169,6 +169,7 @@ body.focus .topbar { position: static; }
   letter-spacing: .16em;
   text-transform: uppercase;
   color: var(--ink-faint);
+  text-align: center;
 }
 
 /* -------------------------------------------------------------------- buttons */
