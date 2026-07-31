@@ -376,26 +376,27 @@ def announce_language(language, dry_run):
 
 @shola_cli.command("backup")
 @click.option("--out", default="instance/backups", show_default=True)
-@click.option("--keep", default=14, show_default=True,
-              help="how many previous backups to retain.")
-def backup(out, keep):
-    """Back up the database, and separately the part that cannot be rebuilt.
+@click.option("--keep-db", default=3, show_default=True,
+              help="full database copies to retain.")
+@click.option("--keep-people", default=60, show_default=True,
+              help="volunteer exports to retain. Cheap, so keep many.")
+@click.option("--keep-dirs", default=7, show_default=True,
+              help="archives of each backed-up directory to retain.")
+@click.option("--keep-config", default=30, show_default=True,
+              help="Coolify configuration exports to retain.")
+def backup(out, keep_db, keep_people, keep_dirs, keep_config):
+    """Back up the database, the volunteers, any mounted directories and the
+    deployment configuration.
 
-    Coolify's scheduled backups only cover the databases it manages, so a
-    SQLite file inside an application volume is not backed up by anything. This
-    writes two things:
-
-      * a consistent copy of the whole database, compressed
-      * volunteers and their answers as JSON
-
-    The JSON matters more than its size suggests. Every word and translation
-    can be re-imported from the published dataset in minutes, but a volunteer's
-    email, their chosen days and the answers they gave exist nowhere else. That
-    file is a few hundred kilobytes and is the only irreplaceable part.
+    Retention differs by how replaceable each thing is. The word list can be
+    re-imported from the published dataset in minutes, so only a few full
+    database copies are kept. A volunteer's email, chosen days and answers
+    exist nowhere else and weigh a few hundred kilobytes, so many are kept.
     """
     import gzip as _gzip
     import shutil
     import sqlite3
+    import tarfile
     from datetime import datetime as _dt
 
     from .models import Evaluation, Volunteer
@@ -408,7 +409,9 @@ def backup(out, keep):
     out_dir = os.path.abspath(out)
     os.makedirs(out_dir, exist_ok=True)
     stamp = _dt.utcnow().strftime("%Y%m%d-%H%M%S")
+    made = []
 
+    # --- the database -----------------------------------------------------
     # sqlite3's backup API copies a live database consistently; copying the
     # file by hand can catch it mid-write.
     tmp = os.path.join(out_dir, f".shola-{stamp}.db")
@@ -418,12 +421,14 @@ def backup(out, keep):
         src.backup(dst)
     dst.close()
     src.close()
-
     db_gz = os.path.join(out_dir, f"shola-{stamp}.db.gz")
     with open(tmp, "rb") as f, _gzip.open(db_gz, "wb", compresslevel=6) as g:
         shutil.copyfileobj(f, g, 1 << 20)
     os.remove(tmp)
+    made.append((db_gz, "shola-", keep_db))
+    click.echo(f"database  {os.path.getsize(db_gz)//1048576} MB")
 
+    # --- the part that cannot be rebuilt ----------------------------------
     people = []
     for v in Volunteer.query.all():
         people.append({
@@ -443,34 +448,109 @@ def backup(out, keep):
     with _gzip.open(people_path, "wt", encoding="utf-8") as fh:
         json.dump({"exported_at": stamp, "volunteers": people}, fh,
                   ensure_ascii=False, indent=1)
-
-    for pattern in ("shola-*.db.gz", "volunteers-*.json.gz"):
-        old = sorted(glob.glob(os.path.join(out_dir, pattern)))[:-keep or None]
-        for f in old:
-            os.remove(f)
-
-    click.echo(f"database  {os.path.getsize(db_gz)//1048576} MB  {db_gz}")
+    made.append((people_path, "volunteers-", keep_people))
     click.echo(f"people    {os.path.getsize(people_path)//1024} KB  "
                f"{len(people)} volunteers, "
                f"{sum(len(p['answers']) for p in people)} answers")
-    click.echo(f"keeping the {keep} most recent of each")
 
-    # Off-site, if credentials are present. Done here rather than through
-    # Coolify's S3 feature so a backup does not depend on a helper container
-    # that has been failing silently.
+    # --- directories from other applications ------------------------------
+    # Set SHOLA_BACKUP_DIRS to "name=/path:name=/path". These are other apps'
+    # upload directories, bind-mounted in read-only, because user-uploaded
+    # files live in no database and nothing else was backing them up.
+    for spec in filter(None, os.environ.get("SHOLA_BACKUP_DIRS", "").split(":")):
+        label, _, path = spec.partition("=")
+        if not path or not os.path.isdir(path):
+            click.echo(f"skip      {label or spec}: not a directory", err=True)
+            continue
+        arc = os.path.join(out_dir, f"{label}-{stamp}.tar.gz")
+        with tarfile.open(arc, "w:gz", compresslevel=6) as tar:
+            tar.add(path, arcname=label)
+        made.append((arc, f"{label}-", keep_dirs))
+        click.echo(f"files     {os.path.getsize(arc)//1048576} MB  {label}")
+
+    # --- deployment configuration ----------------------------------------
+    # The environment variables, domains and schedules of every application.
+    # They are inside Coolify's own database dump too, but restoring from a
+    # readable file does not require standing Coolify up first.
+    cfg = export_coolify_config()
+    if cfg is not None:
+        cfg_path = os.path.join(out_dir, f"coolify-config-{stamp}.json.gz")
+        with _gzip.open(cfg_path, "wt", encoding="utf-8") as fh:
+            json.dump(cfg, fh, ensure_ascii=False, indent=1)
+        made.append((cfg_path, "coolify-config-", keep_config))
+        click.echo(f"config    {os.path.getsize(cfg_path)//1024} KB  "
+                   f"{len(cfg.get('applications', []))} apps")
+
+    prune_local(out_dir, made)
+
     if os.environ.get("SHOLA_S3_BUCKET"):
         try:
-            uploaded = upload_to_s3([db_gz, people_path], keep=keep)
-            for key in uploaded:
+            for path, stem, keep in made:
+                key = upload_to_s3([path], keep=keep, stem=stem)[0]
                 click.echo(f"uploaded  {key}")
-        except Exception as exc:      # noqa: BLE001 - never fail the local backup
+        except Exception as exc:      # noqa: BLE001 - report loudly, fail loudly
             click.echo(f"S3 upload FAILED: {exc}", err=True)
             raise SystemExit(1)
     else:
         click.echo("no SHOLA_S3_BUCKET set, so this backup stays on this host")
 
 
-def upload_to_s3(paths, keep=14, prefix=None):
+def prune_local(out_dir, made):
+    """Keep only the newest N of each kind on local disk."""
+    for _path, stem, keep in {(None, m[1], m[2]) for m in made}:
+        files = sorted(glob.glob(os.path.join(out_dir, f"{stem}*")))
+        for old in files[:-keep or None]:
+            os.remove(old)
+
+
+def export_coolify_config():
+    """Every application's environment variables, domains and schedules.
+
+    Returns None when no Coolify token is configured, so the backup still
+    works without it.
+    """
+    url = (os.environ.get("SHOLA_COOLIFY_URL") or "").rstrip("/")
+    token = os.environ.get("SHOLA_COOLIFY_TOKEN")
+    if not (url and token):
+        return None
+
+    import httpx
+    from datetime import datetime as _dt
+
+    head = {"Authorization": f"Bearer {token}"}
+    out = {"exported_at": _dt.utcnow().isoformat(), "applications": [],
+           "databases": []}
+    with httpx.Client(timeout=30, headers=head) as http:
+        for app in http.get(f"{url}/api/v1/applications").json():
+            uuid = app.get("uuid")
+            envs = http.get(f"{url}/api/v1/applications/{uuid}/envs").json()
+            tasks = http.get(
+                f"{url}/api/v1/applications/{uuid}/scheduled-tasks").json()
+            storages = http.get(
+                f"{url}/api/v1/applications/{uuid}/storages").json()
+            out["applications"].append({
+                "name": app.get("name"), "uuid": uuid,
+                "fqdn": app.get("fqdn"), "build_pack": app.get("build_pack"),
+                "git_repository": app.get("git_repository"),
+                "git_branch": app.get("git_branch"),
+                "ports_exposes": app.get("ports_exposes"),
+                "environment": {e.get("key"): e.get("value") for e in envs
+                                if not e.get("is_preview")},
+                "scheduled_tasks": [
+                    {"name": t.get("name"), "command": t.get("command"),
+                     "frequency": t.get("frequency")} for t in tasks],
+                "storages": storages,
+            })
+        for db in http.get(f"{url}/api/v1/databases").json():
+            out["databases"].append({
+                "name": db.get("name"), "uuid": db.get("uuid"),
+                "type": db.get("database_type"),
+                "internal_url": db.get("internal_db_url"),
+            })
+    return out
+
+
+def upload_to_s3(paths, keep=14, prefix=None, stem=None):
     """Copy backups to S3-compatible storage and prune old remote copies.
 
     Raises on failure. A backup that silently fails to leave the machine is
@@ -501,7 +581,7 @@ def upload_to_s3(paths, keep=14, prefix=None):
             raise RuntimeError(f"{key} uploaded at the wrong size")
         keys.append(key)
 
-    for stem in ("shola-", "volunteers-"):
+    if stem:
         listed = client.list_objects_v2(Bucket=bucket, Prefix=f"{prefix}/{stem}")
         objs = sorted(listed.get("Contents", []), key=lambda o: o["Key"])
         for obj in objs[:-keep or None]:
