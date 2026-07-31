@@ -47,6 +47,15 @@ def build_otp_email(name, code, minutes):
             render_template("email/otp.html", **ctx))
 
 
+def build_opened_email(volunteer, language_name, link):
+    """Sent once, on the day a volunteer's language starts being collected."""
+    first = volunteer.name.split()[0] if volunteer.name else "there"
+    ctx = {"first": first, "language_name": language_name, "link": link}
+    return (f"{language_name} is open — your first SHOLA words are ready",
+            render_template("email/opened.txt", **ctx),
+            render_template("email/opened.html", **ctx))
+
+
 def daily_link(volunteer):
     """Absolute link to today's list.
 

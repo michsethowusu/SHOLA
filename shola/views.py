@@ -83,9 +83,14 @@ def champions():
 
 @main.route("/stats")
 def stats():
+    # Each language works through the tiers at its own pace.
+    by_language = {}
+    for code in current_app.config["LANGUAGES"]:
+        by_language[code] = {"tiers": tier_progress(code),
+                             "active": active_tier(code)}
     return render_template("stats.html", stats=site_stats(),
                            per_language=consensus.language_progress(),
-                           tiers=tier_progress(), active=active_tier())
+                           by_language=by_language)
 
 
 @main.route("/photo/<path:filename>")

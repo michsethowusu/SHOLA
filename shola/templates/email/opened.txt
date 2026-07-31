@@ -1,0 +1,14 @@
+{{ language_name }} is open, {{ first }}.
+
+You signed up to check {{ language_name }} words for SHOLA. We have now loaded
+them, so your first list is ready.
+
+A handful of words a day, on the days you chose. Two minutes each time.
+
+Start here:
+{{ link }}
+
+From now on your daily email arrives as normal.
+
+--
+SHOLA - Share Your Language

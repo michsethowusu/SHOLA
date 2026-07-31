@@ -20,7 +20,7 @@ from shola.consensus import best, normalise, tally               # noqa: E402
 from shola.tiers import (MAX_VERDICTS_BEFORE_CONTESTED,           # noqa: E402
                          active_tier, assign_tiers, daily_quota,
                          lease_words, refresh_word, release_expired,
-                         tier_for, tier_progress, top_up)
+                         state_for, tier_for, tier_progress, top_up)
 from shola.models import (Assignment, Candidate, Evaluation,      # noqa: E402
                           PendingSignup, Volunteer, Word, db)
 
@@ -172,7 +172,8 @@ def main():
         Evaluation.query.delete()
         db.session.commit()
         for w in Word.query.all():
-            refresh_word(w, commit=False)
+            for lang in LANGS:
+                refresh_word(w.id, lang, commit=False)
         db.session.commit()
         ok &= check("thresholds map counts to tiers",
                     (tier_for(100), tier_for(30), tier_for(12),
@@ -182,10 +183,10 @@ def main():
             w.occurrences = 100 if i < 10 else 1
         db.session.commit()
         assign_tiers()
-        counts = {r["tier"]: r["total"] for r in tier_progress()}
+        counts = {r["tier"]: r["total"] for r in tier_progress("twi")}
         ok &= check("words land in the right tiers",
                     counts.get(1) == 10 and counts.get(5) == 20, str(counts))
-        ok &= check("tier 1 is the one being worked", active_tier() == 1)
+        ok &= check("tier 1 is the one being worked", active_tier("twi") == 1)
 
     print("\nwork is leased from the active tier, not reserved at signup")
     with app.app_context():
@@ -204,11 +205,11 @@ def main():
         v1 = add_volunteer("i@example.com")
         v2 = add_volunteer("j@example.com")
         record_verdict(v1, w.id, custom_text="same answer")
-        db.session.refresh(w)
-        ok &= check("one vote does not settle it", not w.done)
+        ok &= check("one vote does not settle it",
+                    not state_for(w.id, "twi").done)
         record_verdict(v2, w.id, custom_text="same answer")
-        db.session.refresh(w)
-        ok &= check("two matching votes settle it", w.done)
+        ok &= check("two matching votes settle it",
+                    state_for(w.id, "twi").done)
         later = add_volunteer("k@example.com")
         lease_words(later, 10)
         ok &= check("a settled word is not handed out again",
@@ -216,35 +217,54 @@ def main():
 
     print("\ndisagreement keeps a word in the queue, but not forever")
     with app.app_context():
-        w2 = Word.query.filter(Word.tier == 1, Word.done.is_(False)).first()
+        w2 = next(x for x in Word.query.filter(Word.tier == 1).all()
+                  if not state_for(x.id, "twi").done)
         voters = [add_volunteer(f"dis{i}@example.com") for i in range(6)]
         for i, v in enumerate(voters[:3]):
             record_verdict(v, w2.id, custom_text=f"different {i}")
-        db.session.refresh(w2)
+        st = state_for(w2.id, "twi")
         ok &= check("three different answers leave it unsettled",
-                    not w2.done and w2.top_votes == 1)
+                    not st.done and st.top_votes == 1)
         ok &= check("and it is still offered",
                     lease_words(add_volunteer("l@example.com"), 30) > 0
-                    and not w2.contested)
+                    and not state_for(w2.id, "twi").contested)
         for i, v in enumerate(voters[3:]):
             record_verdict(v, w2.id, custom_text=f"another {i}")
-        db.session.refresh(w2)
+        st = state_for(w2.id, "twi")
         ok &= check(f"after {MAX_VERDICTS_BEFORE_CONTESTED} verdicts it is "
-                    "closed as contested", w2.contested,
-                    f"votes={w2.total_votes} contested={w2.contested}")
+                    "closed as contested", st.contested,
+                    f"votes={st.total_votes} contested={st.contested}")
         fresh_v = add_volunteer("m@example.com")
         lease_words(fresh_v, 30)
         ok &= check("a contested word is no longer handed out",
                     w2.id not in {a.word_id for a in fresh_v.assignments})
 
+    print("\neach language is settled on its own")
+    with app.app_context():
+        shared = Word.query.filter(Word.tier == 1).order_by(Word.id.desc()).first()
+        a1 = add_volunteer("twi1@example.com", language="twi")
+        a2 = add_volunteer("twi2@example.com", language="twi")
+        record_verdict(a1, shared.id, custom_text="agreed twi wording")
+        record_verdict(a2, shared.id, custom_text="agreed twi wording")
+        ok &= check("settled in Twi", state_for(shared.id, "twi").done)
+        ok &= check("untouched in Ga", not state_for(shared.id, "ga").done)
+        gaman = add_volunteer("ga1@example.com", language="ga")
+        lease_words(gaman, 40)
+        ok &= check("a Ga speaker is still asked that word",
+                    shared.id in {x.word_id for x in gaman.assignments},
+                    "Twi agreement must not close the word for other languages")
+        ok &= check("Ga has its own tier position",
+                    active_tier("ga") == 1)
+
     print("\nthe next tier opens only when this one is closed")
     with app.app_context():
-        ok &= check("still on tier 1 while words remain", active_tier() == 1)
+        ok &= check("still on tier 1 while words remain",
+                    active_tier("twi") == 1)
         for w in Word.query.filter(Word.tier == 1).all():
-            w.done = True
+            state_for(w.id, "twi").done = True
         db.session.commit()
-        ok &= check("tier 2 opens once tier 1 closes", active_tier() == 5,
-                    f"active={active_tier()}")
+        ok &= check("tier 2 opens once tier 1 closes", active_tier("twi") == 5,
+                    f"active={active_tier('twi')}")
 
     print("\nleases expire so words are never stuck")
     with app.app_context():

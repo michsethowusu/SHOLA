@@ -29,42 +29,49 @@
     <div style="margin-top:40px">
       <h2>Which words we are working on</h2>
       <p class="muted">
-        The most common words come first. We finish one group before starting
-        the next, so the words people use every day are confirmed soonest.
+        The most common words come first. Each language finishes one group
+        before starting the next, so the words people use every day are
+        confirmed soonest.
       </p>
-      <div class="scroll-x" style="margin-top:16px">
-        <table class="plain">
-          <thead>
-            <tr>
-              <th>Group</th><th>Words</th><th>Confirmed</th>
-              <th>No agreement</th><th>Still to check</th><th>Progress</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in tiers %}
-              <tr{% if row.tier == active %} style="background:var(--gold-wash)"{% endif %}>
-                <td>
-                  <strong>Group {{ row.tier }}</strong>
-                  {% if row.tier == active %}<span class="faint">in progress</span>{% endif %}
-                </td>
-                <td>{{ row.total | thousands }}</td>
-                <td>{{ row.done | thousands }}</td>
-                <td>{{ row.contested | thousands }}</td>
-                <td>{{ row.left | thousands }}</td>
-                <td style="min-width:120px">
-                  <div class="track"><i style="width:{{ '%.1f' % row.pct }}%"></i></div>
-                  <span class="faint" style="font-size:.8rem">{{ '%.1f' % row.pct }}%</span>
-                </td>
+
+      {% for code, lang in LANGUAGES.items() %}
+        {% set info = by_language.get(code) %}
+        <h3 style="margin-top:26px">{{ lang.name }}</h3>
+        <div class="scroll-x" style="margin-top:10px">
+          <table class="plain">
+            <thead>
+              <tr>
+                <th>Group</th><th>Words</th><th>Confirmed</th>
+                <th>No agreement</th><th>Still to check</th><th>Progress</th>
               </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      <p class="hint" style="margin-top:10px">
-        A word is <strong>confirmed</strong> once two speakers choose the same
-        wording. Some words have several equally good translations and never
-        reach agreement — those are marked <strong>no agreement</strong> and
-        every answer given is kept.
+            </thead>
+            <tbody>
+              {% for row in info.tiers %}
+                <tr{% if row.tier == info.active %} style="background:var(--gold-wash)"{% endif %}>
+                  <td>
+                    <strong>Group {{ row.tier }}</strong>
+                    {% if row.tier == info.active %}<span class="faint">in progress</span>{% endif %}
+                  </td>
+                  <td>{{ row.total | thousands }}</td>
+                  <td>{{ row.done | thousands }}</td>
+                  <td>{{ row.contested | thousands }}</td>
+                  <td>{{ row.left | thousands }}</td>
+                  <td style="min-width:120px">
+                    <div class="track"><i style="width:{{ '%.1f' % row.pct }}%"></i></div>
+                    <span class="faint" style="font-size:.8rem">{{ '%.1f' % row.pct }}%</span>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endfor %}
+
+      <p class="hint" style="margin-top:14px">
+        A word is <strong>confirmed</strong> once two speakers of that language
+        choose the same wording. Some words have several equally good
+        translations and never reach agreement — those are marked
+        <strong>no agreement</strong> and every answer given is kept.
       </p>
     </div>
 

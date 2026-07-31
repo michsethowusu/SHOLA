@@ -96,14 +96,9 @@ def candidate_by_id(candidate_id):
 
 
 def verified_count(language, min_votes=2):
-    """How many entries in this language have reached agreement."""
-    from .models import Word
-    return (Word.query
-            .filter(Word.done.is_(True))
-            .join(Evaluation, Evaluation.word_id == Word.id)
-            .filter(Evaluation.language == language)
-            .distinct()
-            .count())
+    """How many words in this language have reached agreement."""
+    from .models import WordState
+    return WordState.query.filter_by(language=language, done=True).count()
 
 
 def sample_entries(language, limit=3):

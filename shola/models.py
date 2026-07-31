@@ -131,16 +131,11 @@ class Word(db.Model):
     # completion before tier 2 opens.
     tier = db.Column(db.Integer, default=5, nullable=False, index=True)
 
-    # Vote state, denormalised from Evaluation so the work queue is one indexed
-    # query rather than a tally per candidate word.
+    # Superseded by WordState, which tracks these per language. Left in place
+    # so existing databases still load; nothing reads them.
     top_votes = db.Column(db.Integer, default=0, nullable=False)
     total_votes = db.Column(db.Integer, default=0, nullable=False)
-    # True once one wording has the votes it needs. Indexed with tier because
-    # every queue query filters on exactly this pair.
     done = db.Column(db.Boolean, default=False, nullable=False)
-    # True when speakers keep disagreeing. Some words have several equally
-    # correct wordings and will never reach agreement; without this a single
-    # such word would be handed out forever and its tier could never close.
     contested = db.Column(db.Boolean, default=False, nullable=False)
 
     __table_args__ = (
@@ -152,6 +147,33 @@ class Word(db.Model):
 
     def options(self, language):
         return [c for c in self.candidates if c.language == language]
+
+
+class WordState(db.Model):
+    """Vote state for one word in one language.
+
+    A word is not settled globally - it is settled per language. Two Twi
+    speakers agreeing tells you nothing about Ga, so every language keeps its
+    own counts and its own done/contested flags. A missing row means "no votes
+    yet", which the queue treats as open.
+    """
+
+    __tablename__ = "word_state"
+    __table_args__ = (
+        db.UniqueConstraint("word_id", "language", name="uq_word_language"),
+        db.Index("ix_state_queue", "language", "done", "contested", "top_votes"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    word_id = db.Column(db.Integer, db.ForeignKey("words.id", ondelete="CASCADE"),
+                        nullable=False, index=True)
+    language = db.Column(db.String(20), nullable=False, index=True)
+    top_votes = db.Column(db.Integer, default=0, nullable=False)
+    total_votes = db.Column(db.Integer, default=0, nullable=False)
+    done = db.Column(db.Boolean, default=False, nullable=False)
+    contested = db.Column(db.Boolean, default=False, nullable=False)
+
+    word = db.relationship("Word")
 
 
 class Candidate(db.Model):

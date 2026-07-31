@@ -18,7 +18,7 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy import func
 
-from .models import Assignment, Evaluation, Volunteer, Word, db
+from .models import Assignment, Evaluation, Volunteer, Word, WordState, db
 
 # Occurrence thresholds, highest tier first. Chosen from the real distribution:
 # tier 1 is ~11k words, the band worth settling before anything else.
@@ -62,41 +62,70 @@ def normalise(text):
     return unicodedata.normalize("NFC", (text or "").strip()).casefold()
 
 
-def refresh_word(word, commit=True):
-    """Recompute a word's vote state from its verdicts."""
-    evals = Evaluation.query.filter_by(word_id=word.id, skipped=False).all()
+def state_for(word_id, language, create=True):
+    """The WordState row for one word in one language."""
+    row = WordState.query.filter_by(word_id=word_id, language=language).first()
+    if row is None and create:
+        row = WordState(word_id=word_id, language=language)
+        db.session.add(row)
+    return row
+
+
+def refresh_word(word_id, language, commit=True):
+    """Recompute one language's vote state for one word.
+
+    Votes are counted within the language only. Pooling them would let Twi
+    answers settle a word for Ga speakers, who never saw it.
+    """
+    evals = Evaluation.query.filter_by(word_id=word_id, language=language,
+                                       skipped=False).all()
     counts = Counter()
     for ev in evals:
         text = ev.chosen_text
         if text:
             counts[normalise(text)] += 1
-    word.total_votes = sum(counts.values())
-    word.top_votes = max(counts.values()) if counts else 0
-    word.done = word.top_votes >= VOTES_TO_SETTLE
-    word.contested = (not word.done
-                      and word.total_votes >= MAX_VERDICTS_BEFORE_CONTESTED)
+
+    row = state_for(word_id, language)
+    row.total_votes = sum(counts.values())
+    row.top_votes = max(counts.values()) if counts else 0
+    row.done = row.top_votes >= VOTES_TO_SETTLE
+    row.contested = (not row.done
+                     and row.total_votes >= MAX_VERDICTS_BEFORE_CONTESTED)
     if commit:
         db.session.commit()
-    return word.done
+    return row.done
 
 
-def open_words():
-    """Filter for words still worth handing out."""
-    return db.and_(Word.done.is_(False), Word.contested.is_(False))
+def open_query(language):
+    """Words still worth handing out in this language.
+
+    Left join, because a word with no votes yet has no state row at all and
+    must still count as open.
+    """
+    return (db.session.query(Word)
+            .outerjoin(WordState,
+                       db.and_(WordState.word_id == Word.id,
+                               WordState.language == language))
+            .filter(func.coalesce(WordState.done, False).is_(False),
+                    func.coalesce(WordState.contested, False).is_(False)))
 
 
-def active_tier():
-    """The lowest tier still holding words that can be settled."""
-    return (db.session.query(func.min(Word.tier))
-            .filter(open_words()).scalar())
+def active_tier(language):
+    """The lowest tier still holding words this language can settle."""
+    row = (open_query(language)
+           .with_entities(func.min(Word.tier))
+           .scalar())
+    return row
 
 
-def tier_progress():
-    """Per-tier totals for the progress board."""
+def tier_progress(language):
+    """Per-tier totals for one language."""
     rows = (db.session.query(
         Word.tier, func.count(Word.id),
-        func.sum(db.case((Word.done.is_(True), 1), else_=0)),
-        func.sum(db.case((Word.contested.is_(True), 1), else_=0)))
+        func.sum(db.case((WordState.done.is_(True), 1), else_=0)),
+        func.sum(db.case((WordState.contested.is_(True), 1), else_=0)))
+        .outerjoin(WordState, db.and_(WordState.word_id == Word.id,
+                                     WordState.language == language))
         .group_by(Word.tier).order_by(Word.tier).all())
     out = []
     for tier, total, done, contested in rows:
@@ -108,13 +137,19 @@ def tier_progress():
     return out
 
 
-def outstanding_leases(word_ids):
-    """word_id -> how many live leases already promise a verdict on it."""
+def outstanding_leases(word_ids, language):
+    """word_id -> live leases promising a verdict in this language.
+
+    Scoped by the holder's language: a Twi speaker holding a word does nothing
+    towards settling it in Ga.
+    """
     if not word_ids:
         return {}
     now = datetime.utcnow()
     rows = (db.session.query(Assignment.word_id, func.count(Assignment.id))
+            .join(Volunteer, Volunteer.id == Assignment.volunteer_id)
             .filter(Assignment.word_id.in_(word_ids),
+                    Volunteer.language == language,
                     Assignment.status == "pending",
                     db.or_(Assignment.expires_at.is_(None),
                            Assignment.expires_at > now))
@@ -131,7 +166,8 @@ def lease_words(volunteer, count, today=None):
     if count <= 0:
         return 0
     today = today or date.today()
-    tier = active_tier()
+    language = volunteer.language
+    tier = active_tier(language)
     if tier is None:
         return 0
 
@@ -142,24 +178,28 @@ def lease_words(volunteer, count, today=None):
         Assignment.volunteer_id == volunteer.id)
 
     # Over-fetch: some candidates will already have enough live leases.
-    candidates = (Word.query
-                  .filter(Word.tier == tier, open_words(),
+    candidates = (open_query(language)
+                  .filter(Word.tier == tier,
                           ~Word.id.in_(mine), ~Word.id.in_(held))
-                  .order_by(Word.top_votes.desc(), Word.occurrences.desc(),
-                            Word.id.asc())
+                  .order_by(func.coalesce(WordState.top_votes, 0).desc(),
+                            Word.occurrences.desc(), Word.id.asc())
                   .limit(count * 6)
                   .all())
     if not candidates:
         return 0
 
-    live = outstanding_leases([w.id for w in candidates])
+    live = outstanding_leases([w.id for w in candidates], language)
+    states = {r.word_id: r for r in WordState.query.filter(
+        WordState.word_id.in_([w.id for w in candidates]),
+        WordState.language == language).all()}
     expires = datetime.utcnow() + timedelta(days=LEASE_DAYS)
 
     given = 0
     for word in candidates:
         if given >= count:
             break
-        still_needed = VOTES_TO_SETTLE - word.top_votes - live.get(word.id, 0)
+        have = states[word.id].top_votes if word.id in states else 0
+        still_needed = VOTES_TO_SETTLE - have - live.get(word.id, 0)
         if still_needed <= 0:
             continue
         db.session.add(Assignment(volunteer_id=volunteer.id, word_id=word.id,

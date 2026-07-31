@@ -157,7 +157,7 @@ def record_verdict(volunteer, word_id, candidate_id=None, custom_text=None,
             assignment.status = "skipped" if skipped else "done"
         db.session.commit()
         from .tiers import refresh_word
-        refresh_word(db.session.get(Word, word_id))
+        refresh_word(word_id, volunteer.language)
         return existing
 
     ev = Evaluation(volunteer_id=volunteer.id, word_id=word_id,
@@ -172,7 +172,7 @@ def record_verdict(volunteer, word_id, candidate_id=None, custom_text=None,
     db.session.commit()
 
     from .tiers import refresh_word
-    refresh_word(db.session.get(Word, word_id))
+    refresh_word(word_id, volunteer.language)
     return ev
 
 

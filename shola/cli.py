@@ -261,16 +261,17 @@ def assign_tiers_cmd():
 
 @shola_cli.command("tier-status")
 def tier_status():
-    """Show how far each tier has got."""
-    current = active_tier()
-    click.echo(f"working on tier {current}" if current
-               else "every tier is closed")
-    for row in tier_progress():
-        mark = " <-- current" if row["tier"] == current else ""
-        click.echo(f"  tier {row['tier']}  {row['done']:>8,} settled  "
-                   f"{row['contested']:>6,} contested  "
-                   f"{row['left']:>8,} to go  "
-                   f"({row['pct']:.1f}% of {row['total']:,}){mark}")
+    """Show how far each language has got through the tiers."""
+    for code, lang in current_app.config["LANGUAGES"].items():
+        current = active_tier(code)
+        click.echo(f"\n{lang['name']} — " + (f"working on tier {current}"
+                                             if current else "all tiers closed"))
+        for row in tier_progress(code):
+            mark = " <-- current" if row["tier"] == current else ""
+            click.echo(f"  tier {row['tier']}  {row['done']:>8,} settled  "
+                       f"{row['contested']:>6,} contested  "
+                       f"{row['left']:>8,} to go  "
+                       f"({row['pct']:.1f}% of {row['total']:,}){mark}")
 
 
 @shola_cli.command("release-leases")
@@ -284,21 +285,17 @@ def release_leases_cmd():
 @click.option("--all", "do_all", is_flag=True,
               help="recompute every word, not just those with verdicts.")
 def refresh_words_cmd(do_all):
-    """Rebuild vote state from the verdicts on record."""
-    if do_all:
-        words = Word.query.yield_per(1000)
-    else:
-        from .models import Evaluation
-        ids = [r[0] for r in db.session.query(db.distinct(Evaluation.word_id))]
-        words = Word.query.filter(Word.id.in_(ids)).all()
+    """Rebuild vote state from the verdicts on record, per language."""
+    from .models import Evaluation
+    pairs = db.session.query(Evaluation.word_id, Evaluation.language).distinct()
     n = 0
-    for word in words:
-        refresh_word(word, commit=False)
+    for word_id, language in pairs:
+        refresh_word(word_id, language, commit=False)
         n += 1
         if n % 2000 == 0:
             db.session.commit()
     db.session.commit()
-    click.echo(f"refreshed {n:,} words")
+    click.echo(f"refreshed {n:,} word/language pairs")
 
 
 @shola_cli.command("waitlist")
@@ -321,3 +318,47 @@ def waitlist():
                f"{len(waiting)} languages:")
     for code, n in waiting.most_common():
         click.echo(f"  {names.get(code, code):24s} {n:>4}")
+
+
+@shola_cli.command("announce-language")
+@click.option("--language", required=True,
+              help="the code as it now appears in LANGUAGES.")
+@click.option("--dry-run", is_flag=True)
+def announce_language(language, dry_run):
+    """Tell everyone waiting for a language that it has opened.
+
+    Run this once, after adding the language to LANGUAGES and importing its
+    translations. The waiting page promises this email, so opening a language
+    without sending it breaks that promise.
+    """
+    from .mailer import build_opened_email, daily_link, send
+
+    open_langs = current_app.config["LANGUAGES"]
+    if language not in open_langs:
+        raise click.UsageError(
+            f"{language!r} is not open yet. Add it to LANGUAGES and import its "
+            "translations first, or nobody will have words to check.")
+
+    people = Volunteer.query.filter_by(language=language, active=True).all()
+    if not people:
+        click.echo("nobody was waiting for that language")
+        return
+
+    name = open_langs[language]["name"]
+    sent = failed = 0
+    for volunteer in people:
+        if not dry_run:
+            top_up(volunteer, target=current_app.config["WORDS_PER_VOLUNTEER"])
+        subject, text, html = build_opened_email(volunteer, name,
+                                                 daily_link(volunteer))
+        if dry_run:
+            click.echo(f"[dry-run] {volunteer.email}: {subject}")
+            sent += 1
+            continue
+        try:
+            send(volunteer.email, subject, text, html)
+            sent += 1
+        except Exception as exc:      # noqa: BLE001
+            failed += 1
+            click.echo(f"  failed {volunteer.email}: {exc}", err=True)
+    click.echo(f"told {sent} people {name} is open; {failed} failed")
