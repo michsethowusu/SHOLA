@@ -70,11 +70,6 @@ def index():
                            champions=leaderboard(limit=5))
 
 
-@main.route("/about")
-def about():
-    return render_template("about.html", stats=site_stats())
-
-
 @main.route("/champions")
 def champions():
     return render_template("champions.html", champions=leaderboard(limit=100),

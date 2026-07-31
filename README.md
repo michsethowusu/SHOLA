@@ -2,7 +2,7 @@
 
 **Live: [shola.inkika.org](https://shola.inkika.org)** — [sign
 up](https://shola.inkika.org/join) · [champions](https://shola.inkika.org/champions)
-· [progress](https://shola.inkika.org/stats)
+· [progress](https://shola.inkika.org/stats) · [API](https://shola.inkika.org/api)
 
 A volunteer app for confirming translations of everyday words in **Twi, Ewe, Ga
 and Dagbani**.
@@ -252,6 +252,17 @@ equal to the options, single votes *not* counting as agreement, the recruitment
 arithmetic, signup by one-time code creating nothing until confirmed, the
 waiting list, evaluation working with no cookies at all, tampered links being
 refused, and the closed sheet staying pointer-transparent.
+
+## Deploying
+
+```bash
+./deploy.sh
+```
+
+Use the script rather than typing rsync by hand. It excludes `.venv`, `.env`,
+`instance/` and `seed/`, all of which exist only on the server — an `rsync
+--delete` without those exclusions removes the server's virtualenv and takes the
+site down.
 
 ## The live deployment
 
