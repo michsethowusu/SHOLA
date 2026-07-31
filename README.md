@@ -1,5 +1,9 @@
 # SHOLA — Share Your Language
 
+**Live: [shola.inkika.org](https://shola.inkika.org)** — [sign
+up](https://shola.inkika.org/join) · [champions](https://shola.inkika.org/champions)
+· [progress](https://shola.inkika.org/stats)
+
 A volunteer app for verifying machine translations of everyday words in **Twi,
 Ewe, Ga and Dagbani**.
 
@@ -8,6 +12,11 @@ guesses are good, some are calques no speaker would use, and some are wrong. A
 machine cannot tell the difference; a speaker can, in about two seconds. SHOLA
 sends each volunteer a handful of words a day by email and records which wording
 they would actually use.
+
+The words come from [GhanaNouns](https://github.com/GhanaNLP/GhanaNouns):
+478,822 English nouns drawn from Ghanaian news, research and speech, each with
+three machine-proposed translations per language. All of them are loaded into
+the live deployment.
 
 ## How it works
 
@@ -143,6 +152,32 @@ Covers the parts most likely to break: coverage-before-duplication, day
 scheduling, missed-day carry-forward and redistribution, one-verdict-per-word,
 typed answers beating machine options, single votes *not* counting as consensus,
 and daily-link tokens round-tripping and rejecting tampering.
+
+## The live deployment
+
+[shola.inkika.org](https://shola.inkika.org) runs on the Ghana NLP H200 box:
+
+| | |
+|---|---|
+| Code | `/mnt/volume_d2wey28/projects/shola` |
+| Service | `shola.service` — gunicorn, 3 workers, `127.0.0.1:8110` |
+| Public address | Cloudflare named tunnel `ghana-tts`, ingress `shola.inkika.org` → `localhost:8110` |
+| Database | SQLite at `instance/shola.db`, all 478,822 words loaded |
+| Email | Gmail SMTP as `michseth@ghananlp.org`, port 587 STARTTLS |
+| Schedule | cron at 07:00 / 13:00 / 18:00 for the three time windows, plus Monday 03:30 redistribute |
+
+```bash
+sudo systemctl status shola          # is it up
+sudo journalctl -u shola -f          # what it is doing
+tail -f /mnt/volume_d2wey28/projects/shola/mail.log   # what cron sent
+```
+
+Adding a hostname to the tunnel means editing `~/.cloudflared/config.yml` (new
+rules go **above** the `http_status:404` catch-all), running `cloudflared tunnel
+route dns ghana-tts <hostname>`, then restarting the tunnel. Note that
+cloudflared only reads its config at startup, and that box has had stray
+hand-started `cloudflared` processes outside systemd — if a config change
+appears to do nothing, check `pgrep -af cloudflared` for a process no unit owns.
 
 ## Notes for whoever runs this
 
