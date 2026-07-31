@@ -156,8 +156,11 @@ body.focus .topbar { position: static; }
 /* The imprint line reads as an imprint, not as more navigation: separated by a
    hairline, smaller, letter-spaced and in the utility face rather than the body
    face it shared with the links above. */
-/* The rule spans the same column as the links above it, not the whole page. */
+/* The rule spans the same column as the links above it, not the whole page.
+   flex-basis matters: .site-foot .wrap is a flex container, so without it the
+   paragraph shrinks to the width of its text and the rule with it. */
 .site-foot .imprint {
+  flex: 1 0 100%;
   margin: 18px 0 0;
   padding-top: 16px;
   border-top: 1px solid var(--line);
