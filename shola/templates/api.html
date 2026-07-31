@@ -13,12 +13,11 @@
     </p>
 
     <div class="notice" style="margin-top:22px">
-      <strong>What "verified" means.</strong> Each English term is shown to
-      speakers with three machine-proposed translations. They tap one or type
-      their own. An entry appears in this API only once <strong>two or more
-      speakers independently chose the same wording</strong>. Entries where
-      speakers disagreed are excluded — you can raise the bar with
-      <code>min_votes</code>.
+      <strong>What "verified" means.</strong> Each English word is shown to
+      speakers alongside three possible translations. They choose one or write
+      their own. A word appears here only once <strong>two or more speakers
+      independently chose the same wording</strong>. Words where speakers
+      disagreed are left out. Raise <code>min_votes</code> for a stricter list.
     </div>
 
     <h2 style="margin-top:44px">Available now</h2>
@@ -114,7 +113,7 @@
       <table class="plain">
         <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
         <tbody>
-          <tr><td><code>phrase</code></td><td>The English term.</td></tr>
+          <tr><td><code>phrase</code></td><td>The English word.</td></tr>
           <tr><td><code>translation</code></td><td>The wording speakers agreed on.</td></tr>
           <tr><td><code>votes</code></td><td>Speakers who chose that wording.</td></tr>
           <tr><td><code>agreement</code></td><td>Their share of all votes on the entry: 1.0 means unanimous.</td></tr>
@@ -161,15 +160,16 @@ print(len(entries), "verified entries")</code></pre>
 
     <h2 style="margin-top:44px">One entry in detail</h2>
     <p class="muted">
-      To see every wording offered for a term, including the ones that lost:
+      To see every wording given for one word, including those that were not
+      chosen:
     </p>
     <div class="card" style="margin-top:10px">
 <pre style="margin:0;overflow-x:auto"><code>GET /api/entry/&lt;id&gt;/&lt;language&gt;</code></pre>
     </div>
     <p class="hint">
       Returns the full tally — each wording, its vote count and its share —
-      alongside the agreed answer. Useful when you want the variants rather
-      than a single winner.
+      alongside the confirmed answer. Useful when you want all the variants
+      rather than one.
     </p>
 
     <h2 style="margin-top:44px">Notes</h2>
@@ -177,14 +177,14 @@ print(len(entries), "verified entries")</code></pre>
       <li>Responses are UTF-8. Twi, Ewe, Ga and Dagbani use characters like
           <strong>ɛ ɔ ŋ ɖ ƒ ɣ ʋ ʒ</strong>, so decode as UTF-8 rather than
           Latin-1 or they will arrive mangled.</li>
-      <li>Nothing is cached. Every request reflects the votes cast up to that
-          moment, so a term can move from unverified to verified between calls.</li>
-      <li>The unverified machine translations for all
-          {{ stats_words if stats_words else '478,822' }} terms are published
+      <li>Nothing is cached. Every request reflects the answers given up to
+          that moment, so a word can become verified between two calls.</li>
+      <li>Unverified machine translations for all
+          {{ stats_words if stats_words else '478,822' }} words are published
           separately in
           <a href="https://github.com/GhanaNLP/GhanaNouns">GhanaNouns</a>. Use
-          those for coverage, and this API when you need wording a speaker
-          stood behind.</li>
+          those when you need full coverage, and this API when you need wording
+          a speaker stood behind.</li>
     </ul>
   </div>
 </section>

@@ -11,30 +11,31 @@
       <div class="glyph-tile lit">ɣ</div>
     </div>
 
-    <p class="eyebrow">Today is clear</p>
-    <h1 style="font-size:clamp(1.8rem,6vw,2.5rem)">That is the list finished.</h1>
+    <p class="eyebrow">Today</p>
+    <h1 style="font-size:clamp(1.8rem,6vw,2.5rem)">You are done for today</h1>
     <p class="lede" style="margin:0 auto">
-      {{ done_total | thousands }} of your {{ target | thousands }} words are
-      checked. The next list comes by email on your next chosen day.
+      You have checked {{ done_total | thousands }} of your
+      {{ target | thousands }} words. Your next list arrives by email on the
+      next day you chose.
     </p>
 
     <div class="stat-strip" style="margin-top:32px; text-align:left">
       <div class="stat">
         <span class="n">{{ done_total | thousands }}</span>
-        <span class="k">words you have checked</span>
+        <span class="k">words checked</span>
       </div>
       <div class="stat">
         <span class="n">{{ (target - done_total) | thousands if target > done_total else 0 }}</span>
-        <span class="k">left in your thousand</span>
+        <span class="k">left to check</span>
       </div>
       <div class="stat">
         <span class="n">{{ '%.0f' % (done_total / target * 100 if target else 0) }}%</span>
-        <span class="k">of the way there</span>
+        <span class="k">complete</span>
       </div>
     </div>
 
     <p style="margin-top:30px">
-      <a class="btn ghost" href="{{ url_for('main.champions') }}">See where you rank</a>
+      <a class="btn ghost" href="{{ url_for('main.champions') }}">See the leaderboard</a>
     </p>
   </div>
 </section>

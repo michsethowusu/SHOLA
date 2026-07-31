@@ -24,13 +24,13 @@
         Your first email arrives tomorrow
         {% if volunteer.time_window != 'anytime' %}
           in the {{ TIME_WINDOWS[volunteer.time_window] | lower }}{% endif %},
-        listing the words waiting for you. Miss a day and nothing is lost — those
-        words come back in the next email.
+        with that day's words. If you miss a day, nothing is lost — those words
+        come back in your next email.
       </p>
     </div>
 
-    <a class="btn" href="{{ url_for('main.evaluate', token=token) }}">Check your first words now</a>
-    <p class="hint" style="margin-top:14px">No need to wait for the email.</p>
+    <a class="btn" href="{{ url_for('main.evaluate', token=token) }}">Start checking now</a>
+    <p class="hint" style="margin-top:14px">You do not have to wait for the email.</p>
   </div>
 </section>
 {% endblock %}

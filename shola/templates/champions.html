@@ -8,7 +8,7 @@
     <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">SHOLA champions</h1>
     <p class="muted">
       {{ stats.verdicts | thousands }} words checked by
-      {{ stats.volunteers | thousands }} speakers, ranked by how much they have done.
+      {{ stats.volunteers | thousands }} speakers.
     </p>
 
     {% if champions and champions[0][1] > 0 %}
@@ -21,7 +21,7 @@
       <div class="card center" style="margin-top:28px">
         <h3>No words checked yet</h3>
         <p class="muted" style="margin-bottom:18px">
-          The first champion is whoever signs up and taps a translation.
+          Sign up and check your first word to appear here.
         </p>
         <a class="btn" href="{{ url_for('main.join') }}">Be the first</a>
       </div>

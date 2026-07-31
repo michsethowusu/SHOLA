@@ -14,39 +14,38 @@
       </div>
       <div class="stat">
         <span class="n">{{ stats.covered | thousands }}</span>
-        <span class="k">seen by a speaker</span>
+        <span class="k">words checked</span>
       </div>
       <div class="stat">
         <span class="n">{{ stats.verdicts | thousands }}</span>
-        <span class="k">verdicts recorded</span>
+        <span class="k">answers given</span>
       </div>
       <div class="stat">
         <span class="n">{{ stats.volunteers | thousands }}</span>
-        <span class="k">active champions</span>
+        <span class="k">champions</span>
       </div>
     </div>
 
     <div style="margin-top:40px">
-      <h2>Tiers</h2>
+      <h2>Which words we are working on</h2>
       <p class="muted">
-        Words are worked in bands of commonness. Nothing in a tier is handed out
-        until the tier above it is closed, so the words people use most are
-        settled first.
+        The most common words come first. We finish one group before starting
+        the next, so the words people use every day are confirmed soonest.
       </p>
       <div class="scroll-x" style="margin-top:16px">
         <table class="plain">
           <thead>
             <tr>
-              <th>Tier</th><th>Words</th><th>Settled</th>
-              <th>Contested</th><th>To go</th><th>Progress</th>
+              <th>Group</th><th>Words</th><th>Confirmed</th>
+              <th>No agreement</th><th>Still to check</th><th>Progress</th>
             </tr>
           </thead>
           <tbody>
             {% for row in tiers %}
               <tr{% if row.tier == active %} style="background:var(--gold-wash)"{% endif %}>
                 <td>
-                  <strong>Tier {{ row.tier }}</strong>
-                  {% if row.tier == active %}<span class="faint">current</span>{% endif %}
+                  <strong>Group {{ row.tier }}</strong>
+                  {% if row.tier == active %}<span class="faint">in progress</span>{% endif %}
                 </td>
                 <td>{{ row.total | thousands }}</td>
                 <td>{{ row.done | thousands }}</td>
@@ -62,27 +61,27 @@
         </table>
       </div>
       <p class="hint" style="margin-top:10px">
-        A word is <strong>settled</strong> when two speakers choose the same
-        wording. It is <strong>contested</strong> when five verdicts arrive
-        without two agreeing — several wordings can be equally right, so the
-        word is closed, every variant kept, and the tier moves on.
+        A word is <strong>confirmed</strong> once two speakers choose the same
+        wording. Some words have several equally good translations and never
+        reach agreement — those are marked <strong>no agreement</strong> and
+        every answer given is kept.
       </p>
     </div>
 
     <div style="margin-top:40px">
       <h2>By language</h2>
       <p class="muted">
-        A word needs two speakers to agree before its translation is recorded, so
-        “agreed” is always smaller than “words seen”.
+        Two speakers must agree before a translation is confirmed, so the
+        confirmed count is always lower than the number of words checked.
       </p>
       <div class="scroll-x" style="margin-top:16px">
         <table class="plain">
           <thead>
             <tr>
               <th>Language</th>
-              <th>Verdicts</th>
-              <th>Words seen</th>
-              <th>Agreed (2+ votes)</th>
+              <th>Answers given</th>
+              <th>Words checked</th>
+              <th>Confirmed</th>
             </tr>
           </thead>
           <tbody>
@@ -104,10 +103,10 @@
     </div>
 
     <div class="card" style="margin-top:36px">
-      <h3>Getting the data out</h3>
+      <h3>Using this data</h3>
       <p class="muted" style="margin-bottom:10px">
-        Agreed translations are available per language, counting only words with
-        at least two matching votes.
+        Confirmed translations are free to download for each language. See the
+        <a href="{{ url_for('main.api_docs') }}">API</a> for details.
       </p>
       <p style="margin:0">
         {% for code in LANGUAGES %}

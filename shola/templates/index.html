@@ -7,9 +7,9 @@
       <p class="eyebrow">Share Your Language</p>
       <h1>Your language, checked by the people who speak it.</h1>
       <p class="lede">
-        A machine has guessed how to say
-        {{ stats.words | thousands }} everyday English words in Twi, Ewe, Ga and
-        Dagbani. Some guesses are good. Some are wrong. You know which.
+        We have machine translations for {{ stats.words | thousands }} everyday
+        English words in Twi, Ewe, Ga and Dagbani. Some are right, some are not.
+        You can tell which.
       </p>
       <div class="hero-actions">
         <a class="btn" href="{{ url_for('main.join') }}">Start with your language</a>
@@ -59,7 +59,7 @@
 <section class="section">
   <div class="wrap">
     <p class="eyebrow">Four languages</p>
-    <h2>Pick the one you speak best</h2>
+    <h2>Choose your language</h2>
     <div class="cards" style="margin-top:22px">
       {% for code, lang in LANGUAGES.items() %}
         <a class="lang-card" href="{{ url_for('main.join') }}?language={{ code }}">
@@ -74,8 +74,8 @@
 
 <section class="section">
   <div class="wrap">
-    <p class="eyebrow">What you actually do</p>
-    <h2>Four steps, then it repeats</h2>
+    <p class="eyebrow">How it works</p>
+    <h2>What you do</h2>
     <div class="steps" style="margin-top:22px">
       <div class="step">
         <div>
@@ -85,8 +85,8 @@
       </div>
       <div class="step">
         <div>
-          <h3>Get an email on your days</h3>
-          <p>It lists the words waiting for you, so you can see the work before you open it.</p>
+          <h3>Get an email on the days you chose</h3>
+          <p>It lists that day's words, so you know what is waiting before you open it.</p>
         </div>
       </div>
       <div class="step">
@@ -98,9 +98,9 @@
       </div>
       <div class="step">
         <div>
-          <h3>Your picks decide the answer</h3>
-          <p>When several speakers land on the same wording, that becomes the
-             recorded translation. Nobody's single opinion wins alone.</p>
+          <h3>Your answer counts</h3>
+          <p>When another speaker chooses the same wording as you, that becomes
+             the confirmed translation.</p>
         </div>
       </div>
     </div>
@@ -124,8 +124,8 @@
 
 <section class="section">
   <div class="wrap narrow center" style="padding-bottom:8px">
-    <h2>A thousand words is one year of two-minute days.</h2>
-    <p class="muted">That is all it takes to put your language in the record.</p>
+    <h2>Two minutes a day</h2>
+    <p class="muted">About 1,000 words over a year, on the days you choose.</p>
     <p style="margin-top:22px"><a class="btn" href="{{ url_for('main.join') }}">Join SHOLA</a></p>
   </div>
 </section>
