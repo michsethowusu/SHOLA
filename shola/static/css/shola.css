@@ -128,6 +128,12 @@ a:hover { text-decoration: underline; }
 .topnav a:hover { background: var(--sand-deep); color: var(--ink); text-decoration: none; }
 .topnav a.here { color: var(--ink); background: var(--sand-deep); }
 
+/* While checking words the header does not stick. It is translucent, so a
+   scrolled option shows through it and looks tappable while the header takes
+   the tap - on a short phone screen that swallowed the top option. Nothing on
+   that screen needs the nav anyway. */
+body.focus .topbar { position: static; }
+
 .site-foot {
   border-top: 1px solid var(--line);
   margin-top: 72px;

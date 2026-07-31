@@ -12,7 +12,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='css/shola.css') }}">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='25' x='4' font-size='24' font-family='sans-serif' font-weight='bold' fill='%23c0392b'>ɔ</text></svg>">
 </head>
-<body>
+<body class="{% block body_class %}{% endblock %}">
 
 <header class="topbar">
   <div class="wrap">

@@ -452,6 +452,15 @@ def main():
     ok &= check("evaluate page offers the back control",
                 b'id="back-btn"' in r.data)
 
+    print("\nthe header cannot cover the options while checking words")
+    r = fresh.get(f"/w/{token}")
+    ok &= check("evaluate page opts out of the sticky header",
+                b'class="focus"' in r.data)
+    css = open(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "shola/static/css/shola.css")).read()
+    ok &= check("and the stylesheet honours it",
+                "body.focus .topbar { position: static; }" in css)
+
     print("\nstatic files are versioned so a stale cache cannot linger")
     r = fresh.get("/")
     import re as _re
