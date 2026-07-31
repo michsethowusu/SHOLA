@@ -100,7 +100,7 @@ For speakers of a language not yet open:
 **Local-language captions:** we have deliberately not written these. Copy in
 Twi, Ewe, Ga or Dagbani should be written by a speaker, not translated by us —
 getting it slightly wrong in a campaign about language accuracy would undercut
-the whole point. If you write one, send it to info@ghananlp.org and we will add
+the whole point. If you write one, send it to michseth@ghananlp.org and we will add
 it here with credit.
 
 ## Hashtags
@@ -108,17 +108,13 @@ it here with credit.
 `#SHOLA` `#ShareYourLanguage` `#GhanaNLP` `#Twi` `#Ewe` `#Ga` `#Dagbani`
 `#GhanaianLanguages` `#AIforGhana`
 
-## Talking points that land
+## What to say
 
 - **It is two minutes.** People assume volunteering means hours. It does not.
 - **No app, no password.** A link arrives by email and it opens straight into
   the words.
-- **Your answer counts as much as the machine's.** If none of the three options
-  fit, you type your own and it competes on equal terms.
-- **The result is free for everyone.** Confirmed translations are published
-  under CC BY 4.0, so anyone building Ghanaian language tools can use them.
-- **There is a leaderboard.** Champions are ranked by how many words they have
-  checked, with their photo if they want.
+- **The result is free for anyone to build on.** That is how a language earns
+  its place in the apps, services and businesses Ghanaians use every day.
 
 ## Please do not
 
@@ -150,4 +146,4 @@ and the volunteers.
 
 ## Contact
 
-info@ghananlp.org · [ghananlp.org](https://ghananlp.org)
+michseth@ghananlp.org · [ghananlp.org](https://ghananlp.org)
