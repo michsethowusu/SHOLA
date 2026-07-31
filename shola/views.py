@@ -10,20 +10,23 @@ An address is confirmed by a one-time code at signup, so the daily emails only
 ever go to a mailbox someone actually opened.
 """
 
+import csv
+import io
 import secrets
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
-from flask import (Blueprint, abort, current_app, flash, jsonify, redirect,
-                   render_template, request, send_from_directory, session,
-                   url_for)
+from flask import (Blueprint, Response, abort, current_app, flash, jsonify,
+                   redirect, render_template, request, send_from_directory,
+                   session, url_for)
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 from . import consensus
-from .assignment import assign_words, leaderboard, record_verdict, redistribute
+from .assignment import leaderboard, record_verdict, redistribute
+from .tiers import active_tier, tier_progress, top_up
 from .mailer import build_otp_email, make_token, read_token
-from .models import Candidate, PendingSignup, Volunteer, db, site_stats
+from .models import Candidate, PendingSignup, Volunteer, Word, db, site_stats
 
 main = Blueprint("main", __name__)
 
@@ -70,7 +73,8 @@ def champions():
 @main.route("/stats")
 def stats():
     return render_template("stats.html", stats=site_stats(),
-                           per_language=consensus.language_progress())
+                           per_language=consensus.language_progress(),
+                           tiers=tier_progress(), active=active_tier())
 
 
 @main.route("/photo/<path:filename>")
@@ -224,8 +228,7 @@ def verify():
     db.session.delete(pending)
     db.session.commit()
 
-    given = assign_words(volunteer, current_app.config["WORDS_PER_VOLUNTEER"],
-                         horizon_days=current_app.config["COMMITMENT_DAYS"])
+    given = top_up(volunteer, target=current_app.config["WORDS_PER_VOLUNTEER"])
     token = make_token(volunteer)
     session["token"] = token
     session.pop("signup_email", None)
@@ -326,6 +329,9 @@ def evaluate(token):
     # Remembered only so the nav bar can offer a way back; never trusted.
     session["token"] = token
 
+    # Lease whatever the project needs right now, up to today's quota.
+    top_up(volunteer, target=current_app.config["WORDS_PER_VOLUNTEER"])
+
     queue, working_ahead = queue_payload(volunteer)
     remaining = (volunteer.upcoming().count() if working_ahead
                  else volunteer.pending_today().count())
@@ -386,28 +392,87 @@ def done(token):
 
 # ------------------------------------------------------------------------- api
 
-@main.route("/api/consensus/<language>")
-def api_consensus(language):
-    if language not in current_app.config["LANGUAGES"]:
-        abort(404)
-    min_votes = request.args.get("min_votes", 2, type=int)
-    limit = min(request.args.get("limit", 100, type=int), 1000)
+@main.route("/api")
+def api_docs():
+    """Human-readable documentation for the vocabulary API."""
+    counts = {}
+    for code in current_app.config["LANGUAGES"]:
+        counts[code] = consensus.verified_count(code)
+    sample = consensus.sample_entries("twi", limit=3)
+    return render_template("api.html", counts=counts, sample=sample)
+
+
+def _vocabulary(language, min_votes, limit, offset):
     rows = []
-    for phrase, text, votes, share, total in consensus.export_rows(
-            language, min_votes=min_votes):
+    for i, row in enumerate(consensus.export_rows(language, min_votes=min_votes)):
+        if i < offset:
+            continue
+        phrase, text, votes, share, total = row
         rows.append({"phrase": phrase, "translation": text, "votes": votes,
-                     "share": share, "total_votes": total})
+                     "agreement": share, "total_votes": total})
         if len(rows) >= limit:
             break
-    return jsonify({"language": language, "min_votes": min_votes,
-                    "count": len(rows), "results": rows})
+    return rows
 
 
+@main.route("/api/vocabulary/<language>")
+def api_vocabulary(language):
+    """Verified vocabulary for one language.
+
+    Only entries where at least `min_votes` speakers chose the same wording.
+    """
+    if language not in current_app.config["LANGUAGES"]:
+        return jsonify({"error": "unknown language",
+                        "languages": list(current_app.config["LANGUAGES"])}), 404
+
+    min_votes = max(1, request.args.get("min_votes", 2, type=int))
+    limit = min(max(1, request.args.get("limit", 100, type=int)), 1000)
+    offset = max(0, request.args.get("offset", 0, type=int))
+    fmt = (request.args.get("format") or "json").lower()
+
+    rows = _vocabulary(language, min_votes, limit, offset)
+
+    if fmt == "csv":
+        out = io.StringIO()
+        w = csv.writer(out, lineterminator="\n")
+        w.writerow(["phrase", language, "votes", "agreement", "total_votes"])
+        for r in rows:
+            w.writerow([r["phrase"], r["translation"], r["votes"],
+                        r["agreement"], r["total_votes"]])
+        return Response(
+            out.getvalue(), mimetype="text/csv",
+            headers={"Content-Disposition":
+                     f'attachment; filename="shola-{language}.csv"'})
+
+    return jsonify({
+        "language": language,
+        "language_name": current_app.config["LANGUAGES"][language]["name"],
+        "min_votes": min_votes,
+        "offset": offset,
+        "limit": limit,
+        "returned": len(rows),
+        "total_verified": consensus.verified_count(language, min_votes),
+        "entries": rows,
+    })
+
+
+# The original name, kept so anything already pointing at it keeps working.
+@main.route("/api/consensus/<language>")
+def api_consensus(language):
+    return api_vocabulary(language)
+
+
+@main.route("/api/entry/<int:word_id>/<language>")
 @main.route("/api/word/<int:word_id>/<language>")
 def api_word(word_id, language):
+    """Every vote on one entry, including wordings that did not win."""
     if language not in current_app.config["LANGUAGES"]:
         abort(404)
-    return jsonify({"word_id": word_id, "language": language,
+    word = db.session.get(Word, word_id)
+    if not word:
+        abort(404)
+    return jsonify({"word_id": word_id, "phrase": word.phrase,
+                    "language": language,
                     "tally": consensus.tally(word_id, language),
                     "agreed": consensus.best(word_id, language)})
 

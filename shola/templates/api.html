@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% block title %}SHOLA vocabulary API{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap">
+    <p class="eyebrow">For developers</p>
+    <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">Vocabulary API</h1>
+    <p class="lede" style="max-width:56ch">
+      Pull verified Ghanaian-language vocabulary straight out of SHOLA. No key,
+      no sign-up, no rate limit. Every entry here was chosen by speakers, not by
+      a machine.
+    </p>
+
+    <div class="notice" style="margin-top:22px">
+      <strong>What "verified" means.</strong> Each English term is shown to
+      speakers with three machine-proposed translations. They tap one or type
+      their own. An entry appears in this API only once <strong>two or more
+      speakers independently chose the same wording</strong>. Entries where
+      speakers disagreed are excluded — you can raise the bar with
+      <code>min_votes</code>.
+    </div>
+
+    <h2 style="margin-top:44px">Available now</h2>
+    <div class="scroll-x" style="margin-top:14px">
+      <table class="plain">
+        <thead>
+          <tr><th>Language</th><th>Verified entries</th><th>JSON</th><th>CSV</th></tr>
+        </thead>
+        <tbody>
+          {% for code, lang in LANGUAGES.items() %}
+            <tr>
+              <td><strong>{{ lang.name }}</strong> <span class="faint">{{ lang.note }}</span></td>
+              <td>{{ counts.get(code, 0) | thousands }}</td>
+              <td><a href="{{ url_for('main.api_vocabulary', language=code) }}"><code>/api/vocabulary/{{ code }}</code></a></td>
+              <td><a href="{{ url_for('main.api_vocabulary', language=code, format='csv') }}">download</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="hint">
+      Counts start at zero and grow as volunteers work. Verification runs in
+      tiers, commonest vocabulary first — see <a href="{{ url_for('main.stats') }}">progress</a>.
+    </p>
+
+    <h2 style="margin-top:44px">The endpoint</h2>
+    <div class="card" style="margin-top:14px">
+      <p style="margin:0 0 10px"><code>GET /api/vocabulary/&lt;language&gt;</code></p>
+      <p class="muted" style="margin:0">
+        <code>language</code> is one of
+        {% for code in LANGUAGES %}<code>{{ code }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+      </p>
+    </div>
+
+    <div class="scroll-x" style="margin-top:18px">
+      <table class="plain">
+        <thead>
+          <tr><th>Parameter</th><th>Default</th><th>What it does</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>min_votes</code></td><td>2</td>
+            <td>How many speakers must have agreed. Raise it for a stricter list.</td>
+          </tr>
+          <tr>
+            <td><code>limit</code></td><td>100</td>
+            <td>Entries per response, up to 1000.</td>
+          </tr>
+          <tr>
+            <td><code>offset</code></td><td>0</td>
+            <td>Skip this many entries. Page through with <code>limit</code>.</td>
+          </tr>
+          <tr>
+            <td><code>format</code></td><td>json</td>
+            <td><code>csv</code> returns a downloadable file instead.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 style="margin-top:44px">What comes back</h2>
+    <div class="card" style="margin-top:14px">
+<pre style="margin:0;overflow-x:auto"><code>{
+  "language": "twi",
+  "language_name": "Twi",
+  "min_votes": 2,
+  "offset": 0,
+  "limit": 100,
+  "returned": {{ sample | length }},
+  "total_verified": {{ counts.get('twi', 0) }},
+  "entries": [
+{%- if sample %}
+{%- for e in sample %}
+    {
+      "phrase": {{ e.phrase | tojson }},
+      "translation": {{ e.translation | tojson }},
+      "votes": {{ e.votes }},
+      "agreement": {{ e.agreement }},
+      "total_votes": {{ e.total_votes }}
+    }{% if not loop.last %},{% endif %}
+{%- endfor %}
+{%- else %}
+    { "phrase": "blood bank",
+      "translation": "mogya adekoraeɛ",
+      "votes": 3,
+      "agreement": 0.75,
+      "total_votes": 4 }
+{%- endif %}
+  ]
+}</code></pre>
+    </div>
+    <div class="scroll-x" style="margin-top:16px">
+      <table class="plain">
+        <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
+        <tbody>
+          <tr><td><code>phrase</code></td><td>The English term.</td></tr>
+          <tr><td><code>translation</code></td><td>The wording speakers agreed on.</td></tr>
+          <tr><td><code>votes</code></td><td>Speakers who chose that wording.</td></tr>
+          <tr><td><code>agreement</code></td><td>Their share of all votes on the entry: 1.0 means unanimous.</td></tr>
+          <tr><td><code>total_votes</code></td><td>All votes cast on the entry.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 style="margin-top:44px">Examples</h2>
+
+    <h3 style="margin-top:20px">Fetch a page of Twi vocabulary</h3>
+    <div class="card" style="margin-top:10px">
+<pre style="margin:0;overflow-x:auto"><code>curl "{{ config.SITE_URL }}/api/vocabulary/twi?limit=50"</code></pre>
+    </div>
+
+    <h3 style="margin-top:20px">Only entries three speakers agreed on</h3>
+    <div class="card" style="margin-top:10px">
+<pre style="margin:0;overflow-x:auto"><code>curl "{{ config.SITE_URL }}/api/vocabulary/ewe?min_votes=3"</code></pre>
+    </div>
+
+    <h3 style="margin-top:20px">Straight into pandas</h3>
+    <div class="card" style="margin-top:10px">
+<pre style="margin:0;overflow-x:auto"><code>import pandas as pd
+
+df = pd.read_csv("{{ config.SITE_URL }}/api/vocabulary/ga?format=csv&amp;limit=1000")
+df.head()</code></pre>
+    </div>
+
+    <h3 style="margin-top:20px">Page through everything</h3>
+    <div class="card" style="margin-top:10px">
+<pre style="margin:0;overflow-x:auto"><code>import requests
+
+BASE = "{{ config.SITE_URL }}/api/vocabulary/dagbani"
+entries, offset = [], 0
+while True:
+    page = requests.get(BASE, params={"limit": 1000, "offset": offset}).json()
+    entries += page["entries"]
+    if len(page["entries"]) &lt; 1000:
+        break
+    offset += 1000
+
+print(len(entries), "verified entries")</code></pre>
+    </div>
+
+    <h2 style="margin-top:44px">One entry in detail</h2>
+    <p class="muted">
+      To see every wording offered for a term, including the ones that lost:
+    </p>
+    <div class="card" style="margin-top:10px">
+<pre style="margin:0;overflow-x:auto"><code>GET /api/entry/&lt;id&gt;/&lt;language&gt;</code></pre>
+    </div>
+    <p class="hint">
+      Returns the full tally — each wording, its vote count and its share —
+      alongside the agreed answer. Useful when you want the variants rather
+      than a single winner.
+    </p>
+
+    <h2 style="margin-top:44px">Notes</h2>
+    <ul class="muted" style="padding-left:20px">
+      <li>Responses are UTF-8. Twi, Ewe, Ga and Dagbani use characters like
+          <strong>ɛ ɔ ŋ ɖ ƒ ɣ ʋ ʒ</strong>, so decode as UTF-8 rather than
+          Latin-1 or they will arrive mangled.</li>
+      <li>Nothing is cached. Every request reflects the votes cast up to that
+          moment, so a term can move from unverified to verified between calls.</li>
+      <li>The unverified machine translations for all
+          {{ stats_words if stats_words else '478,822' }} terms are published
+          separately in
+          <a href="https://github.com/GhanaNLP/GhanaNouns">GhanaNouns</a>. Use
+          those for coverage, and this API when you need wording a speaker
+          stood behind.</li>
+    </ul>
+  </div>
+</section>
+{% endblock %}

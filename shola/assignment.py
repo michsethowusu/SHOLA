@@ -63,7 +63,11 @@ def pick_words(volunteer, count):
 
 
 def assign_words(volunteer, count, start=None, horizon_days=365):
-    """Give a volunteer `count` words, dated across their available days."""
+    """Deprecated: work is leased on demand now, see tiers.lease_words.
+
+    Kept because the fixed allocation is still the right shape for a one-off
+    backfill, but nothing in the live flow calls it.
+    """
     # Starts today so a volunteer who just signed up has something to do
     # immediately; the first email still goes out on their next chosen day.
     start = start or date.today()
@@ -152,6 +156,8 @@ def record_verdict(volunteer, word_id, candidate_id=None, custom_text=None,
         if assignment:
             assignment.status = "skipped" if skipped else "done"
         db.session.commit()
+        from .tiers import refresh_word
+        refresh_word(db.session.get(Word, word_id))
         return existing
 
     ev = Evaluation(volunteer_id=volunteer.id, word_id=word_id,
@@ -164,6 +170,9 @@ def record_verdict(volunteer, word_id, candidate_id=None, custom_text=None,
     if assignment:
         assignment.status = "skipped" if skipped else "done"
     db.session.commit()
+
+    from .tiers import refresh_word
+    refresh_word(db.session.get(Word, word_id))
     return ev
 
 

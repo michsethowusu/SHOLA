@@ -22,6 +22,7 @@
     <nav class="topnav">
       <a href="{{ url_for('main.champions') }}" {% if request.endpoint == 'main.champions' %}class="here"{% endif %}>Champions</a>
       <a href="{{ url_for('main.stats') }}" {% if request.endpoint == 'main.stats' %}class="here"{% endif %}>Progress</a>
+      <a href="{{ url_for('main.api_docs') }}" {% if request.endpoint == 'main.api_docs' %}class="here"{% endif %}>API</a>
       <a href="{{ url_for('main.about') }}" {% if request.endpoint == 'main.about' %}class="here"{% endif %}>About</a>
       {% if session.token %}
         <a href="{{ url_for('main.evaluate', token=session.token) }}" class="btn small">My words</a>
@@ -55,6 +56,8 @@
     <a href="{{ url_for('main.champions') }}">Champions</a>
     <span class="faint">·</span>
     <a href="{{ url_for('main.stats') }}">Progress</a>
+    <span class="faint">·</span>
+    <a href="{{ url_for('main.api_docs') }}">API</a>
     <span class="faint">·</span>
     <a href="{{ url_for('main.resend') }}">Lost your link?</a>
     <span style="margin-left:auto" class="faint">Built with volunteers, for Ghanaian languages.</span>

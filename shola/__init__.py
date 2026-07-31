@@ -27,6 +27,25 @@ def create_app(config_object=Config):
     app.cli.add_command(shola_cli)
 
     with app.app_context():
+        # SQLite defaults to a single writer that blocks readers. With several
+        # gunicorn workers that surfaces as "database is locked" the moment a
+        # verdict lands while someone else is reading. WAL lets readers carry
+        # on during a write, and a busy timeout makes concurrent writers wait
+        # their turn rather than fail outright.
+        if app.config["SQLALCHEMY_DATABASE_URI"].startswith("sqlite"):
+            from sqlalchemy import event
+
+            @event.listens_for(db.engine, "connect")
+            def _sqlite_pragmas(dbapi_connection, _record):   # noqa: ANN001
+                cur = dbapi_connection.cursor()
+                cur.execute("PRAGMA journal_mode=WAL")
+                cur.execute("PRAGMA busy_timeout=10000")
+                cur.execute("PRAGMA synchronous=NORMAL")
+                cur.close()
+
+            with db.engine.connect() as conn:
+                conn.exec_driver_sql("PRAGMA journal_mode=WAL")
+
         db.create_all()
 
     @app.context_processor

@@ -93,3 +93,26 @@ def language_progress():
 
 def candidate_by_id(candidate_id):
     return db.session.get(Candidate, candidate_id)
+
+
+def verified_count(language, min_votes=2):
+    """How many entries in this language have reached agreement."""
+    from .models import Word
+    return (Word.query
+            .filter(Word.done.is_(True))
+            .join(Evaluation, Evaluation.word_id == Word.id)
+            .filter(Evaluation.language == language)
+            .distinct()
+            .count())
+
+
+def sample_entries(language, limit=3):
+    """A few real verified entries, for the documentation page."""
+    out = []
+    for row in export_rows(language):
+        phrase, text, votes, share, total = row
+        out.append({"phrase": phrase, "translation": text, "votes": votes,
+                    "agreement": round(share, 2), "total_votes": total})
+        if len(out) >= limit:
+            break
+    return out

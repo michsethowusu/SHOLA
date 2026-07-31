@@ -19,23 +19,36 @@ from flask.cli import AppGroup
 from . import consensus
 from .assignment import redistribute
 from .models import Candidate, Volunteer, Word, db, site_stats
+from .tiers import (active_tier, assign_tiers, refresh_word, release_expired,
+                    tier_for, tier_progress, top_up)
 
 shola_cli = AppGroup("shola", help="SHOLA operations.")
 
 
 def load_frequencies(path):
-    """phrase -> corpus frequency, from the source dataset."""
+    """phrase -> (percentage, raw occurrences).
+
+    Occurrences drive the tiers: the percentage column is rounded to four
+    decimals, so 91% of words tie at 0.0000 and it cannot order the long tail.
+    """
     freqs = {}
     with open(path, newline="", encoding="utf-8") as fh:
         for rec in csv.DictReader(fh):
             try:
-                freqs[rec["phrase"]] = float(rec.get("average_percentage") or 0)
+                pct = float(rec.get("average_percentage") or 0)
             except (TypeError, ValueError):
-                freqs[rec["phrase"]] = 0.0
+                pct = 0.0
+            total = 0
+            for col in ("news_count", "research_count", "speech_count"):
+                try:
+                    total += int(float(rec.get(col) or 0))
+                except (TypeError, ValueError):
+                    pass
+            freqs[rec["phrase"]] = (pct, total)
     return freqs
 
 
-def _upsert_word(phrase, per_language, seen, freq=0.0):
+def _upsert_word(phrase, per_language, seen, freq=(0.0, 0)):
     """Add a word and its candidate translations. Returns True if new."""
     if phrase in seen:
         return False
@@ -43,7 +56,9 @@ def _upsert_word(phrase, per_language, seen, freq=0.0):
     if word:
         seen.add(phrase)
         return False
-    word = Word(phrase=phrase, frequency=freq)
+    pct, occurrences = freq
+    word = Word(phrase=phrase, frequency=pct, occurrences=occurrences,
+                tier=tier_for(occurrences))
     db.session.add(word)
     db.session.flush()
     for language, variants in per_language.items():
@@ -92,7 +107,7 @@ def import_words(csv_path, jsonl_path, freq_csv, limit):
                     continue
                 per_lang = {L: [str(v) for v in (rec.get(L) or [])]
                             for L in languages}
-                if _upsert_word(phrase, per_lang, seen, freqs.get(phrase, 0.0)):
+                if _upsert_word(phrase, per_lang, seen, freqs.get(phrase, (0.0, 0))):
                     added += 1
                     batch += 1
                 if batch >= 500:
@@ -109,7 +124,7 @@ def import_words(csv_path, jsonl_path, freq_csv, limit):
                     continue
                 per_lang = {L: [rec.get(f"{L}_{i}", "") for i in (1, 2, 3)]
                             for L in languages}
-                if _upsert_word(phrase, per_lang, seen, freqs.get(phrase, 0.0)):
+                if _upsert_word(phrase, per_lang, seen, freqs.get(phrase, (0.0, 0))):
                     added += 1
                     batch += 1
                 if batch >= 500:
@@ -146,6 +161,9 @@ def send_daily(window, dry_run, force):
             skipped += 1
             continue
 
+        # Lease today's words first: nothing is reserved in advance any more.
+        top_up(volunteer, target=current_app.config["WORDS_PER_VOLUNTEER"],
+               today=today)
         due = volunteer.pending_today(today).limit(400).all()
         if not due:
             skipped += 1
@@ -225,3 +243,54 @@ def stats_cmd():
     for language, d in sorted(consensus.language_progress().items()):
         click.echo(f"  {language:9s} {d['verdicts']:>7,} verdicts, "
                    f"{d['agreed']:>7,} with 2+ votes")
+
+
+@shola_cli.command("assign-tiers")
+def assign_tiers_cmd():
+    """Recompute every word's tier from its occurrence count."""
+    n = assign_tiers()
+    click.echo(f"tiered {n:,} words")
+    for row in tier_progress():
+        click.echo(f"  tier {row['tier']}  {row['total']:>8,} words")
+
+
+@shola_cli.command("tier-status")
+def tier_status():
+    """Show how far each tier has got."""
+    current = active_tier()
+    click.echo(f"working on tier {current}" if current
+               else "every tier is closed")
+    for row in tier_progress():
+        mark = " <-- current" if row["tier"] == current else ""
+        click.echo(f"  tier {row['tier']}  {row['done']:>8,} settled  "
+                   f"{row['contested']:>6,} contested  "
+                   f"{row['left']:>8,} to go  "
+                   f"({row['pct']:.1f}% of {row['total']:,}){mark}")
+
+
+@shola_cli.command("release-leases")
+def release_leases_cmd():
+    """Return unanswered leased words to the queue."""
+    n = release_expired()
+    click.echo(f"released {n:,} expired leases")
+
+
+@shola_cli.command("refresh-words")
+@click.option("--all", "do_all", is_flag=True,
+              help="recompute every word, not just those with verdicts.")
+def refresh_words_cmd(do_all):
+    """Rebuild vote state from the verdicts on record."""
+    if do_all:
+        words = Word.query.yield_per(1000)
+    else:
+        from .models import Evaluation
+        ids = [r[0] for r in db.session.query(db.distinct(Evaluation.word_id))]
+        words = Word.query.filter(Word.id.in_(ids)).all()
+    n = 0
+    for word in words:
+        refresh_word(word, commit=False)
+        n += 1
+        if n % 2000 == 0:
+            db.session.commit()
+    db.session.commit()
+    click.echo(f"refreshed {n:,} words")

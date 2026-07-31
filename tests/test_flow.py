@@ -8,7 +8,7 @@ Run with:  python3 -m pytest tests -q      (or: python3 tests/test_flow.py)
 import os
 import sys
 import tempfile
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -17,6 +17,10 @@ from shola.assignment import (assign_words, leaderboard,         # noqa: E402
                               record_verdict, redistribute, spread)
 from shola.config import Config                                 # noqa: E402
 from shola.consensus import best, normalise, tally               # noqa: E402
+from shola.tiers import (MAX_VERDICTS_BEFORE_CONTESTED,           # noqa: E402
+                         active_tier, assign_tiers, daily_quota,
+                         lease_words, refresh_word, release_expired,
+                         tier_for, tier_progress, top_up)
 from shola.models import (Assignment, Candidate, Evaluation,      # noqa: E402
                           PendingSignup, Volunteer, Word, db)
 
@@ -40,7 +44,8 @@ def make_app():
 def seed(n_words=30):
     for i in range(n_words):
         # Descending frequency, so word 0 is the commonest.
-        w = Word(phrase=f"word {i}", frequency=float(n_words - i))
+        w = Word(phrase=f"word {i}", frequency=float(n_words - i),
+                 occurrences=n_words - i, tier=tier_for(n_words - i))
         db.session.add(w)
         db.session.flush()
         for lang in LANGS:
@@ -158,6 +163,109 @@ def main():
         ok &= check("frequency descending within a coverage level",
                     freqs == sorted(freqs, reverse=True), str(picked))
 
+    print("\ntiers")
+    with app.app_context():
+        # The sections above used the old fixed allocation. Those leftover
+        # assignments count as live leases and would starve the queue, which
+        # is exactly why the migration clears them on the live database too.
+        Assignment.query.delete()
+        Evaluation.query.delete()
+        db.session.commit()
+        for w in Word.query.all():
+            refresh_word(w, commit=False)
+        db.session.commit()
+        ok &= check("thresholds map counts to tiers",
+                    (tier_for(100), tier_for(30), tier_for(12),
+                     tier_for(6), tier_for(1)) == (1, 2, 3, 4, 5))
+        # Give the seeded words a clean spread across two tiers.
+        for i, w in enumerate(Word.query.order_by(Word.id).all()):
+            w.occurrences = 100 if i < 10 else 1
+        db.session.commit()
+        assign_tiers()
+        counts = {r["tier"]: r["total"] for r in tier_progress()}
+        ok &= check("words land in the right tiers",
+                    counts.get(1) == 10 and counts.get(5) == 20, str(counts))
+        ok &= check("tier 1 is the one being worked", active_tier() == 1)
+
+    print("\nwork is leased from the active tier, not reserved at signup")
+    with app.app_context():
+        h = add_volunteer("h@example.com")
+        n = lease_words(h, 6)
+        ok &= check("leases were handed out", n == 6, f"got {n}")
+        tiers_used = {db.session.get(Word, a.word_id).tier
+                      for a in h.assignments}
+        ok &= check("only from the active tier", tiers_used == {1}, str(tiers_used))
+        ok &= check("nothing was pre-allocated beyond the lease",
+                    h.assignments.count() == 6)
+
+    print("\na word stops being handed out once two agree")
+    with app.app_context():
+        w = Word.query.filter_by(tier=1).order_by(Word.id).first()
+        v1 = add_volunteer("i@example.com")
+        v2 = add_volunteer("j@example.com")
+        record_verdict(v1, w.id, custom_text="same answer")
+        db.session.refresh(w)
+        ok &= check("one vote does not settle it", not w.done)
+        record_verdict(v2, w.id, custom_text="same answer")
+        db.session.refresh(w)
+        ok &= check("two matching votes settle it", w.done)
+        later = add_volunteer("k@example.com")
+        lease_words(later, 10)
+        ok &= check("a settled word is not handed out again",
+                    w.id not in {a.word_id for a in later.assignments})
+
+    print("\ndisagreement keeps a word in the queue, but not forever")
+    with app.app_context():
+        w2 = Word.query.filter(Word.tier == 1, Word.done.is_(False)).first()
+        voters = [add_volunteer(f"dis{i}@example.com") for i in range(6)]
+        for i, v in enumerate(voters[:3]):
+            record_verdict(v, w2.id, custom_text=f"different {i}")
+        db.session.refresh(w2)
+        ok &= check("three different answers leave it unsettled",
+                    not w2.done and w2.top_votes == 1)
+        ok &= check("and it is still offered",
+                    lease_words(add_volunteer("l@example.com"), 30) > 0
+                    and not w2.contested)
+        for i, v in enumerate(voters[3:]):
+            record_verdict(v, w2.id, custom_text=f"another {i}")
+        db.session.refresh(w2)
+        ok &= check(f"after {MAX_VERDICTS_BEFORE_CONTESTED} verdicts it is "
+                    "closed as contested", w2.contested,
+                    f"votes={w2.total_votes} contested={w2.contested}")
+        fresh_v = add_volunteer("m@example.com")
+        lease_words(fresh_v, 30)
+        ok &= check("a contested word is no longer handed out",
+                    w2.id not in {a.word_id for a in fresh_v.assignments})
+
+    print("\nthe next tier opens only when this one is closed")
+    with app.app_context():
+        ok &= check("still on tier 1 while words remain", active_tier() == 1)
+        for w in Word.query.filter(Word.tier == 1).all():
+            w.done = True
+        db.session.commit()
+        ok &= check("tier 2 opens once tier 1 closes", active_tier() == 5,
+                    f"active={active_tier()}")
+
+    print("\nleases expire so words are never stuck")
+    with app.app_context():
+        stuck = add_volunteer("n@example.com")
+        lease_words(stuck, 3)
+        for a in stuck.assignments:
+            a.expires_at = datetime.utcnow() - timedelta(days=1)
+        db.session.commit()
+        released = release_expired()
+        ok &= check("expired leases are released", released == 3, f"{released}")
+        ok &= check("they leave the volunteer queue",
+                    stuck.pending_today().count() == 0)
+
+    print("\ndaily quota still follows the days they chose")
+    with app.app_context():
+        everyday = add_volunteer("o@example.com")
+        twodays = add_volunteer("p@example.com", days="0,3")
+        q1, q2 = daily_quota(everyday), daily_quota(twodays)
+        ok &= check("fewer days means a bigger daily list", q2 > q1,
+                    f"7-day={q1}, 2-day={q2}")
+
     print("\nsignup needs a code before anything is created")
     sent = {}
 
@@ -202,7 +310,10 @@ def main():
         ok &= check("pending record cleared",
                     PendingSignup.query.filter_by(email="ama@example.com").first()
                     is None)
-        ok &= check("words assigned on confirmation", vol.assignments.count() > 0)
+        ok &= check("words leased on confirmation", vol.assignments.count() > 0)
+        ok &= check("only a day's worth, not a year's",
+                    vol.assignments.count() <= daily_quota(vol) ,
+                    f"{vol.assignments.count()} leased")
         with app.test_request_context():
             from shola.mailer import make_token
             token = make_token(vol)
@@ -267,10 +378,24 @@ def main():
     ok &= check("evaluate page offers the back control",
                 b'id="back-btn"' in r.data)
 
+    r = fresh.get("/api/vocabulary/twi")
+    ok &= check("vocabulary API responds", r.status_code == 200)
+    body = r.get_json()
+    ok &= check("response documents itself",
+                {"language", "min_votes", "total_verified", "entries"}
+                <= set(body), str(sorted(body)))
+    r = fresh.get("/api/vocabulary/twi?format=csv")
+    ok &= check("csv format works",
+                r.status_code == 200 and "text/csv" in r.headers["Content-Type"])
     r = fresh.get("/api/consensus/twi")
-    ok &= check("consensus API responds", r.status_code == 200)
-    r = fresh.get("/api/consensus/nope")
+    ok &= check("the old endpoint name still works", r.status_code == 200)
+    r = fresh.get("/api/vocabulary/nope")
     ok &= check("unknown language 404s", r.status_code == 404)
+    r = fresh.get("/api")
+    ok &= check("API docs page renders", r.status_code == 200
+                and b"Vocabulary API" in r.data)
+    ok &= check("docs explain what verified means", b"two or more" in r.data.lower()
+                or b"two or more speakers" in r.data.lower())
 
     print("\nemail rendering")
     with app.app_context():

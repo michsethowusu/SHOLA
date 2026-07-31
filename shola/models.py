@@ -111,11 +111,33 @@ class Word(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     phrase = db.Column(db.String(255), nullable=False, unique=True, index=True)
-    # Denormalised so fair assignment is one indexed sort, not a join per word.
     assign_count = db.Column(db.Integer, default=0, nullable=False, index=True)
-    # Corpus frequency, carried over from the source dataset. Common words are
-    # worth verifying first: they carry more weight in anything trained on this.
-    frequency = db.Column(db.Float, default=0.0, nullable=False, index=True)
+
+    # Corpus evidence. `occurrences` is the raw count across news, research and
+    # speech; `frequency` is the rounded percentage, kept for display only -
+    # 91% of words round to 0.0000, so it cannot order the long tail.
+    frequency = db.Column(db.Float, default=0.0, nullable=False)
+    occurrences = db.Column(db.Integer, default=0, nullable=False, index=True)
+
+    # Which band of commonness this word sits in. Tier 1 is worked to
+    # completion before tier 2 opens.
+    tier = db.Column(db.Integer, default=5, nullable=False, index=True)
+
+    # Vote state, denormalised from Evaluation so the work queue is one indexed
+    # query rather than a tally per candidate word.
+    top_votes = db.Column(db.Integer, default=0, nullable=False)
+    total_votes = db.Column(db.Integer, default=0, nullable=False)
+    # True once one wording has the votes it needs. Indexed with tier because
+    # every queue query filters on exactly this pair.
+    done = db.Column(db.Boolean, default=False, nullable=False)
+    # True when speakers keep disagreeing. Some words have several equally
+    # correct wordings and will never reach agreement; without this a single
+    # such word would be handed out forever and its tier could never close.
+    contested = db.Column(db.Boolean, default=False, nullable=False)
+
+    __table_args__ = (
+        db.Index("ix_word_queue", "tier", "done", "top_votes", "occurrences"),
+    )
 
     candidates = db.relationship("Candidate", back_populates="word",
                                  cascade="all, delete-orphan")
@@ -159,6 +181,9 @@ class Assignment(db.Model):
     due_date = db.Column(db.Date, nullable=False, index=True)
     status = db.Column(db.String(20), default="pending", nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # A lease, not a permanent allocation: if a volunteer never answers, the
+    # word must return to the queue instead of being stuck with them.
+    expires_at = db.Column(db.DateTime, index=True)
 
     volunteer = db.relationship("Volunteer", back_populates="assignments")
     word = db.relationship("Word")
