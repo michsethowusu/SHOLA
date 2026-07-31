@@ -5,7 +5,8 @@ individual languages spoken in Ghana, minus the four already running.
 Someone whose language is here can still sign up; they go on the list
 and start receiving words when it opens.
 
-Regenerate with scripts/refresh_languages.py.
+Anything marked ADDED below is not in afriso's Ghana list but is spoken here,
+so it must be re-added by hand if this file is ever regenerated.
 """
 
 OTHER_LANGUAGES = [
@@ -39,6 +40,9 @@ OTHER_LANGUAGES = [
     ('gjn', 'Gonja', ['Guang', 'Ngbanyito']),
     ('gwx', 'Gua', ['Anum-Boso', 'Guang', 'Gwa']),
     ('hag', 'Hanga', ['Anga']),
+    # ADDED: afriso files Hausa under BF, BJ, CM, NE, NG and TD, but it is
+    # widely spoken in Ghana, particularly in Zongo communities.
+    ('hau', 'Hausa', ['Haoussa', 'Hausawa']),
     ('ahl', 'Igo', ['Achlo', 'Ago', 'Ahlon']),
     ('kpo', 'Ikposo', ['Akposo', 'Akposos', 'Akposso']),
     ('jwi', 'Jwira-Pepesa', ['Pepesa-Jwira']),
