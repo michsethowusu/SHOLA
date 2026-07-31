@@ -309,7 +309,7 @@ appears to do nothing, check `pgrep -af cloudflared` for a process no unit owns.
 
 Artwork and captions for recruiting volunteers live in `brand/`, are served at
 [shola.inkika.org/brand](https://shola.inkika.org/brand), and are published as a
-[release asset](https://github.com/GhanaNLP/SHOLA/releases/latest/download/shola-brand-kit.zip).
+[release asset](https://github.com/michsethowusu/SHOLA/releases/latest/download/shola-brand-kit.zip).
 
 ```bash
 python3 brand/build.py     # regenerate the artwork after a brand change

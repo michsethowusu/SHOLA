@@ -3,7 +3,7 @@
 Everything needed to post about SHOLA and send volunteers our way.
 
 **Download it all:**
-[shola-brand-kit.zip](https://github.com/GhanaNLP/SHOLA/releases/latest/download/shola-brand-kit.zip)
+[shola-brand-kit.zip](https://github.com/michsethowusu/SHOLA/releases/latest/download/shola-brand-kit.zip)
 · **Web page:** [shola.inkika.org/brand](https://shola.inkika.org/brand)
 · **Link to share:** `shola.inkika.org`
 
