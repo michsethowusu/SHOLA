@@ -156,15 +156,11 @@ body.focus .topbar { position: static; }
 /* The imprint line reads as an imprint, not as more navigation: separated by a
    hairline, smaller, letter-spaced and in the utility face rather than the body
    face it shared with the links above. */
-/* The rule runs the full width of the page, while the text keeps to the same
-   left edge as the links above it. */
-.site-foot .imprint-row {
-  margin-top: 18px;
+/* The rule spans the same column as the links above it, not the whole page. */
+.site-foot .imprint {
+  margin: 18px 0 0;
   padding-top: 16px;
   border-top: 1px solid var(--line);
-}
-.site-foot .imprint {
-  margin: 0;
   font-family: var(--mono);
   font-size: .74rem;
   letter-spacing: .16em;
