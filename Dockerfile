@@ -23,6 +23,11 @@ COPY . .
 RUN mkdir -p /app/instance
 VOLUME ["/app/instance"]
 
+# Coolify passes the commit it is building; bake it in so /healthz can report
+# which build is actually serving.
+ARG SOURCE_COMMIT=unknown
+ENV SHOLA_BUILD=$SOURCE_COMMIT
+
 ENV SHOLA_DATABASE_URL=sqlite:////app/instance/shola.db
 EXPOSE 8000
 

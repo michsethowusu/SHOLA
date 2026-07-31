@@ -588,4 +588,11 @@ def api_word(word_id, language):
 
 @main.route("/healthz")
 def healthz():
-    return {"ok": True, "today": date.today().isoformat()}
+    """Liveness, plus which build is serving.
+
+    The commit matters: /healthz answers 200 from the old container throughout a
+    rolling update, so a deploy that only waits for 200 reports success before
+    the new code is live.
+    """
+    return {"ok": True, "today": date.today().isoformat(),
+            "build": current_app.config.get("BUILD", "unknown")}

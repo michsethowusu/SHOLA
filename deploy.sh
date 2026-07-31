@@ -33,15 +33,20 @@ curl -sS -m 60 -H "Authorization: Bearer $TOKEN" \
   "$COOLIFY_URL/api/v1/deploy?uuid=$APP_UUID" | head -c 200
 echo
 
-echo -n "waiting for the site"
-for _ in $(seq 1 60); do
-  if [ "$(curl -s -o /dev/null -w '%{http_code}' -m 10 "$SITE/healthz")" = "200" ]; then
-    echo " — up"
+# Waiting for /healthz is not enough: it answers 200 from the old container all
+# the way through a rolling update, so it reports success before the new code is
+# serving. Wait for the commit itself to appear instead.
+WANT="$(git rev-parse --short HEAD)"
+echo -n "waiting for $WANT to serve"
+for _ in $(seq 1 90); do
+  GOT="$(curl -s -m 10 "$SITE/healthz" | sed -n 's/.*"build":"\([^"]*\)".*/\1/p')"
+  if [ "$GOT" = "$WANT" ]; then
+    echo " — live"
     curl -s -m 10 "$SITE/healthz"; echo
     exit 0
   fi
   echo -n "."
   sleep 10
 done
-echo " — did not come back up in time; check Coolify" >&2
+echo " — $WANT is not serving yet; check Coolify" >&2
 exit 1

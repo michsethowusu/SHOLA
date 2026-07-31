@@ -54,8 +54,27 @@ TIME_WINDOWS = {
 }
 
 
+def _build_id():
+    """Short commit of the running code, for /healthz.
+
+    Read from the environment when set (Coolify passes the commit), otherwise
+    from git, otherwise unknown.
+    """
+    env = os.environ.get("SOURCE_COMMIT") or os.environ.get("SHOLA_BUILD")
+    if env:
+        return env[:7]
+    try:
+        import subprocess
+        return subprocess.run(["git", "rev-parse", "--short", "HEAD"],
+                              cwd=BASE_DIR, capture_output=True, text=True,
+                              timeout=5).stdout.strip() or "unknown"
+    except Exception:      # noqa: BLE001 - a missing git is not an error here
+        return "unknown"
+
+
 class Config:
     SECRET_KEY = os.environ.get("SHOLA_SECRET_KEY", "dev-only-change-me")
+    BUILD = _build_id()
     SQLALCHEMY_DATABASE_URI = os.environ.get(
         "SHOLA_DATABASE_URL", f"sqlite:///{INSTANCE_DIR / 'shola.db'}")
     SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
