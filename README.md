@@ -256,13 +256,12 @@ refused, and the closed sheet staying pointer-transparent.
 ## Deploying
 
 ```bash
-./deploy.sh
+COOLIFY_TOKEN=... ./deploy.sh
 ```
 
-Use the script rather than typing rsync by hand. It excludes `.venv`, `.env`,
-`instance/` and `seed/`, all of which exist only on the server — an `rsync
---delete` without those exclusions removes the server's virtualenv and takes the
-site down.
+The app builds from GitHub, so deploying is a push plus a Coolify build. The
+script refuses to run with a dirty working tree, because pushing is the deploy —
+uncommitted changes simply would not ship.
 
 ## Running on Coolify
 
@@ -339,7 +338,7 @@ well if the data matters.
 
 ## The live deployment
 
-[shola.inkika.org](https://shola.inkika.org) runs on the Inkika H200 box:
+[shola.inkika.org](https://shola.inkika.org) runs on the Coolify VPS:
 
 | | |
 |---|---|
@@ -399,7 +398,7 @@ The **words** collected through SHOLA — the translations volunteers confirm �
 are released under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), the same licence as
 [GhanaNouns](https://github.com/GhanaNLP/GhanaNouns). Use them for anything,
-including commercially, as long as you credit SHOLA and Inkika.
+including commercially, as long as you credit SHOLA and Ghana Open Data.
 
 Two licences because they cover different things: MIT is a software licence and
 says nothing sensible about a word list, while CC BY is written for data and
