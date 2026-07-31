@@ -305,6 +305,19 @@ appears to do nothing, check `pgrep -af cloudflared` for a process no unit owns.
   it, not from the incoming request, because the emails are sent from cron where
   there is no request to read.
 
+## Media kit
+
+Artwork and captions for recruiting volunteers live in `brand/`, are served at
+[shola.inkika.org/brand](https://shola.inkika.org/brand), and are published as a
+[release asset](https://github.com/GhanaNLP/SHOLA/releases/latest/download/shola-brand-kit.zip).
+
+```bash
+python3 brand/build.py     # regenerate the artwork after a brand change
+```
+
+Assets are HTML templates rendered by headless Chrome at exact pixel sizes, so
+they use the site's own typeface and palette rather than drifting from it.
+
 ## Licence
 
 The **code** in this repository is MIT licensed; see `LICENSE`.
