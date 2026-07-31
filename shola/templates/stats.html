@@ -111,7 +111,7 @@
       </p>
       <p style="margin:0">
         {% for code in LANGUAGES %}
-          <a href="{{ url_for('main.api_consensus', language=code) }}"><code>/api/consensus/{{ code }}</code></a>{% if not loop.last %} · {% endif %}
+          <a href="{{ url_for('main.api_words', language=code) }}"><code>/api/words/{{ code }}</code></a>{% if not loop.last %} · {% endif %}
         {% endfor %}
       </p>
     </div>

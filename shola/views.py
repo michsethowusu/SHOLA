@@ -394,7 +394,7 @@ def done(token):
 
 @main.route("/api")
 def api_docs():
-    """Human-readable documentation for the vocabulary API."""
+    """Human-readable documentation for the words API."""
     counts = {}
     for code in current_app.config["LANGUAGES"]:
         counts[code] = consensus.verified_count(code)
@@ -402,7 +402,7 @@ def api_docs():
     return render_template("api.html", counts=counts, sample=sample)
 
 
-def _vocabulary(language, min_votes, limit, offset):
+def _words(language, min_votes, limit, offset):
     rows = []
     for i, row in enumerate(consensus.export_rows(language, min_votes=min_votes)):
         if i < offset:
@@ -415,9 +415,9 @@ def _vocabulary(language, min_votes, limit, offset):
     return rows
 
 
-@main.route("/api/vocabulary/<language>")
-def api_vocabulary(language):
-    """Verified vocabulary for one language.
+@main.route("/api/words/<language>")
+def api_words(language):
+    """Verified words for one language.
 
     Only entries where at least `min_votes` speakers chose the same wording.
     """
@@ -430,7 +430,7 @@ def api_vocabulary(language):
     offset = max(0, request.args.get("offset", 0, type=int))
     fmt = (request.args.get("format") or "json").lower()
 
-    rows = _vocabulary(language, min_votes, limit, offset)
+    rows = _words(language, min_votes, limit, offset)
 
     if fmt == "csv":
         out = io.StringIO()
@@ -456,10 +456,11 @@ def api_vocabulary(language):
     })
 
 
-# The original name, kept so anything already pointing at it keeps working.
+# Earlier names, kept so anything already pointing at them keeps working.
+@main.route("/api/vocabulary/<language>")
 @main.route("/api/consensus/<language>")
 def api_consensus(language):
-    return api_vocabulary(language)
+    return api_words(language)
 
 
 @main.route("/api/entry/<int:word_id>/<language>")

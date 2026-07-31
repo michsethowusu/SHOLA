@@ -378,22 +378,23 @@ def main():
     ok &= check("evaluate page offers the back control",
                 b'id="back-btn"' in r.data)
 
-    r = fresh.get("/api/vocabulary/twi")
-    ok &= check("vocabulary API responds", r.status_code == 200)
+    r = fresh.get("/api/words/twi")
+    ok &= check("words API responds", r.status_code == 200)
     body = r.get_json()
     ok &= check("response documents itself",
                 {"language", "min_votes", "total_verified", "entries"}
                 <= set(body), str(sorted(body)))
-    r = fresh.get("/api/vocabulary/twi?format=csv")
+    r = fresh.get("/api/words/twi?format=csv")
     ok &= check("csv format works",
                 r.status_code == 200 and "text/csv" in r.headers["Content-Type"])
-    r = fresh.get("/api/consensus/twi")
-    ok &= check("the old endpoint name still works", r.status_code == 200)
-    r = fresh.get("/api/vocabulary/nope")
+    for old_path in ("/api/consensus/twi", "/api/vocabulary/twi"):
+        r = fresh.get(old_path)
+        ok &= check(f"{old_path} still works", r.status_code == 200)
+    r = fresh.get("/api/words/nope")
     ok &= check("unknown language 404s", r.status_code == 404)
     r = fresh.get("/api")
     ok &= check("API docs page renders", r.status_code == 200
-                and b"Vocabulary API" in r.data)
+                and b"Words API" in r.data)
     ok &= check("docs explain what verified means", b"two or more" in r.data.lower()
                 or b"two or more speakers" in r.data.lower())
 

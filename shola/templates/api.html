@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block title %}SHOLA vocabulary API{% endblock %}
+{% block title %}SHOLA words API{% endblock %}
 
 {% block content %}
 <section class="section">
   <div class="wrap">
     <p class="eyebrow">For developers</p>
-    <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">Vocabulary API</h1>
+    <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">Words API</h1>
     <p class="lede" style="max-width:56ch">
-      Pull verified Ghanaian-language vocabulary straight out of SHOLA. No key,
+      Pull verified Ghanaian-language words straight out of SHOLA. No key,
       no sign-up, no rate limit. Every entry here was chosen by speakers, not by
       a machine.
     </p>
@@ -32,8 +32,8 @@
             <tr>
               <td><strong>{{ lang.name }}</strong> <span class="faint">{{ lang.note }}</span></td>
               <td>{{ counts.get(code, 0) | thousands }}</td>
-              <td><a href="{{ url_for('main.api_vocabulary', language=code) }}"><code>/api/vocabulary/{{ code }}</code></a></td>
-              <td><a href="{{ url_for('main.api_vocabulary', language=code, format='csv') }}">download</a></td>
+              <td><a href="{{ url_for('main.api_words', language=code) }}"><code>/api/words/{{ code }}</code></a></td>
+              <td><a href="{{ url_for('main.api_words', language=code, format='csv') }}">download</a></td>
             </tr>
           {% endfor %}
         </tbody>
@@ -41,12 +41,12 @@
     </div>
     <p class="hint">
       Counts start at zero and grow as volunteers work. Verification runs in
-      tiers, commonest vocabulary first — see <a href="{{ url_for('main.stats') }}">progress</a>.
+      tiers, commonest words first — see <a href="{{ url_for('main.stats') }}">progress</a>.
     </p>
 
     <h2 style="margin-top:44px">The endpoint</h2>
     <div class="card" style="margin-top:14px">
-      <p style="margin:0 0 10px"><code>GET /api/vocabulary/&lt;language&gt;</code></p>
+      <p style="margin:0 0 10px"><code>GET /api/words/&lt;language&gt;</code></p>
       <p class="muted" style="margin:0">
         <code>language</code> is one of
         {% for code in LANGUAGES %}<code>{{ code }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
@@ -125,21 +125,21 @@
 
     <h2 style="margin-top:44px">Examples</h2>
 
-    <h3 style="margin-top:20px">Fetch a page of Twi vocabulary</h3>
+    <h3 style="margin-top:20px">Fetch a page of Twi words</h3>
     <div class="card" style="margin-top:10px">
-<pre style="margin:0;overflow-x:auto"><code>curl "{{ config.SITE_URL }}/api/vocabulary/twi?limit=50"</code></pre>
+<pre style="margin:0;overflow-x:auto"><code>curl "{{ config.SITE_URL }}/api/words/twi?limit=50"</code></pre>
     </div>
 
     <h3 style="margin-top:20px">Only entries three speakers agreed on</h3>
     <div class="card" style="margin-top:10px">
-<pre style="margin:0;overflow-x:auto"><code>curl "{{ config.SITE_URL }}/api/vocabulary/ewe?min_votes=3"</code></pre>
+<pre style="margin:0;overflow-x:auto"><code>curl "{{ config.SITE_URL }}/api/words/ewe?min_votes=3"</code></pre>
     </div>
 
     <h3 style="margin-top:20px">Straight into pandas</h3>
     <div class="card" style="margin-top:10px">
 <pre style="margin:0;overflow-x:auto"><code>import pandas as pd
 
-df = pd.read_csv("{{ config.SITE_URL }}/api/vocabulary/ga?format=csv&amp;limit=1000")
+df = pd.read_csv("{{ config.SITE_URL }}/api/words/ga?format=csv&amp;limit=1000")
 df.head()</code></pre>
     </div>
 
@@ -147,7 +147,7 @@ df.head()</code></pre>
     <div class="card" style="margin-top:10px">
 <pre style="margin:0;overflow-x:auto"><code>import requests
 
-BASE = "{{ config.SITE_URL }}/api/vocabulary/dagbani"
+BASE = "{{ config.SITE_URL }}/api/words/dagbani"
 entries, offset = [], 0
 while True:
     page = requests.get(BASE, params={"limit": 1000, "offset": offset}).json()
