@@ -8,6 +8,7 @@ Typical operation:
 """
 
 import csv
+import gzip
 import json
 import sys
 from datetime import date
@@ -25,6 +26,13 @@ from .tiers import (active_tier, assign_tiers, refresh_word, release_expired,
 shola_cli = AppGroup("shola", help="SHOLA operations.")
 
 
+def open_maybe_gz(path):
+    """Open a text file, transparently handling .gz."""
+    if str(path).endswith(".gz"):
+        return gzip.open(path, "rt", encoding="utf-8", newline="")
+    return open(path, newline="", encoding="utf-8")
+
+
 def load_frequencies(path):
     """phrase -> (percentage, raw occurrences).
 
@@ -32,7 +40,7 @@ def load_frequencies(path):
     decimals, so 91% of words tie at 0.0000 and it cannot order the long tail.
     """
     freqs = {}
-    with open(path, newline="", encoding="utf-8") as fh:
+    with open_maybe_gz(path) as fh:
         for rec in csv.DictReader(fh):
             try:
                 pct = float(rec.get("average_percentage") or 0)
@@ -96,7 +104,7 @@ def import_words(csv_path, jsonl_path, freq_csv, limit):
         db.session.commit()
 
     if jsonl_path:
-        with open(jsonl_path, encoding="utf-8") as fh:
+        with open_maybe_gz(jsonl_path) as fh:
             for line in fh:
                 try:
                     rec = json.loads(line)
@@ -117,7 +125,7 @@ def import_words(csv_path, jsonl_path, freq_csv, limit):
                 if limit and added >= limit:
                     break
     else:
-        with open(csv_path, newline="", encoding="utf-8") as fh:
+        with open_maybe_gz(csv_path) as fh:
             for rec in csv.DictReader(fh):
                 phrase = (rec.get("phrase") or "").strip()
                 if not phrase:

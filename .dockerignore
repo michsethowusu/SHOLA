@@ -1,0 +1,9 @@
+.git
+.venv
+instance
+seed
+brand/assets
+__pycache__
+*.pyc
+*.log
+.env

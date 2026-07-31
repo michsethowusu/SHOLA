@@ -264,6 +264,43 @@ Use the script rather than typing rsync by hand. It excludes `.venv`, `.env`,
 --delete` without those exclusions removes the server's virtualenv and takes the
 site down.
 
+## Running on Coolify
+
+The repository builds as a container, matching the other apps on that server.
+
+```
+build pack   dockerfile
+port         8000
+volume       /app/instance      <-- required
+```
+
+**Mount the volume.** The SQLite database lives in `/app/instance`; without a
+persistent mount every redeploy erases the volunteers and every answer given.
+
+Environment:
+
+```
+SHOLA_SECRET_KEY      generate: python3 -c "import secrets;print(secrets.token_urlsafe(48))"
+SHOLA_SITE_URL        https://shola.inkika.org
+SHOLA_SMTP_HOST       smtp.gmail.com
+SHOLA_SMTP_PORT       587
+SHOLA_SMTP_USER       the sending Gmail address
+SHOLA_SMTP_PASSWORD   a Gmail app password, set in the Coolify UI rather than over the API
+SHOLA_MAIL_FROM_NAME  SHOLA
+```
+
+On first boot the container fetches the published dataset and imports it —
+38 MB down, a few minutes to load 478,822 words. It is skipped on later boots,
+so a redeploy is quick. `SHOLA_SKIP_SEED=1` disables it entirely.
+
+Scheduled tasks, as Coolify cron entries on the same container:
+
+```
+0 7,13,18 * * *   flask --app wsgi shola send-daily --window all
+0 4 * * *         flask --app wsgi shola release-leases
+30 3 * * 1        flask --app wsgi shola redistribute-missed
+```
+
 ## The live deployment
 
 [shola.inkika.org](https://shola.inkika.org) runs on the Inkika H200 box:
