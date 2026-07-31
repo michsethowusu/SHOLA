@@ -128,9 +128,14 @@ a:hover { text-decoration: underline; }
 .topnav a:hover { background: var(--sand-deep); color: var(--ink); text-decoration: none; }
 .topnav a.here { color: var(--ink); background: var(--sand-deep); }
 /* .topnav a is more specific than .btn, so without this the nav buttons take
-   the muted link colour and render dark text on red. */
+   the muted link colour and the lighter link weight - dark text on red, set
+   thinner than every other button on the site. */
 .topnav a.btn,
-.topnav a.btn:hover { color: #fff; background: var(--red); }
+.topnav a.btn:hover {
+  color: #fff;
+  background: var(--red);
+  font-weight: 600;
+}
 .topnav a.btn:hover { background: var(--red-deep); }
 
 /* While checking words the header does not stick. It is translucent, so a
