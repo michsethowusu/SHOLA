@@ -4,47 +4,128 @@
 up](https://shola.inkika.org/join) · [champions](https://shola.inkika.org/champions)
 · [progress](https://shola.inkika.org/stats)
 
-A volunteer app for verifying machine translations of everyday words in **Twi,
-Ewe, Ga and Dagbani**.
+A volunteer app for confirming translations of everyday words in **Twi, Ewe, Ga
+and Dagbani**.
 
-A language model has guessed three translations for each English noun. Some
-guesses are good, some are calques no speaker would use, and some are wrong. A
-machine cannot tell the difference; a speaker can, in about two seconds. SHOLA
-sends each volunteer a handful of words a day by email and records which wording
-they would actually use.
+Machine translation produced three candidate translations for each word. Much of
+it is good, some is word-for-word and no speaker would say it, and some is
+wrong. Software cannot tell the difference; a speaker can, in a couple of
+seconds. SHOLA sends each volunteer a handful of words a day by email and
+records the wording they would actually use.
 
 The words come from [GhanaNouns](https://github.com/GhanaNLP/GhanaNouns):
-478,822 English nouns drawn from Ghanaian news, research and speech, each with
-three machine-proposed translations per language. All of them are loaded into
-the live deployment.
+478,822 English nouns drawn from Ghanaian news, research and speech, with three
+candidate translations per language. All of them are loaded into the live
+deployment.
 
 ## How it works
 
 1. A volunteer signs up: name, email, language, the weekdays they are free, and
-   roughly what time of day.
-2. They are assigned **1000 words**, dated across their chosen weekdays over a
-   year — so a handful per day, no matter how many days they picked.
-3. On each of their days they get an email that **lists the actual words** and a
-   link straight into the flow. No password.
-4. For each word they tap one of three translations, skip it, or type their own.
-   Choosing an option and typing your own are mutually exclusive.
-5. When two or more speakers land on the same wording, that becomes the recorded
-   translation.
+   roughly what time of day. A six-digit code confirms the address before
+   anything is created.
+2. On each of their days they get an email that **lists the actual words** and a
+   personalised link. No account, no password.
+3. For each word they tap one of three translations, skip it, or type their own.
+   Choosing an option and typing your own are mutually exclusive, and they can
+   step back to change their last answer.
+4. When two speakers of that language choose the same wording, the translation
+   is confirmed and the word leaves the queue.
 
-### Assignment is coverage-first
+### There is no login
 
-Words are handed out **least-assigned first**, so every word reaches one
-volunteer before any word reaches a second. Once the list is covered, words come
-round again and the repeats become the agreement signal. See
-`shola/assignment.py`.
+The link in the email carries a signed token identifying the volunteer, and
+every evaluation URL includes it, so the flow works from any device with no
+account and no dependence on cookies. The session only remembers the token so
+the nav bar has somewhere to point; authorisation always comes from the URL.
+
+### Words are worked in groups, commonest first
+
+Words are banded by how often they occur in the source corpus. Nothing in a
+group is handed out until the group above it is closed, so the vocabulary people
+actually use is settled first and a half-finished project is still usable.
+
+| Group | Occurrences | Words |
+|-------|-------------|-------|
+| 1 | 50+ | 11,206 |
+| 2 | 20–49 | 11,184 |
+| 3 | 10–19 | 16,466 |
+| 4 | 5–9 | 32,158 |
+| 5 | 1–4 | 407,808 |
+
+Bands come from raw occurrence counts, not the percentage column in the source
+dataset: that is rounded to four decimals, so 91% of words tie at 0.0000 and it
+cannot order the long tail.
+
+### Work is leased, not allocated
+
+Nothing is reserved at signup. A volunteer is handed as many words as their
+daily quota allows, drawn from the group being worked on, closest-to-agreement
+first so a group converges rather than accumulating half-voted entries. A lease
+expires after `LEASE_DAYS` and the word returns to the queue, so a word parked
+with someone who stopped coming is never lost. See `shola/tiers.py`.
+
+The daily quota is still the brief's arithmetic — an annual commitment spread
+over the days they chose — but it now sets the size of each day's lease instead
+of carving up a fixed list a year in advance.
+
+### Every language is settled separately
+
+Vote counts live in `word_state`, keyed by **word and language**. Two Twi
+speakers agreeing says nothing about Ga, so each language keeps its own counts,
+its own confirmed/contested flags and its own position in the groups. Lease
+counting is language-scoped too: a Twi speaker holding a word does nothing
+towards settling it in Ga.
 
 ### Missing days costs nothing
 
-A day's words that go unanswered stay pending and appear in the next email —
+Words that go unanswered stay pending and appear in the next email —
 `Volunteer.pending_today()` selects everything due *on or before* today. To stop
 a missed week turning into one crushing list, `shola redistribute-missed`
 re-dates overdue words across the volunteer's remaining days. Work is only ever
-moved, never dropped, so the 1000 still land inside the year.
+moved, never dropped.
+
+### When agreement never comes
+
+Voting between the three options always resolves: the worst case is one vote
+each and the fourth verdict has to create a pair. Typed answers are free text
+and unbounded, though, so five speakers can each write a different wording and
+no pair ever forms. After `MAX_VERDICTS_BEFORE_CONTESTED` such answers the word
+is closed as contested, every variant is kept, and the group can finish.
+
+### Languages not open yet
+
+Anyone can sign up for one of 84 other Ghanaian languages. They confirm their
+email as usual, then land on a page telling them they are on the list. No words
+are leased to them and the daily mail skips them, so nobody ever opens a link to
+an empty queue. `shola waitlist` shows who is waiting and for what.
+
+Opening a language takes three steps:
+
+```bash
+# 1. load three candidate translations per word for the new language
+flask --app wsgi shola import-words --csv <translated>.csv --freq-csv <source>.csv
+
+# 2. add it to LANGUAGES in shola/config.py: name, special characters, long-press map
+
+# 3. lease everyone a first list and tell them it is open
+flask --app wsgi shola announce-language --language <code>
+```
+
+Step 3 matters: without it, waiting volunteers would receive an ordinary daily
+list on their next chosen day with no explanation, and the waiting page promises
+otherwise.
+
+### Knowing how many volunteers to recruit
+
+`/stats` shows what it would take to finish the current group in a year. It
+counts what each open word still lacks, then divides by what one recruit can be
+expected to deliver: the annual commitment times `SHOLA_COMPLETION_RATE`,
+default 0.30. Volunteers who do not finish are counted as contributing nothing,
+which is harsher than reality on purpose — hitting the number should put the
+project ahead of the year, not behind it.
+
+At the time of writing that is 75 volunteers per language for group 1, 300
+across all four.
 
 ## Setup
 
@@ -86,7 +167,11 @@ run hourly.
 0 13 * * *  cd /srv/shola && .venv/bin/flask --app wsgi shola send-daily --window afternoon
 0 18 * * *  cd /srv/shola && .venv/bin/flask --app wsgi shola send-daily --window evening
 0 3  * * 1  cd /srv/shola && .venv/bin/flask --app wsgi shola redistribute-missed
+0 4  * * *  cd /srv/shola && .venv/bin/flask --app wsgi shola release-leases
 ```
+
+`release-leases` returns words nobody answered to the queue. Without it a word
+leased to someone who stopped coming would sit unavailable for good.
 
 Check what would go out without sending anything:
 
@@ -101,8 +186,16 @@ flask --app wsgi shola export --language twi --min-votes 2 --out twi-agreed.csv
 flask --app wsgi shola stats
 ```
 
-Or over HTTP: `/api/consensus/<language>?min_votes=2`, and
-`/api/word/<id>/<language>` for one word's full vote breakdown.
+Or over HTTP — see **[/api](https://shola.inkika.org/api)** for the documented
+endpoint:
+
+```
+GET /api/words/<language>?min_votes=2&limit=1000&offset=0&format=csv
+GET /api/entry/<id>/<language>      # every wording given for one word
+```
+
+`/api/vocabulary/<language>` and `/api/consensus/<language>` still resolve to the
+same handler, so older links keep working.
 
 Consensus is **always computed from current votes**, never stored as truth, so
 it improves as volunteers arrive and can never go stale (`shola/consensus.py`).
@@ -130,10 +223,12 @@ and the page copy.
 
 ```
 shola/
-├── config.py        # settings + the four languages and their characters
-├── models.py        # Volunteer, Word, Candidate, Assignment, Evaluation
-├── assignment.py    # coverage-first assignment, day spreading, redistribution
-├── consensus.py     # votes -> most likely translation
+├── config.py        # settings + the four open languages and their characters
+├── languages.py     # 84 Ghanaian languages people can join the list for
+├── models.py        # Volunteer, Word, Candidate, WordState, Assignment, Evaluation
+├── tiers.py         # groups, per-language vote state, the work queue
+├── assignment.py    # verdicts, day spreading, redistribution, leaderboard
+├── consensus.py     # votes -> confirmed translation
 ├── mailer.py        # Gmail SMTP + signed daily links
 ├── views.py         # routes
 ├── cli.py           # import-words, send-daily, redistribute-missed, export
@@ -148,10 +243,15 @@ tests/test_flow.py   # end-to-end checks
 python3 tests/test_flow.py
 ```
 
-Covers the parts most likely to break: coverage-before-duplication, day
-scheduling, missed-day carry-forward and redistribution, one-verdict-per-word,
-typed answers beating machine options, single votes *not* counting as consensus,
-and daily-link tokens round-tripping and rejecting tampering.
+Covers the parts most likely to break: group ordering and commonest-first
+leasing, a word leaving the queue once two agree, **a word settled in one
+language still being asked in the others**, contested words closing so a group
+can finish, lease expiry, day scheduling, missed-day carry-forward and
+redistribution, one-verdict-per-word and revising it, typed answers counting
+equal to the options, single votes *not* counting as agreement, the recruitment
+arithmetic, signup by one-time code creating nothing until confirmed, the
+waiting list, evaluation working with no cookies at all, tampered links being
+refused, and the closed sheet staying pointer-transparent.
 
 ## The live deployment
 
