@@ -455,7 +455,15 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink); outline-of
 .option.own:hover { color: var(--ink); }
 .option.own .mark { border-style: dashed; }
 
-.eval-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 16px; }
+.eval-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 16px;
+}
+.eval-foot [hidden] { display: none; }
 
 /* Sheet for typing your own translation. Bottom sheet on phones. */
 .sheet-back {
@@ -472,16 +480,28 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink); outline-of
   right: 0;
   bottom: 0;
   z-index: 101;
+  /* A closed sheet must not exist as far as the pointer is concerned. On wide
+     screens it sits over the word card at opacity 0, and an invisible element
+     still catches clicks - that is what made the upper options unclickable. */
+  visibility: hidden;
+  pointer-events: none;
   background: var(--paper);
   border-radius: var(--r-lg) var(--r-lg) 0 0;
   padding: 22px 20px 26px;
   box-shadow: var(--shadow-lg);
   transform: translateY(102%);
-  transition: transform .26s cubic-bezier(.22, .61, .36, 1);
+  transition: transform .26s cubic-bezier(.22, .61, .36, 1),
+              opacity .2s ease,
+              visibility 0s linear .26s;
   max-height: 92vh;
   overflow-y: auto;
 }
-.sheet.open { transform: translateY(0); }
+.sheet.open {
+  transform: translateY(0);
+  visibility: visible;
+  pointer-events: auto;
+  transition-delay: 0s;
+}
 .sheet h3 { margin-bottom: 2px; }
 .sheet .for-word { color: var(--ink-faint); font-size: .92rem; margin-bottom: 16px; }
 

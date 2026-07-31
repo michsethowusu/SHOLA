@@ -14,7 +14,7 @@ Two rules from the brief drive this:
    arrive at 1000 in a year.
 """
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import func
 
@@ -133,10 +133,25 @@ def redistribute(volunteer, today=None, horizon_days=365):
 
 def record_verdict(volunteer, word_id, candidate_id=None, custom_text=None,
                    skipped=False):
-    """Store one verdict and close its assignment. Idempotent per word."""
+    """Store a verdict, or revise the one already there.
+
+    A volunteer who realises they tapped the wrong option can go back and fix
+    it, so a second verdict on the same word replaces the first rather than
+    being ignored. It stays one verdict per volunteer per word, so nobody votes
+    twice and consensus is unaffected.
+    """
     existing = Evaluation.query.filter_by(volunteer_id=volunteer.id,
                                           word_id=word_id).first()
     if existing:
+        existing.candidate_id = candidate_id
+        existing.custom_text = custom_text or None
+        existing.skipped = skipped
+        existing.created_at = datetime.utcnow()
+        assignment = Assignment.query.filter_by(volunteer_id=volunteer.id,
+                                                word_id=word_id).first()
+        if assignment:
+            assignment.status = "skipped" if skipped else "done"
+        db.session.commit()
         return existing
 
     ev = Evaluation(volunteer_id=volunteer.id, word_id=word_id,

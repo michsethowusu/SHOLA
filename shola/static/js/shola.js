@@ -15,6 +15,9 @@
   var doneTotal = cfg.doneTotal;
   var atStart = remaining;
   var busy = false;
+  // Words already answered this session, so a volunteer can step back and
+  // change an answer they got wrong.
+  var history = [];
 
   var els = {
     card: document.getElementById("word-card"),
@@ -28,7 +31,8 @@
     input: document.getElementById("own-text"),
     keystrip: document.getElementById("keystrip"),
     popkeys: document.getElementById("popkeys"),
-    skip: document.getElementById("skip-btn")
+    skip: document.getElementById("skip-btn"),
+    back: document.getElementById("back-btn")
   };
 
   function wordUrl(wordId) {
@@ -37,7 +41,7 @@
 
   /* ------------------------------------------------------------ rendering */
 
-  function render() {
+  function render(previousChoice) {
     var item = queue[0];
     if (!item) {
       window.location.href = cfg.doneUrl;
@@ -54,6 +58,10 @@
       b.innerHTML = '<span class="mark" aria-hidden="true">✓</span>' +
         '<span class="txt"></span>';
       b.querySelector(".txt").textContent = opt.text;
+      // Show what was picked last time when revisiting a word.
+      if (previousChoice && previousChoice === String(opt.id)) {
+        b.classList.add("chosen");
+      }
       b.addEventListener("click", function () { choose(b, String(opt.id)); });
       els.options.appendChild(b);
     });
@@ -70,6 +78,7 @@
     els.left.textContent = remaining === 1 ? "1 word left"
       : remaining + " words left";
     els.bar.style.width = Math.min(100, ((pos - 1) / Math.max(atStart, 1)) * 100) + "%";
+    if (els.back) { els.back.hidden = history.length === 0; }
   }
 
   function choose(button, choice) {
@@ -103,6 +112,7 @@
         if (!data) return;
         remaining = data.remaining;
         doneTotal = data.done_total;
+        history.push({ item: item, choice: choice, custom: customText || "" });
         queue.shift();
         // Top up from the server so the queue never runs dry mid-session.
         if (queue.length < 2 && data.next && data.next.length) {
@@ -132,6 +142,17 @@
 
   if (els.skip) {
     els.skip.addEventListener("click", function () { submit("skip", ""); });
+  }
+
+  if (els.back) {
+    els.back.addEventListener("click", function () {
+      if (busy || !history.length) return;
+      var prev = history.pop();
+      queue.unshift(prev.item);
+      // Answering it again overwrites the previous verdict server-side, so the
+      // count of words still to do does not change.
+      render(prev.choice);
+    });
   }
 
   /* ---------------------------------------------------------- own-text sheet */

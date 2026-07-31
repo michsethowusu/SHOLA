@@ -235,6 +235,38 @@ def main():
                       headers={"X-Requested-With": "shola"})
     ok &= check("empty typed answer is rejected", r.status_code == 400)
 
+    print("\nan answer can be changed")
+    other = None
+    with app.app_context():
+        vol = Volunteer.query.filter_by(email="ama@example.com").first()
+        cands = [c.id for c in db.session.get(Word, wid).candidates
+                 if c.language == "twi"]
+        other = cands[1]
+    r = nocookie.post(f"/w/{token}/{wid}", data={"choice": str(other)},
+                      headers={"X-Requested-With": "shola"})
+    ok &= check("re-answering is accepted", r.status_code == 200)
+    with app.app_context():
+        evs = Evaluation.query.filter_by(word_id=wid).all()
+        ok &= check("still exactly one verdict for that word", len(evs) == 1,
+                    f"{len(evs)} verdicts")
+        ok &= check("the verdict now holds the new choice",
+                    evs[0].candidate_id == other)
+
+    print("\nthe closed sheet cannot swallow clicks")
+    css = open(os.path.join(os.path.dirname(os.path.dirname(
+        os.path.abspath(__file__))), "shola/static/css/shola.css")).read()
+    sheet = css.split(".sheet {")[1].split("}")[0]
+    ok &= check("closed sheet is pointer-transparent",
+                "pointer-events: none" in sheet and "visibility: hidden" in sheet,
+                "an invisible overlay over the word card blocks the options")
+    opened = css.split(".sheet.open {")[1].split("}")[0]
+    ok &= check("open sheet takes pointer events back",
+                "pointer-events: auto" in opened)
+
+    r = fresh.get(f"/w/{token}")
+    ok &= check("evaluate page offers the back control",
+                b'id="back-btn"' in r.data)
+
     r = fresh.get("/api/consensus/twi")
     ok &= check("consensus API responds", r.status_code == 200)
     r = fresh.get("/api/consensus/nope")
