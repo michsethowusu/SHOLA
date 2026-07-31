@@ -123,9 +123,6 @@ it here with credit.
 
 - **Say it pays.** It is volunteer work. Nobody is paid, and implying otherwise
   brings people who leave immediately.
-- **Say it uses AI to translate your language.** Machine translation produced
-  the first guesses; the point of SHOLA is that people correct them. Getting
-  this backwards is the fastest way to lose trust.
 - **Promise a language that is not open.** Only Twi, Ewe, Ga and Dagbani are
   collecting today. For the rest, say they can join the list.
 - **Recolour or stretch the logo,** or set the wordmark in another typeface.
