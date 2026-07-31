@@ -143,6 +143,13 @@ body.focus .topbar { position: static; }
 }
 .site-foot .wrap { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: center; }
 .site-foot a { color: var(--ink-soft); }
+/* The credit takes a line of its own and centres on it. Pushed right with
+   margin-left:auto it landed hard against the edge once the links wrapped. */
+.site-foot .credit {
+  flex: 1 0 100%;
+  text-align: center;
+  margin-top: 4px;
+}
 
 /* -------------------------------------------------------------------- buttons */
 
