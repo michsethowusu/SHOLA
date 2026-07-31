@@ -26,6 +26,72 @@
       </div>
     </div>
 
+    <div style="margin-top:44px">
+      <h2>Volunteers we still need</h2>
+      <p class="muted">
+        To finish the group each language is on within a year. We assume only
+        {{ (completion_rate * 100) | round | int }}% of volunteers complete
+        their {{ words_per_volunteer | thousands }} words and that the rest
+        contribute nothing, so these numbers are deliberately cautious — meeting
+        them should put us ahead of schedule, not behind.
+      </p>
+
+      <div class="stat-strip" style="margin-top:18px">
+        <div class="stat">
+          <span class="n">{{ totals.volunteers_needed | thousands }}</span>
+          <span class="k">volunteers needed in total</span>
+        </div>
+        <div class="stat">
+          <span class="n">{{ stats.volunteers | thousands }}</span>
+          <span class="k">signed up so far</span>
+        </div>
+        <div class="stat">
+          <span class="n">{{ totals.still_to_recruit | thousands }}</span>
+          <span class="k">still to find</span>
+        </div>
+        <div class="stat">
+          <span class="n">{{ totals.answers_needed | thousands }}</span>
+          <span class="k">answers to collect</span>
+        </div>
+      </div>
+
+      <div class="scroll-x" style="margin-top:18px">
+        <table class="plain">
+          <thead>
+            <tr>
+              <th>Language</th><th>Group</th><th>Answers needed</th>
+              <th>Volunteers needed</th><th>Signed up</th><th>Still to find</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for code, lang in LANGUAGES.items() %}
+              {% set r = by_language[code].recruit %}
+              <tr>
+                <td><strong>{{ lang.name }}</strong></td>
+                <td>{% if r.tier %}Group {{ r.tier }}{% else %}—{% endif %}</td>
+                <td>{{ r.answers_needed | thousands }}</td>
+                <td>{{ r.volunteers_needed | thousands }}</td>
+                <td>{{ r.signed_up | thousands }}</td>
+                <td>
+                  {% if r.still_to_recruit %}
+                    <strong>{{ r.still_to_recruit | thousands }}</strong>
+                  {% else %}
+                    <span class="faint">enough</span>
+                  {% endif %}
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="hint" style="margin-top:10px">
+        Each completing volunteer covers {{ words_per_volunteer | thousands }}
+        answers a year, so we plan on
+        {{ (words_per_volunteer * completion_rate) | round | int }} per person
+        recruited.
+      </p>
+    </div>
+
     <div style="margin-top:40px">
       <h2>Which words we are working on</h2>
       <p class="muted">

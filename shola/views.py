@@ -24,7 +24,7 @@ from werkzeug.utils import secure_filename
 
 from . import consensus
 from .assignment import leaderboard, record_verdict, redistribute
-from .tiers import active_tier, tier_progress, top_up
+from .tiers import active_tier, recruitment, tier_progress, top_up
 from .mailer import build_otp_email, make_token, read_token
 from .models import Candidate, PendingSignup, Volunteer, Word, db, site_stats
 
@@ -84,13 +84,33 @@ def champions():
 @main.route("/stats")
 def stats():
     # Each language works through the tiers at its own pace.
+    signed_up = dict(db.session.query(Volunteer.language,
+                                      db.func.count(Volunteer.id))
+                     .filter(Volunteer.active.is_(True))
+                     .group_by(Volunteer.language).all())
+    rate = current_app.config["COMPLETION_RATE"]
+    target = current_app.config["WORDS_PER_VOLUNTEER"]
+
     by_language = {}
     for code in current_app.config["LANGUAGES"]:
-        by_language[code] = {"tiers": tier_progress(code),
-                             "active": active_tier(code)}
+        by_language[code] = {
+            "tiers": tier_progress(code),
+            "active": active_tier(code),
+            "recruit": recruitment(code, target, rate,
+                                   signed_up.get(code, 0)),
+        }
+    totals = {
+        "volunteers_needed": sum(v["recruit"]["volunteers_needed"]
+                                 for v in by_language.values()),
+        "still_to_recruit": sum(v["recruit"]["still_to_recruit"]
+                                for v in by_language.values()),
+        "answers_needed": sum(v["recruit"]["answers_needed"]
+                              for v in by_language.values()),
+    }
     return render_template("stats.html", stats=site_stats(),
                            per_language=consensus.language_progress(),
-                           by_language=by_language)
+                           by_language=by_language, totals=totals,
+                           completion_rate=rate, words_per_volunteer=target)
 
 
 @main.route("/photo/<path:filename>")

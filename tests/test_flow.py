@@ -20,7 +20,8 @@ from shola.consensus import best, normalise, tally               # noqa: E402
 from shola.tiers import (MAX_VERDICTS_BEFORE_CONTESTED,           # noqa: E402
                          active_tier, assign_tiers, daily_quota,
                          lease_words, refresh_word, release_expired,
-                         state_for, tier_for, tier_progress, top_up)
+                         answers_needed, recruitment, state_for,
+                         tier_for, tier_progress, top_up)
 from shola.models import (Assignment, Candidate, Evaluation,      # noqa: E402
                           PendingSignup, Volunteer, Word, db)
 
@@ -285,6 +286,30 @@ def main():
         q1, q2 = daily_quota(everyday), daily_quota(twodays)
         ok &= check("fewer days means a bigger daily list", q2 > q1,
                     f"7-day={q1}, 2-day={q2}")
+
+    print("\nrecruitment target is conservative")
+    with app.app_context():
+        need = answers_needed("dagbani")
+        r = recruitment("dagbani", 1000, 0.30, signed_up=0)
+        ok &= check("counts what open words still lack",
+                    need == r["answers_needed"] and need > 0, f"need={need}")
+        ok &= check("plans on 300 answers per recruit, not 1000",
+                    r["per_volunteer"] == 300, str(r["per_volunteer"]))
+        expected = -(-need // 300)
+        ok &= check("volunteers needed rounds up", r["volunteers_needed"] == expected,
+                    f"{r['volunteers_needed']} vs {expected}")
+        r2 = recruitment("dagbani", 1000, 0.30, signed_up=r["volunteers_needed"])
+        ok &= check("nothing more to recruit once the target is met",
+                    r2["still_to_recruit"] == 0)
+        loose = recruitment("dagbani", 1000, 1.0, signed_up=0)
+        ok &= check("a higher completion rate never needs more people",
+                    loose["volunteers_needed"] <= r["volunteers_needed"])
+        # At tier-1 scale the pessimism is what matters: 11,206 open words need
+        # 22,412 answers, which is 75 people at 300 each but only 23 at 1000.
+        big = 22412
+        ok &= check("pessimism roughly triples the recruitment target",
+                    -(-big // 300) == 75 and -(-big // 1000) == 23,
+                    f"{-(-big // 300)} vs {-(-big // 1000)}")
 
     print("\nsignup needs a code before anything is created")
     sent = {}

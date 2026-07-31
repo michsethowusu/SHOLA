@@ -259,3 +259,43 @@ def assign_tiers():
         changed += q.update({"tier": tier}, synchronize_session=False)
     db.session.commit()
     return changed
+
+
+def answers_needed(language, tier=None):
+    """How many more verdicts would close a tier in this language.
+
+    Counts what each open word still lacks rather than assuming two per word,
+    so a word already holding one matching vote counts as one, not two.
+    """
+    if tier is None:
+        tier = active_tier(language)
+    if tier is None:
+        return 0
+    rows = (open_query(language)
+            .filter(Word.tier == tier)
+            .with_entities(func.sum(
+                VOTES_TO_SETTLE - func.coalesce(WordState.top_votes, 0)))
+            .scalar())
+    return int(rows or 0)
+
+
+def recruitment(language, words_per_volunteer, completion_rate, signed_up):
+    """Volunteers needed to close this language's current tier in a year.
+
+    Assumes only `completion_rate` of volunteers finish their commitment and
+    that the rest contribute nothing. That is harsher than reality - people who
+    drop out still answer something - and the point is to over-recruit rather
+    than run out of speakers in month eleven.
+    """
+    tier = active_tier(language)
+    needed_answers = answers_needed(language, tier)
+    per_volunteer = max(1.0, words_per_volunteer * max(completion_rate, 0.01))
+    needed = -(-needed_answers // int(per_volunteer)) if needed_answers else 0
+    return {
+        "tier": tier,
+        "answers_needed": needed_answers,
+        "per_volunteer": int(per_volunteer),
+        "volunteers_needed": needed,
+        "signed_up": signed_up,
+        "still_to_recruit": max(0, needed - signed_up),
+    }

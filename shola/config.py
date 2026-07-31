@@ -64,6 +64,12 @@ class Config:
     WORDS_PER_VOLUNTEER = int(os.environ.get("SHOLA_WORDS_PER_VOLUNTEER", 1000))
     COMMITMENT_DAYS = int(os.environ.get("SHOLA_COMMITMENT_DAYS", 365))
 
+    # Share of volunteers expected to finish their full commitment. Recruitment
+    # targets assume the rest contribute nothing, which is deliberately
+    # pessimistic: it is better to over-recruit and finish early than to plan
+    # off an optimistic number and miss the year.
+    COMPLETION_RATE = float(os.environ.get("SHOLA_COMPLETION_RATE", 0.30))
+
     # Public base URL used in emails.
     SITE_URL = os.environ.get("SHOLA_SITE_URL", "http://localhost:5000")
 
