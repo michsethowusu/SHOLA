@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}SHOLA media kit{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap">
+    <p class="eyebrow">Media kit</p>
+    <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">Help us find speakers</h1>
+    <p class="lede" style="max-width:56ch">
+      Artwork, captions and the facts, ready to post. Take what you need — no
+      permission required, no account, no sign-up.
+    </p>
+
+    <p style="margin-top:22px">
+      <a class="btn" href="{{ url_for('static', filename='brand/shola-brand-kit.zip') }}">
+        Download everything (ZIP)</a>
+    </p>
+
+    <div class="notice" style="margin-top:24px">
+      <strong>The one ask:</strong> send people to
+      <strong>shola.inkika.org</strong> to sign up in the language they speak
+      best. Two minutes a day, no app, no password.
+    </div>
+
+    <h2 style="margin-top:44px">Artwork</h2>
+    <div class="cards" style="margin-top:18px">
+      {% for f, w, h, use in assets %}
+        <a class="lang-card" href="{{ url_for('static', filename='brand/' ~ f) }}"
+           download style="padding:0;overflow:hidden">
+          <img src="{{ url_for('static', filename='brand/' ~ f) }}" alt="{{ use }}"
+               loading="lazy"
+               style="width:100%;display:block;background:var(--sand-deep);
+                      max-height:230px;object-fit:cover;object-position:top">
+          <div style="padding:14px 16px">
+            <div class="name" style="font-size:1rem">{{ use }}</div>
+            <div class="native">{{ w }} × {{ h }}</div>
+          </div>
+        </a>
+      {% endfor %}
+    </div>
+
+    <h2 style="margin-top:44px">Captions to copy</h2>
+    <div class="cards" style="margin-top:18px">
+      {% for label, text in captions %}
+        <div class="card">
+          <div class="eyebrow">{{ label }}</div>
+          <p style="margin:0">{{ text }}</p>
+        </div>
+      {% endfor %}
+    </div>
+    <p class="hint">
+      Writing a caption in Twi, Ewe, Ga or Dagbani? Please send it to
+      <a href="mailto:info@ghananlp.org">info@ghananlp.org</a> and we will add it
+      here with your credit. We have not written those ourselves — copy about
+      language accuracy should come from a speaker.
+    </p>
+
+    <h2 style="margin-top:44px">Colours and type</h2>
+    <div class="scroll-x" style="margin-top:16px">
+      <table class="plain">
+        <thead><tr><th></th><th>Colour</th><th>Hex</th><th>Used for</th></tr></thead>
+        <tbody>
+          {% for name, hex, use in palette %}
+            <tr>
+              <td><span style="display:inline-block;width:26px;height:26px;
+                        border-radius:7px;background:{{ hex }};
+                        border:1px solid var(--line)"></span></td>
+              <td><strong>{{ name }}</strong></td>
+              <td><code>{{ hex }}</code></td>
+              <td>{{ use }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="muted" style="margin-top:14px">
+      Headlines are <strong>Bricolage Grotesque</strong> Bold or ExtraBold, free
+      on Google Fonts. Body text uses the phone's own system font.
+    </p>
+    <p class="muted">
+      The name is always written <strong>SHƆLA</strong> with the open O in red.
+      If you cannot type <strong>Ɔ</strong>, write SHOLA in plain letters rather
+      than using a zero.
+    </p>
+
+    <h2 style="margin-top:44px">Points that land</h2>
+    <ul class="muted" style="padding-left:20px;max-width:62ch">
+      <li><strong>It is two minutes.</strong> People assume volunteering means hours.</li>
+      <li><strong>No app, no password.</strong> A link arrives by email and opens straight into the words.</li>
+      <li><strong>Your answer counts as much as the machine's.</strong> If none of the three fit, type your own.</li>
+      <li><strong>The result is free for everyone,</strong> published under CC BY 4.0.</li>
+      <li><strong>There is a leaderboard,</strong> with your photo if you want one.</li>
+    </ul>
+
+    <h2 style="margin-top:44px">Please do not</h2>
+    <ul class="muted" style="padding-left:20px;max-width:62ch">
+      <li><strong>Say it pays.</strong> It is volunteer work.</li>
+      <li><strong>Say AI translates your language.</strong> Machines made the
+          first guesses; people correct them. Getting this backwards loses trust.</li>
+      <li><strong>Promise a language that is not open.</strong> Twi, Ewe, Ga and
+          Dagbani are collecting today; for the rest, say they can join the list.</li>
+      <li><strong>Recolour or stretch the logo,</strong> or set the name in another typeface.</li>
+    </ul>
+
+    <p style="margin-top:36px">
+      Questions: <a href="mailto:info@ghananlp.org">info@ghananlp.org</a>
+    </p>
+  </div>
+</section>
+{% endblock %}

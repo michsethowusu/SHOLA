@@ -10,7 +10,8 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static', filename='css/shola.css') }}">
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='25' x='4' font-size='24' font-family='sans-serif' font-weight='bold' fill='%23c0392b'>ɔ</text></svg>">
+<link rel="icon" href="{{ url_for('static', filename='img/favicon.svg') }}" type="image/svg+xml">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='img/icon-180.png') }}">
 </head>
 <body class="{% block body_class %}{% endblock %}">
 
@@ -57,6 +58,8 @@
     <a href="{{ url_for('main.api_docs') }}">API</a>
     <span class="faint">·</span>
     <a href="{{ url_for('main.resend') }}">Request a link</a>
+    <span class="faint">·</span>
+    <a href="{{ url_for('main.brand') }}">Media kit</a>
     <span class="faint">·</span>
     <span class="faint">Words released under
       <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank"

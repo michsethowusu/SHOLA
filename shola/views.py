@@ -108,6 +108,46 @@ def stats():
                            completion_rate=rate, words_per_volunteer=target)
 
 
+@main.route("/brand")
+def brand():
+    """Media kit. Public on purpose: an influencer should not have to ask."""
+    assets = [
+        ("story-why-1080x1920.png", 1080, 1920, "WhatsApp Status / story"),
+        ("story-how-1080x1920.png", 1080, 1920, "Story — the two minutes"),
+        ("story-ask-1080x1920.png", 1080, 1920, "Story — other languages"),
+        ("square-why-1080x1080.png", 1080, 1080, "Instagram / Facebook"),
+        ("square-ask-1080x1080.png", 1080, 1080, "Instagram / Facebook"),
+        ("youtube-thumbnail-1280x720.png", 1280, 720, "YouTube thumbnail"),
+        ("x-post-1600x900.png", 1600, 900, "X"),
+        ("facebook-link-1200x630.png", 1200, 630, "Facebook link preview"),
+        ("avatar-1080x1080.png", 1080, 1080, "Profile picture"),
+        ("wordmark-light-1200x400.png", 1200, 400, "Logo, light background"),
+        ("wordmark-dark-1200x400.png", 1200, 400, "Logo, dark background"),
+    ]
+    captions = [
+        ("Short", "Your language, checked by the people who speak it. "
+                  "Two minutes a day. shola.inkika.org"),
+        ("Short", "Twi, Ewe, Ga, Dagbani. A few words a day and you help build "
+                  "a proper record of our languages. shola.inkika.org"),
+        ("Pidgin", "You fit speak Twi, Ewe, Ga or Dagbani? Give am 2 minutes "
+                   "every day make we put your language for the record. "
+                   "shola.inkika.org"),
+        ("Not yet open", "SHOLA is collecting Twi, Ewe, Ga and Dagbani now — "
+                         "and 83 more Ghanaian languages are on the list. Add "
+                         "your name and they will email you the day yours "
+                         "opens. shola.inkika.org"),
+    ]
+    palette = [
+        ("Kente red", "#c0392b", "The Ɔ, buttons, links"),
+        ("Ink", "#1a1815", "All text"),
+        ("Sand", "#faf7f2", "Backgrounds"),
+        ("Gold", "#d99b2b", "Highlights only"),
+        ("Forest", "#1a635a", "Agreement and success"),
+    ]
+    return render_template("brand.html", assets=assets, captions=captions,
+                           palette=palette)
+
+
 @main.route("/photo/<path:filename>")
 def photo(filename):
     return send_from_directory(current_app.config["UPLOAD_DIR"], filename)

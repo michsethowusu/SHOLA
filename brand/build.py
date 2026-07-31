@@ -1,0 +1,221 @@
+#!/usr/bin/env python3
+"""Render the SHOLA brand assets.
+
+Each asset is an HTML template rendered by headless Chrome at an exact pixel
+size, so the artwork uses the same typeface and palette as the site and can be
+regenerated whenever the brand changes.
+
+    python3 brand/build.py
+
+Sizes are chosen for how people actually share things in Ghana: WhatsApp Status
+first, then TikTok and Instagram, then X, Facebook and YouTube.
+"""
+
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+# Written into static so the site can hand them out directly: an
+# influencer should not need a GitHub account to get a logo.
+OUT = HERE.parent / "shola" / "static" / "brand"
+SITE = "shola.inkika.org"
+
+RED = "#c0392b"
+INK = "#1a1815"
+SAND = "#faf7f2"
+GOLD = "#d99b2b"
+FOREST = "#1a635a"
+
+FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com">'
+         '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
+         '<link href="https://fonts.googleapis.com/css2?'
+         'family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,700;12..96,800'
+         '&display=swap" rel="stylesheet">')
+
+BASE_CSS = f"""
+  * {{ margin:0; padding:0; box-sizing:border-box; }}
+  body {{ font-family:'Bricolage Grotesque','Trebuchet MS',sans-serif;
+         -webkit-font-smoothing:antialiased; }}
+  .sheet {{ width:100vw; height:100vh; display:flex; flex-direction:column;
+           justify-content:space-between; background:{SAND}; color:{INK}; }}
+  .mark {{ display:flex; align-items:baseline; font-weight:800;
+          letter-spacing:-.04em; }}
+  .mark .o {{ color:{RED}; }}
+  .url {{ font-weight:700; color:{RED}; }}
+  .glyphs {{ color:{RED}; letter-spacing:.14em; font-weight:700; opacity:.9; }}
+  .tag {{ display:inline-block; background:{RED}; color:#fff; font-weight:700;
+         border-radius:999px; }}
+"""
+
+
+def logo(size):
+    """The wordmark, sized in px."""
+    return (f'<div class="mark" style="font-size:{size}px">'
+            f'SH<span class="o">Ɔ</span>LA</div>')
+
+
+def story(headline, sub, kicker="Share Your Language"):
+    """1080x1920 — WhatsApp Status, Instagram and TikTok stories."""
+    return f"""<div class="sheet" style="padding:120px 90px">
+  <div>
+    {logo(76)}
+    <div style="font-size:30px;color:#57514a;margin-top:10px">{kicker}</div>
+  </div>
+  <div>
+    <div style="font-size:96px;font-weight:800;line-height:1.05;
+                letter-spacing:-.035em">{headline}</div>
+    <div style="font-size:40px;line-height:1.4;color:#57514a;margin-top:38px">
+      {sub}</div>
+  </div>
+  <div>
+    <div class="glyphs" style="font-size:66px;margin-bottom:30px">
+      ɛ ɔ ŋ ɖ ƒ ɣ ʋ ʒ</div>
+    <div class="tag" style="font-size:44px;padding:26px 46px">{SITE}</div>
+  </div>
+</div>"""
+
+
+def square(headline, sub):
+    """1080x1080 — Instagram and Facebook feed."""
+    return f"""<div class="sheet" style="padding:90px">
+  <div>{logo(64)}</div>
+  <div>
+    <div style="font-size:84px;font-weight:800;line-height:1.06;
+                letter-spacing:-.035em">{headline}</div>
+    <div style="font-size:36px;line-height:1.4;color:#57514a;margin-top:30px">
+      {sub}</div>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <div class="glyphs" style="font-size:52px">ɛ ɔ ŋ ɖ ƒ ɣ ʋ ʒ</div>
+    <div class="url" style="font-size:38px">{SITE}</div>
+  </div>
+</div>"""
+
+
+def wide(headline, sub, big=False):
+    """1600x900 for X, 1200x630 for Facebook link previews."""
+    scale = 1.25 if big else 1.0
+    return f"""<div class="sheet" style="padding:{int(80*scale)}px">
+  <div>{logo(int(56*scale))}</div>
+  <div>
+    <div style="font-size:{int(78*scale)}px;font-weight:800;line-height:1.05;
+                letter-spacing:-.035em;max-width:20ch">{headline}</div>
+    <div style="font-size:{int(32*scale)}px;line-height:1.4;color:#57514a;
+                margin-top:{int(24*scale)}px;max-width:44ch">{sub}</div>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <div class="glyphs" style="font-size:{int(44*scale)}px">ɛ ɔ ŋ ɖ ƒ ɣ ʋ ʒ</div>
+    <div class="url" style="font-size:{int(34*scale)}px">{SITE}</div>
+  </div>
+</div>"""
+
+
+def thumbnail():
+    """1280x720 — YouTube. Big type, readable as a small thumbnail."""
+    return f"""<div class="sheet" style="padding:64px;background:{INK};
+              color:{SAND}">
+  <div class="mark" style="font-size:46px;color:{SAND}">
+    SH<span style="color:{RED}">Ɔ</span>LA</div>
+  <div>
+    <div style="font-size:104px;font-weight:800;line-height:1;
+                letter-spacing:-.04em">
+      SPEAK<br>TWI?</div>
+    <div style="font-size:38px;color:{GOLD};margin-top:22px;font-weight:700">
+      Your language needs you — 2 minutes a day</div>
+  </div>
+  <div style="display:flex;align-items:center;justify-content:space-between">
+    <div style="color:{RED};font-size:52px;letter-spacing:.14em;font-weight:700">
+      ɛ ɔ ŋ ɣ</div>
+    <div style="font-size:34px;font-weight:700;color:{SAND}">{SITE}</div>
+  </div>
+</div>"""
+
+
+def avatar():
+    """1080x1080 profile picture."""
+    return f"""<div style="width:100vw;height:100vh;background:{RED};
+              display:flex;align-items:center;justify-content:center">
+  <svg width="62%" height="62%" viewBox="0 0 32 32">
+    <path d="M 8.37 20.77 A 9 9 0 1 0 8.37 11.23" fill="none" stroke="#fff"
+          stroke-width="4.6" stroke-linecap="round"/>
+  </svg>
+</div>"""
+
+
+def wordmark(colour, bg):
+    return (f'<div style="width:100vw;height:100vh;background:{bg};display:flex;'
+            f'align-items:center;justify-content:center">'
+            f'<div class="mark" style="font-size:200px;color:{colour}">'
+            f'SH<span class="o">Ɔ</span>LA</div></div>')
+
+
+ASSETS = [
+    ("story-why", 1080, 1920, False,
+     story("Your language,<br>checked by you.",
+           "Twi, Ewe, Ga and Dagbani.<br>A few words a day, by email.")),
+    ("story-how", 1080, 1920, False,
+     story("2 minutes<br>a day.",
+           "Tap the right translation. Skip what you<br>are unsure of. "
+           "That is the whole job.")),
+    ("story-ask", 1080, 1920, False,
+     story("Do you speak<br>a Ghanaian<br>language?",
+           "83 more languages are on the list.<br>Add yours and we will "
+           "tell you when it opens.")),
+    ("square-why", 1080, 1080, False,
+     square("Your language, checked by you.",
+            "Help confirm translations in Twi, Ewe, Ga and Dagbani. "
+            "A few words a day.")),
+    ("square-ask", 1080, 1080, False,
+     square("Speak Twi, Ewe, Ga or Dagbani?",
+            "Two minutes a day puts your language in the record.")),
+    ("x-post", 1600, 900, False,
+     wide("Your language, checked by the people who speak it.",
+          "Confirm translations in Twi, Ewe, Ga and Dagbani. "
+          "A few words a day, by email.")),
+    ("facebook-link", 1200, 630, True,
+     wide("Your language, checked by you.",
+          "A few words a day in Twi, Ewe, Ga or Dagbani.")),
+    ("youtube-thumbnail", 1280, 720, False, thumbnail()),
+    ("avatar", 1080, 1080, False, avatar()),
+    ("wordmark-light", 1200, 400, False, wordmark(INK, SAND)),
+    ("wordmark-dark", 1200, 400, False, wordmark(SAND, INK)),
+]
+
+
+def chrome():
+    for name in ("google-chrome", "chromium", "chromium-browser"):
+        if shutil.which(name):
+            return name
+    sys.exit("no Chrome or Chromium found")
+
+
+def render(name, w, h, body, tmpdir, browser):
+    html = (f"<!doctype html><html><head><meta charset='utf-8'>{FONTS}"
+            f"<style>{BASE_CSS}</style></head><body>{body}</body></html>")
+    page = Path(tmpdir) / f"{name}.html"
+    page.write_text(html, encoding="utf-8")
+    out = OUT / f"{name}-{w}x{h}.png"
+    subprocess.run(
+        [browser, "--headless=new", "--disable-gpu", "--no-sandbox",
+         "--hide-scrollbars", f"--window-size={w},{h}",
+         "--virtual-time-budget=4000", f"--screenshot={out}", f"file://{page}"],
+        check=True, capture_output=True, timeout=120)
+    return out
+
+
+def main():
+    OUT.mkdir(exist_ok=True)
+    browser = chrome()
+    with tempfile.TemporaryDirectory() as tmp:
+        for name, w, h, _big, body in ASSETS:
+            out = render(name, w, h, body, tmp, browser)
+            print(f"  {out.name:38s} {out.stat().st_size // 1024:>5} KB")
+    print(f"\n{len(ASSETS)} assets in {OUT}")
+
+
+if __name__ == "__main__":
+    main()
