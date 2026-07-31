@@ -112,7 +112,7 @@ it here with credit.
 
 ## Hashtags
 
-`#SHOLA` `#ShareYourLanguage` `#GhanaNLP` `#Twi` `#Ewe` `#Ga` `#Dagbani`
+`#SHOLA` `#ShareYourLanguage` `#Inkika` `#Twi` `#Ewe` `#Ga` `#Dagbani`
 `#GhanaianLanguages` `#AIforGhana`
 
 ## What to say
@@ -148,7 +148,7 @@ else.
 
 **What if I do not know a word?** Skip it. Somebody else will see it.
 
-**Who owns the result?** It is public, under CC BY 4.0, credited to Ghana NLP
+**Who owns the result?** It is public, under CC BY 4.0, credited to Inkika
 and the volunteers.
 
 ## Contact
