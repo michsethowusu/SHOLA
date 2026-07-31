@@ -304,3 +304,17 @@ appears to do nothing, check `pgrep -af cloudflared` for a process no unit owns.
 - **`SHOLA_SITE_URL` must be the public address.** Daily links are built from
   it, not from the incoming request, because the emails are sent from cron where
   there is no request to read.
+
+## Licence
+
+The **code** in this repository is MIT licensed; see `LICENSE`.
+
+The **words** collected through SHOLA — the translations volunteers confirm —
+are released under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), the same licence as
+[GhanaNouns](https://github.com/GhanaNLP/GhanaNouns). Use them for anything,
+including commercially, as long as you credit SHOLA and Ghana NLP.
+
+Two licences because they cover different things: MIT is a software licence and
+says nothing sensible about a word list, while CC BY is written for data and
+asks for the attribution the volunteers deserve.
