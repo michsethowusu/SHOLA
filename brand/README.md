@@ -107,7 +107,7 @@ For speakers of a language not yet open:
 **Local-language captions:** we have deliberately not written these. Copy in
 Twi, Ewe, Ga or Dagbani should be written by a speaker, not translated by us —
 getting it slightly wrong in a campaign about language accuracy would undercut
-the whole point. If you write one, send it to michseth@ghananlp.org and we will add
+the whole point. If you write one, send it to michsethowusu@gmail.com and we will add
 it here with credit.
 
 ## Hashtags
@@ -153,4 +153,4 @@ and the volunteers.
 
 ## Contact
 
-michseth@ghananlp.org · [ghananlp.org](https://ghananlp.org)
+michsethowusu@gmail.com · [ghananlp.org](https://ghananlp.org)
