@@ -7,9 +7,13 @@
       <p class="eyebrow">Share Your Language</p>
       <h1>Your language, checked by the people who speak it.</h1>
       <p class="lede">
-        We have machine translations for {{ stats.words | thousands }} everyday
-        English words in Twi, Ewe, Ga and Dagbani. Some are right, some are not.
-        You can tell which.
+        We have {{ stats.words | thousands }} translations for everyday words in
+        Twi, Ewe, Ga and Dagbani. Some are right, some are not. You can tell
+        which.
+      </p>
+      <p class="lede">
+        Your contribution here helps us build a set of human-verified words for
+        Ghanaian languages.
       </p>
       <div class="hero-actions">
         <a class="btn" href="{{ url_for('main.join') }}">Start with your language</a>
@@ -58,7 +62,7 @@
 
 <section class="section">
   <div class="wrap">
-    <p class="eyebrow">Four languages</p>
+    <p class="eyebrow">Four languages, more to come</p>
     <h2>Choose your language</h2>
     <div class="cards" style="margin-top:22px">
       {% for code, lang in LANGUAGES.items() %}
@@ -69,6 +73,10 @@
         </a>
       {% endfor %}
     </div>
+    <p class="hint" style="margin-top:16px">
+      Speak another Ghanaian language? <a href="{{ url_for('main.join') }}">Add
+      your name</a> and we will tell you the day it opens.
+    </p>
   </div>
 </section>
 

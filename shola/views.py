@@ -46,6 +46,17 @@ def volunteer_from_token(token):
     return volunteer
 
 
+def language_label(code):
+    """Display name for any language, open or still on the list."""
+    open_langs = current_app.config["LANGUAGES"]
+    if code in open_langs:
+        return open_langs[code]["name"]
+    for c, name, _alt in current_app.config["OTHER_LANGUAGES"]:
+        if c == code:
+            return name
+    return code
+
+
 def remembered_token():
     """Token kept from an earlier visit, only so the nav can link onward."""
     return session.get("token")
@@ -128,6 +139,8 @@ def join():
     name = (request.form.get("name") or "").strip()
     email = (request.form.get("email") or "").strip().lower()
     language = request.form.get("language") or ""
+    if language == "other":
+        language = (request.form.get("other_language") or "").strip()
     days = request.form.getlist("days")
     window = request.form.get("time_window") or "anytime"
     consent = bool(request.form.get("photo_consent"))
@@ -137,7 +150,9 @@ def join():
         errors.append("Tell us the name you want on the leaderboard.")
     if "@" not in email or "." not in email.split("@")[-1]:
         errors.append("That email address does not look complete.")
-    if language not in current_app.config["LANGUAGES"]:
+    known = (set(current_app.config["LANGUAGES"])
+             | {code for code, _n, _a in current_app.config["OTHER_LANGUAGES"]})
+    if language not in known:
         errors.append("Choose the language you speak.")
     if Volunteer.query.filter_by(email=email).first():
         errors.append("That email is already signed up. Ask for your link "
@@ -228,10 +243,15 @@ def verify():
     db.session.delete(pending)
     db.session.commit()
 
-    given = top_up(volunteer, target=current_app.config["WORDS_PER_VOLUNTEER"])
     token = make_token(volunteer)
     session["token"] = token
     session.pop("signup_email", None)
+
+    if volunteer.is_waiting(current_app.config["LANGUAGES"]):
+        return render_template("waiting.html", volunteer=volunteer,
+                               language_name=language_label(volunteer.language))
+
+    given = top_up(volunteer, target=current_app.config["WORDS_PER_VOLUNTEER"])
     return render_template("joined.html", volunteer=volunteer, assigned=given,
                            token=token)
 
@@ -328,6 +348,10 @@ def evaluate(token):
 
     # Remembered only so the nav bar can offer a way back; never trusted.
     session["token"] = token
+
+    if volunteer.is_waiting(current_app.config["LANGUAGES"]):
+        return render_template("waiting.html", volunteer=volunteer,
+                               language_name=language_label(volunteer.language))
 
     # Lease whatever the project needs right now, up to today's quota.
     top_up(volunteer, target=current_app.config["WORDS_PER_VOLUNTEER"])

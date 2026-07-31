@@ -41,6 +41,8 @@ LANGUAGES = {
     },
 }
 
+from .languages import OTHER_BY_CODE, OTHER_LANGUAGES   # noqa: E402,F401
+
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
              "Saturday", "Sunday"]
 

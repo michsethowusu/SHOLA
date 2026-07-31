@@ -151,8 +151,13 @@ def send_daily(window, dry_run, force):
     if window != "all":
         query = query.filter(Volunteer.time_window.in_([window, "anytime"]))
 
+    open_langs = current_app.config["LANGUAGES"]
     sent = skipped = failed = 0
     for volunteer in query.all():
+        # Nothing to send to someone whose language has not opened yet.
+        if volunteer.is_waiting(open_langs):
+            skipped += 1
+            continue
         if not force and volunteer.last_emailed_on == today:
             skipped += 1
             continue
@@ -294,3 +299,25 @@ def refresh_words_cmd(do_all):
             db.session.commit()
     db.session.commit()
     click.echo(f"refreshed {n:,} words")
+
+
+@shola_cli.command("waitlist")
+def waitlist():
+    """Who is waiting, and for which language.
+
+    Use it to decide which language to open next: the number here is people
+    ready to start the day it does.
+    """
+    from collections import Counter
+
+    open_langs = current_app.config["LANGUAGES"]
+    names = {c: n for c, n, _a in current_app.config["OTHER_LANGUAGES"]}
+    waiting = Counter(v.language for v in Volunteer.query.all()
+                      if v.is_waiting(open_langs))
+    if not waiting:
+        click.echo("nobody is waiting")
+        return
+    click.echo(f"{sum(waiting.values())} waiting across "
+               f"{len(waiting)} languages:")
+    for code, n in waiting.most_common():
+        click.echo(f"  {names.get(code, code):24s} {n:>4}")

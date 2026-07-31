@@ -4,7 +4,8 @@ import os
 
 from flask import Flask
 
-from .config import DAY_NAMES, INSTANCE_DIR, LANGUAGES, TIME_WINDOWS, Config
+from .config import (DAY_NAMES, INSTANCE_DIR, LANGUAGES, OTHER_LANGUAGES,
+                     TIME_WINDOWS, Config)
 from .models import db
 
 
@@ -15,6 +16,7 @@ def create_app(config_object=Config):
     app.config["LANGUAGES"] = LANGUAGES
     app.config["DAY_NAMES"] = DAY_NAMES
     app.config["TIME_WINDOWS"] = TIME_WINDOWS
+    app.config["OTHER_LANGUAGES"] = OTHER_LANGUAGES
 
     os.makedirs(app.config["UPLOAD_DIR"], exist_ok=True)
 
@@ -51,7 +53,7 @@ def create_app(config_object=Config):
     @app.context_processor
     def inject_globals():
         return {"LANGUAGES": LANGUAGES, "DAY_NAMES": DAY_NAMES,
-                "TIME_WINDOWS": TIME_WINDOWS}
+                "TIME_WINDOWS": TIME_WINDOWS, "OTHER_LANGUAGES": OTHER_LANGUAGES}
 
     @app.template_filter("thousands")
     def thousands(n):

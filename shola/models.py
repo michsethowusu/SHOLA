@@ -43,6 +43,14 @@ class Volunteer(db.Model):
             return list(range(7))
         return [int(d) for d in self.available_days.split(",") if d != ""]
 
+    def is_waiting(self, open_languages):
+        """True when this volunteer's language is not collected yet.
+
+        They confirmed their email and are on the list; there is simply nothing
+        to send them until their language opens.
+        """
+        return self.language not in open_languages
+
     @property
     def initials(self):
         parts = [p for p in self.name.split() if p]

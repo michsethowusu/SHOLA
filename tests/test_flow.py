@@ -321,6 +321,35 @@ def main():
         wid = item.word_id
         cid = [c for c in item.word.candidates if c.language == "twi"][0].id
 
+    print("\nsigning up for a language we do not collect yet")
+    wl = app.test_client()
+    r = wl.post("/join", data={
+        "name": "Kwesi Mensah", "email": "kwesi@example.com",
+        "language": "other", "other_language": "nzi",
+        "time_window": "anytime"}, follow_redirects=True)
+    ok &= check("waiting signup asks for the code too", r.status_code == 200
+                and b"Enter the code" in r.data)
+    r = wl.post("/verify", data={"email": "kwesi@example.com",
+                                 "code": sent["code"]})
+    ok &= check("they are told they are on the list",
+                r.status_code == 200 and b"on the list" in r.data)
+    with app.app_context():
+        w = Volunteer.query.filter_by(email="kwesi@example.com").first()
+        ok &= check("the volunteer exists", w is not None)
+        ok &= check("but no words were leased", w.assignments.count() == 0,
+                    f"{w.assignments.count() if w else '-'} leased")
+        ok &= check("and they count as waiting",
+                    w.is_waiting(app.config["LANGUAGES"]))
+        with app.test_request_context():
+            from shola.mailer import make_token as mt
+            wtok = mt(w)
+    r = app.test_client().get(f"/w/{wtok}")
+    ok &= check("their link shows the waiting page, not an empty queue",
+                r.status_code == 200 and b"on the list" in r.data)
+    r = wl.post("/join", data={"name": "No Such", "email": "no@example.com",
+                               "language": "other", "other_language": "zzz"})
+    ok &= check("an unknown language code is refused", r.status_code == 400)
+
     print("\nthe link alone is enough - no session, no cookies")
     fresh = app.test_client()          # never visited, holds no cookie
     r = fresh.get(f"/w/{token}")

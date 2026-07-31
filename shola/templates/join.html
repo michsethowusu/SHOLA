@@ -36,6 +36,29 @@
               <span class="s">{{ lang.special | join(' ') }}</span>
             </label>
           {% endfor %}
+          <label class="choice" id="other-choice">
+            <input type="radio" name="language" value="other"
+                   {% if chosen == 'other' %}checked{% endif %}>
+            <span class="t">Another language</span>
+            <span class="s">Not collected yet</span>
+          </label>
+        </div>
+
+        <div id="other-picker" hidden style="margin-top:12px">
+          <label for="other_language">Which one?</label>
+          <p class="hint">
+            We are not collecting it yet. Choose it and we will email you the
+            day we start.
+          </p>
+          <select id="other_language" name="other_language">
+            <option value="">Choose a language</option>
+            {% for code, name, alt in OTHER_LANGUAGES %}
+              <option value="{{ code }}"
+                {% if form and form.other_language == code %}selected{% endif %}>
+                {{ name }}{% if alt %} ({{ alt | join(', ') }}){% endif %}
+              </option>
+            {% endfor %}
+          </select>
         </div>
       </div>
 
@@ -85,6 +108,24 @@
       </div>
 
       <button class="btn wide" type="submit">Join SHOLA</button>
+
+      <script>
+        // Reveal the long list only when it is wanted, so the common case
+        // stays four taps.
+        (function () {
+          var picker = document.getElementById("other-picker");
+          var select = document.getElementById("other_language");
+          function sync() {
+            var other = document.querySelector('input[name=language][value=other]');
+            picker.hidden = !(other && other.checked);
+            select.required = !picker.hidden;
+          }
+          document.querySelectorAll('input[name=language]').forEach(function (r) {
+            r.addEventListener("change", sync);
+          });
+          sync();
+        })();
+      </script>
       <p class="hint center" style="margin-top:14px">
         Already signed up? <a href="{{ url_for('main.resend') }}">Request a link</a>.
       </p>
