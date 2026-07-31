@@ -347,11 +347,31 @@ def resend():
     email = (request.form.get("email") or "").strip().lower()
     volunteer = Volunteer.query.filter_by(email=email).first()
     if volunteer:
-        from .mailer import build_daily_email, send
-        words = [a.word for a in volunteer.pending_today().limit(200)]
+        from .mailer import (build_daily_email, build_link_email, daily_link,
+                             send)
         try:
-            subject, text, html = build_daily_email(volunteer, words)
-            send(volunteer.email, subject, text, html)
+            if volunteer.is_waiting(current_app.config["LANGUAGES"]):
+                message = build_link_email(
+                    volunteer, daily_link(volunteer),
+                    f"{language_label(volunteer.language)} is not open yet. "
+                    "You are on the list and we will email you the day it "
+                    "starts.")
+            else:
+                # Someone asking for a link has time to spare. If they have
+                # already cleared today's list, give them a fresh one rather
+                # than an email announcing zero words.
+                top_up(volunteer,
+                       target=current_app.config["WORDS_PER_VOLUNTEER"])
+                words = [a.word for a in volunteer.pending_today().limit(400)]
+                if words:
+                    message = build_daily_email(volunteer, words)
+                else:
+                    message = build_link_email(
+                        volunteer, daily_link(volunteer),
+                        "Nothing is waiting for you right now — every word in "
+                        "your language is either confirmed or with another "
+                        "speaker. We will email you as soon as there is more.")
+            send(volunteer.email, *message)
         except Exception as exc:      # noqa: BLE001 - show the operator cause
             current_app.logger.warning("resend failed: %s", exc)
     # Same answer either way: never reveal whether an address is registered.

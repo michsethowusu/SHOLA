@@ -1,0 +1,8 @@
+Here is your SHOLA link, {{ first }}.
+
+{{ note }}
+
+{{ link }}
+
+--
+SHOLA - Share Your Language

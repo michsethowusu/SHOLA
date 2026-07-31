@@ -56,6 +56,14 @@ def build_opened_email(volunteer, language_name, link):
             render_template("email/opened.html", **ctx))
 
 
+def build_link_email(volunteer, link, note):
+    """Just the personalised link, for when there are no words to list."""
+    first = volunteer.name.split()[0] if volunteer.name else "there"
+    return ("Your SHOLA link",
+            render_template("email/link.txt", first=first, link=link, note=note),
+            render_template("email/link.html", first=first, link=link, note=note))
+
+
 def daily_link(volunteer):
     """Absolute link to today's list.
 

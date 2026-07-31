@@ -452,6 +452,43 @@ def main():
     ok &= check("evaluate page offers the back control",
                 b'id="back-btn"' in r.data)
 
+    print("\nasking for a link after finishing the day gives you more words")
+    captured = {}
+
+    def capture(to, subject, text, html):
+        captured["to"] = to
+        captured["subject"] = subject
+        captured["text"] = text
+
+    mailer_mod.send = capture
+
+    with app.app_context():
+        vol = Volunteer.query.filter_by(email="ama@example.com").first()
+        # Clear the day: answer everything outstanding.
+        for a in vol.pending_today().all():
+            record_verdict(vol, a.word_id, custom_text="done for today")
+        ok &= check("nothing left for today", vol.pending_today().count() == 0)
+
+    fresh.post("/resend", data={"email": "ama@example.com"})
+    ok &= check("an email went out", captured.get("to") == "ama@example.com")
+    ok &= check("it does not announce zero words",
+                "0 " not in captured.get("subject", ""),
+                captured.get("subject", ""))
+    with app.app_context():
+        vol = Volunteer.query.filter_by(email="ama@example.com").first()
+        ok &= check("fresh words were leased", vol.pending_today().count() > 0,
+                    f"{vol.pending_today().count()} pending")
+    ok &= check("the email lists words rather than an empty list",
+                "TODAY'S WORDS" in captured.get("text", ""))
+
+    print("\nsomeone still on the waiting list gets their status, not a word list")
+    captured.clear()
+    fresh.post("/resend", data={"email": "kwesi@example.com"})
+    ok &= check("they are emailed too", captured.get("to") == "kwesi@example.com")
+    ok &= check("and told their language is not open",
+                "not open yet" in captured.get("text", ""),
+                captured.get("text", "")[:80])
+
     print("\nthe header cannot cover the options while checking words")
     r = fresh.get(f"/w/{token}")
     ok &= check("evaluate page opts out of the sticky header",
