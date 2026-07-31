@@ -55,6 +55,23 @@ def create_app(config_object=Config):
         return {"LANGUAGES": LANGUAGES, "DAY_NAMES": DAY_NAMES,
                 "TIME_WINDOWS": TIME_WINDOWS, "OTHER_LANGUAGES": OTHER_LANGUAGES}
 
+    @app.url_defaults
+    def version_static(endpoint, values):
+        """Stamp every static URL with the file's modification time.
+
+        Without this, a volunteer who has visited before keeps whatever CSS and
+        JS their browser cached. A stale stylesheet is not a cosmetic problem
+        here: the last release changed which elements accept clicks, so an old
+        file leaves the options looking fine and doing nothing.
+        """
+        if endpoint != "static" or "filename" not in values:
+            return
+        path = os.path.join(app.static_folder, values["filename"])
+        try:
+            values["v"] = int(os.stat(path).st_mtime)
+        except OSError:
+            pass
+
     @app.template_filter("thousands")
     def thousands(n):
         return f"{n:,}"

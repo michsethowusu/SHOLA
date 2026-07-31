@@ -452,6 +452,17 @@ def main():
     ok &= check("evaluate page offers the back control",
                 b'id="back-btn"' in r.data)
 
+    print("\nstatic files are versioned so a stale cache cannot linger")
+    r = fresh.get("/")
+    import re as _re
+    urls = _re.findall(r'(?:href|src)="(/static/[^"]+)"', r.get_data(as_text=True))
+    ok &= check("stylesheet URL carries a version", any("?v=" in u for u in urls),
+                str(urls))
+    r = fresh.get(f"/w/{token}")
+    urls = _re.findall(r'src="(/static/js/[^"]+)"', r.get_data(as_text=True))
+    ok &= check("script URL carries a version too",
+                bool(urls) and "?v=" in urls[0], str(urls))
+
     r = fresh.get("/api/words/twi")
     ok &= check("words API responds", r.status_code == 200)
     body = r.get_json()
