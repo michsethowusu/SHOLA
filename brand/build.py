@@ -121,10 +121,12 @@ def thumbnail():
   <div class="mark" style="font-size:46px;color:{SAND}">
     SH<span style="color:{RED}">Ɔ</span>LA</div>
   <div>
-    <div style="font-size:104px;font-weight:800;line-height:1;
-                letter-spacing:-.04em">
-      SPEAK<br>TWI?</div>
-    <div style="font-size:38px;color:{GOLD};margin-top:22px;font-weight:700">
+    <div style="font-size:34px;font-weight:700;color:#a89f93;
+                letter-spacing:.02em">DO YOU SPEAK</div>
+    <div style="font-size:88px;font-weight:800;line-height:1.02;
+                letter-spacing:-.04em;margin-top:6px">
+      TWI · EWE<br>GA · DAGBANI?</div>
+    <div style="font-size:36px;color:{GOLD};margin-top:20px;font-weight:700">
       Your language needs you — 2 minutes a day</div>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between">
