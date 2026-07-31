@@ -23,8 +23,8 @@
        "doneTotal": done_total,
        "special": lang.special,
        "longpress": lang.longpress,
-       "submitUrl": url_for("main.submit", word_id=0),
-       "doneUrl": url_for("main.done"),
+       "submitUrl": url_for("main.submit", token=token, word_id=0),
+       "doneUrl": url_for("main.done", token=token),
        "resendUrl": url_for("main.resend")
      } | tojson }}'>
 
@@ -52,7 +52,7 @@
       {# Rendered by shola.js; this copy is the no-JavaScript fallback. #}
       <noscript>
         {% for opt in queue[0].options %}
-          <form method="post" action="{{ url_for('main.submit', word_id=queue[0].word_id) }}">
+          <form method="post" action="{{ url_for('main.submit', token=token, word_id=queue[0].word_id) }}">
             <input type="hidden" name="choice" value="{{ opt.id }}">
             <button class="option" type="submit">
               <span class="mark" aria-hidden="true">✓</span>
@@ -60,7 +60,7 @@
             </button>
           </form>
         {% endfor %}
-        <form method="post" action="{{ url_for('main.submit', word_id=queue[0].word_id) }}">
+        <form method="post" action="{{ url_for('main.submit', token=token, word_id=queue[0].word_id) }}">
           <input type="hidden" name="choice" value="custom">
           <label class="label" for="ns-own" style="margin-top:12px">Or type your own</label>
           <input type="text" id="ns-own" name="custom_text" placeholder="Your translation">

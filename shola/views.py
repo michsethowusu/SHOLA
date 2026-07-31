@@ -1,40 +1,51 @@
 """Routes.
 
-The evaluation flow is the whole product, so it is built to be fast: one word
-per screen, the verdict posts in the background, and the next word is already
-in the page. It also works with JavaScript switched off, in which case each
-verdict is a normal form post and a redirect.
+There is no login. A volunteer's personalised link carries a signed token that
+identifies them, and every evaluation URL includes it, so the flow works from
+the email on any device with no account, no password and no dependence on
+cookies. The session is only ever used to remember the token for the nav bar;
+authorisation always comes from the token in the URL.
+
+An address is confirmed by a one-time code at signup, so the daily emails only
+ever go to a mailbox someone actually opened.
 """
 
 import secrets
-from datetime import date
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from flask import (Blueprint, abort, current_app, flash, jsonify, redirect,
                    render_template, request, send_from_directory, session,
                    url_for)
+from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 from . import consensus
 from .assignment import assign_words, leaderboard, record_verdict, redistribute
-from .mailer import read_token
-from .models import Candidate, Volunteer, db, site_stats
+from .mailer import build_otp_email, make_token, read_token
+from .models import Candidate, PendingSignup, Volunteer, db, site_stats
 
 main = Blueprint("main", __name__)
 
+CODE_TTL_MINUTES = 15
+MAX_CODE_ATTEMPTS = 6
+MAX_CODE_SENDS = 5
 
-def current_volunteer():
-    vid = session.get("volunteer_id")
+
+def volunteer_from_token(token):
+    """The volunteer a personalised link belongs to, or None."""
+    vid = read_token(token)
     if not vid:
         return None
-    return db.session.get(Volunteer, vid)
+    volunteer = db.session.get(Volunteer, vid)
+    if not volunteer or not volunteer.active:
+        return None
+    return volunteer
 
 
-def require_volunteer():
-    v = current_volunteer()
-    if not v:
-        abort(redirect(url_for("main.resend")))
-    return v
+def remembered_token():
+    """Token kept from an earlier visit, only so the nav can link onward."""
+    return session.get("token")
 
 
 # ----------------------------------------------------------------- public pages
@@ -92,6 +103,19 @@ def save_photo(file_storage):
     return name
 
 
+def issue_code(pending):
+    """Generate a fresh code, store its hash, and email it."""
+    code = f"{secrets.randbelow(1000000):06d}"
+    pending.code_hash = generate_password_hash(code)
+    pending.attempts = 0
+    pending.expires_at = datetime.utcnow() + timedelta(minutes=CODE_TTL_MINUTES)
+    db.session.commit()
+
+    from .mailer import send
+    subject, text, html = build_otp_email(pending.name, code, CODE_TTL_MINUTES)
+    send(pending.email, subject, text, html)
+
+
 @main.route("/join", methods=["GET", "POST"])
 def join():
     if request.method == "GET":
@@ -112,7 +136,7 @@ def join():
     if language not in current_app.config["LANGUAGES"]:
         errors.append("Choose the language you speak.")
     if Volunteer.query.filter_by(email=email).first():
-        errors.append("That email is already signed up. Ask for a new link "
+        errors.append("That email is already signed up. Ask for your link "
                       "instead.")
 
     photo_name = None
@@ -127,19 +151,108 @@ def join():
             flash(e, "error")
         return render_template("join.html", form=request.form), 400
 
+    # Held, not created. The Volunteer only exists once the code comes back.
+    pending = PendingSignup.query.filter_by(email=email).first()
+    if not pending:
+        pending = PendingSignup(email=email, code_hash="",
+                                expires_at=datetime.utcnow())
+        db.session.add(pending)
+    pending.name = name
+    pending.language = language
+    pending.available_days = ",".join(sorted(d for d in days if d.isdigit()))
+    pending.time_window = (window if window in current_app.config["TIME_WINDOWS"]
+                           else "anytime")
+    pending.photo = photo_name or pending.photo
+    pending.photo_consent = consent
+    pending.sends = 1
+    db.session.commit()
+
+    try:
+        issue_code(pending)
+    except Exception as exc:      # noqa: BLE001 - surface a usable message
+        current_app.logger.warning("otp send failed: %s", exc)
+        flash("We could not send the code to that address just now. "
+              "Check it and try again.", "error")
+        return render_template("join.html", form=request.form), 502
+
+    session["signup_email"] = email
+    return redirect(url_for("main.verify"))
+
+
+@main.route("/verify", methods=["GET", "POST"])
+def verify():
+    email = (request.form.get("email") or request.args.get("email")
+             or session.get("signup_email") or "").strip().lower()
+    pending = PendingSignup.query.filter_by(email=email).first() if email else None
+
+    if request.method == "GET":
+        if not pending:
+            return redirect(url_for("main.join"))
+        return render_template("verify.html", email=email)
+
+    if not pending:
+        flash("Start again — we have no signup waiting for that address.",
+              "error")
+        return redirect(url_for("main.join"))
+
+    if pending.expired():
+        flash("That code has expired. We can send you a new one.", "error")
+        return render_template("verify.html", email=email), 400
+
+    if pending.attempts >= MAX_CODE_ATTEMPTS:
+        flash("Too many tries. Ask for a new code.", "error")
+        return render_template("verify.html", email=email), 429
+
+    code = (request.form.get("code") or "").strip().replace(" ", "")
+    pending.attempts += 1
+    db.session.commit()
+
+    if not check_password_hash(pending.code_hash, code):
+        left = MAX_CODE_ATTEMPTS - pending.attempts
+        flash(f"That code is not right. {left} tries left." if left > 0
+              else "That code is not right.", "error")
+        return render_template("verify.html", email=email), 400
+
+    # Confirmed: now the volunteer exists and the words are theirs.
     volunteer = Volunteer(
-        name=name, email=email, language=language, photo=photo_name,
-        photo_consent=consent and bool(photo_name),
-        available_days=",".join(sorted(d for d in days if d.isdigit())),
-        time_window=window if window in current_app.config["TIME_WINDOWS"]
-        else "anytime")
+        name=pending.name, email=pending.email, language=pending.language,
+        photo=pending.photo,
+        photo_consent=pending.photo_consent and bool(pending.photo),
+        available_days=pending.available_days,
+        time_window=pending.time_window)
     db.session.add(volunteer)
+    db.session.delete(pending)
     db.session.commit()
 
     given = assign_words(volunteer, current_app.config["WORDS_PER_VOLUNTEER"],
                          horizon_days=current_app.config["COMMITMENT_DAYS"])
-    session["volunteer_id"] = volunteer.id
-    return render_template("joined.html", volunteer=volunteer, assigned=given)
+    token = make_token(volunteer)
+    session["token"] = token
+    session.pop("signup_email", None)
+    return render_template("joined.html", volunteer=volunteer, assigned=given,
+                           token=token)
+
+
+@main.route("/verify/resend", methods=["POST"])
+def verify_resend():
+    email = (request.form.get("email") or session.get("signup_email")
+             or "").strip().lower()
+    pending = PendingSignup.query.filter_by(email=email).first() if email else None
+    if not pending:
+        return redirect(url_for("main.join"))
+    if pending.sends >= MAX_CODE_SENDS:
+        flash("We have sent that address several codes already. "
+              "Check your spam folder, or start again later.", "error")
+        return render_template("verify.html", email=email), 429
+    pending.sends += 1
+    db.session.commit()
+    try:
+        issue_code(pending)
+        flash("New code sent.", "ok")
+    except Exception as exc:      # noqa: BLE001
+        current_app.logger.warning("otp resend failed: %s", exc)
+        flash("We could not send that code. Try again in a moment.", "error")
+    return render_template("verify.html", email=email)
 
 
 @main.route("/resend", methods=["GET", "POST"])
@@ -165,16 +278,8 @@ def resend():
 
 @main.route("/start/<token>")
 def start(token):
-    """Open the daily link from an email and begin evaluating."""
-    vid = read_token(token)
-    if not vid:
-        flash("That link has expired. Ask for a fresh one below.", "error")
-        return redirect(url_for("main.resend"))
-    volunteer = db.session.get(Volunteer, vid)
-    if not volunteer or not volunteer.active:
-        return redirect(url_for("main.index"))
-    session["volunteer_id"] = volunteer.id
-    return redirect(url_for("main.evaluate"))
+    """Older links pointed here; keep them working."""
+    return redirect(url_for("main.evaluate", token=token))
 
 
 @main.route("/leave")
@@ -209,27 +314,33 @@ def queue_payload(volunteer, limit=12):
     return as_cards(ahead, volunteer.language), bool(ahead)
 
 
-@main.route("/evaluate")
-def evaluate():
-    volunteer = current_volunteer()
+@main.route("/w/<token>")
+def evaluate(token):
+    """The personalised link. The token is the only credential needed."""
+    volunteer = volunteer_from_token(token)
     if not volunteer:
+        flash("That link is not valid any more. We can email you a new one.",
+              "error")
         return redirect(url_for("main.resend"))
+
+    # Remembered only so the nav bar can offer a way back; never trusted.
+    session["token"] = token
 
     queue, working_ahead = queue_payload(volunteer)
     remaining = (volunteer.upcoming().count() if working_ahead
                  else volunteer.pending_today().count())
     lang = current_app.config["LANGUAGES"][volunteer.language]
     return render_template("evaluate.html", volunteer=volunteer, queue=queue,
-                           remaining=remaining, lang=lang,
+                           remaining=remaining, lang=lang, token=token,
                            working_ahead=working_ahead,
                            done_total=volunteer.done_count())
 
 
-@main.route("/evaluate/<int:word_id>", methods=["POST"])
-def submit(word_id):
-    volunteer = current_volunteer()
+@main.route("/w/<token>/<int:word_id>", methods=["POST"])
+def submit(token, word_id):
+    volunteer = volunteer_from_token(token)
     if not volunteer:
-        return jsonify({"error": "session expired"}), 401
+        return jsonify({"error": "link no longer valid"}), 401
 
     choice = request.form.get("choice") or ""
     custom = (request.form.get("custom_text") or "").strip()
@@ -260,15 +371,15 @@ def submit(word_id):
                      else volunteer.pending_today().count())
         return jsonify({"ok": True, "remaining": remaining,
                         "done_total": volunteer.done_count(), "next": nxt})
-    return redirect(url_for("main.evaluate"))
+    return redirect(url_for("main.evaluate", token=token))
 
 
-@main.route("/done")
-def done():
-    volunteer = current_volunteer()
+@main.route("/w/<token>/done")
+def done(token):
+    volunteer = volunteer_from_token(token)
     if not volunteer:
         return redirect(url_for("main.index"))
-    return render_template("done.html", volunteer=volunteer,
+    return render_template("done.html", volunteer=volunteer, token=token,
                            done_total=volunteer.done_count(),
                            target=current_app.config["WORDS_PER_VOLUNTEER"])
 

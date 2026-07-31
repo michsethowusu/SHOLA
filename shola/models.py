@@ -77,6 +77,35 @@ class Volunteer(db.Model):
                 .order_by(Assignment.due_date, Assignment.id))
 
 
+class PendingSignup(db.Model):
+    """A signup held back until the email address proves it exists.
+
+    Nothing becomes a Volunteer until the code is entered, so an address
+    somebody mistyped never gets 1000 words assigned to it. The code is stored
+    hashed - it is a credential for as long as it lives.
+    """
+
+    __tablename__ = "pending_signups"
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), nullable=False, unique=True, index=True)
+    name = db.Column(db.String(120), nullable=False)
+    language = db.Column(db.String(20), nullable=False)
+    available_days = db.Column(db.String(20), default="", nullable=False)
+    time_window = db.Column(db.String(20), default="anytime", nullable=False)
+    photo = db.Column(db.String(255))
+    photo_consent = db.Column(db.Boolean, default=False, nullable=False)
+
+    code_hash = db.Column(db.String(255), nullable=False)
+    attempts = db.Column(db.Integer, default=0, nullable=False)
+    sends = db.Column(db.Integer, default=1, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False)
+
+    def expired(self):
+        return datetime.utcnow() > self.expires_at
+
+
 class Word(db.Model):
     __tablename__ = "words"
 
@@ -84,6 +113,9 @@ class Word(db.Model):
     phrase = db.Column(db.String(255), nullable=False, unique=True, index=True)
     # Denormalised so fair assignment is one indexed sort, not a join per word.
     assign_count = db.Column(db.Integer, default=0, nullable=False, index=True)
+    # Corpus frequency, carried over from the source dataset. Common words are
+    # worth verifying first: they carry more weight in anything trained on this.
+    frequency = db.Column(db.Float, default=0.0, nullable=False, index=True)
 
     candidates = db.relationship("Candidate", back_populates="word",
                                  cascade="all, delete-orphan")

@@ -31,6 +31,10 @@
     skip: document.getElementById("skip-btn")
   };
 
+  function wordUrl(wordId) {
+    return cfg.submitUrl.replace(/\/0$/, "/" + String(wordId));
+  }
+
   /* ------------------------------------------------------------ rendering */
 
   function render() {
@@ -84,7 +88,7 @@
     body.append("choice", choice);
     if (customText) body.append("custom_text", customText);
 
-    fetch(cfg.submitUrl.replace("0", String(item.word_id)), {
+    fetch(wordUrl(item.word_id), {
       method: "POST",
       body: body,
       headers: { "X-Requested-With": "shola" },
@@ -119,7 +123,7 @@
         busy = false;
         // Fall back to a full page post rather than losing the verdict.
         var f = document.getElementById("fallback-form");
-        f.action = cfg.submitUrl.replace("0", String(item.word_id));
+        f.action = wordUrl(item.word_id);
         f.querySelector('[name=choice]').value = choice;
         f.querySelector('[name=custom_text]').value = customText || "";
         f.submit();

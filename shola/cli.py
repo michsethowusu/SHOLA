@@ -23,7 +23,19 @@ from .models import Candidate, Volunteer, Word, db, site_stats
 shola_cli = AppGroup("shola", help="SHOLA operations.")
 
 
-def _upsert_word(phrase, per_language, seen):
+def load_frequencies(path):
+    """phrase -> corpus frequency, from the source dataset."""
+    freqs = {}
+    with open(path, newline="", encoding="utf-8") as fh:
+        for rec in csv.DictReader(fh):
+            try:
+                freqs[rec["phrase"]] = float(rec.get("average_percentage") or 0)
+            except (TypeError, ValueError):
+                freqs[rec["phrase"]] = 0.0
+    return freqs
+
+
+def _upsert_word(phrase, per_language, seen, freq=0.0):
     """Add a word and its candidate translations. Returns True if new."""
     if phrase in seen:
         return False
@@ -31,7 +43,7 @@ def _upsert_word(phrase, per_language, seen):
     if word:
         seen.add(phrase)
         return False
-    word = Word(phrase=phrase)
+    word = Word(phrase=phrase, frequency=freq)
     db.session.add(word)
     db.session.flush()
     for language, variants in per_language.items():
@@ -49,13 +61,20 @@ def _upsert_word(phrase, per_language, seen):
               help="ghana-nouns-translated.csv with <lang>_1..3 columns.")
 @click.option("--jsonl", "jsonl_path", type=click.Path(exists=True),
               help="translations.jsonl with one JSON object per noun.")
+@click.option("--freq-csv", type=click.Path(exists=True),
+              help="ghana-nouns.csv, to carry over each word's corpus "
+                   "frequency so common words are evaluated first.")
 @click.option("--limit", type=int, default=0, help="stop after N words.")
-def import_words(csv_path, jsonl_path, limit):
+def import_words(csv_path, jsonl_path, freq_csv, limit):
     """Load words and their candidate translations."""
     if not csv_path and not jsonl_path:
         raise click.UsageError("pass --csv or --jsonl")
 
     languages = list(current_app.config["LANGUAGES"])
+    freqs = {}
+    if freq_csv:
+        freqs = load_frequencies(freq_csv)
+        click.echo(f"loaded frequencies for {len(freqs):,} phrases")
     seen, added, batch = set(), 0, 0
 
     def flush():
@@ -73,7 +92,7 @@ def import_words(csv_path, jsonl_path, limit):
                     continue
                 per_lang = {L: [str(v) for v in (rec.get(L) or [])]
                             for L in languages}
-                if _upsert_word(phrase, per_lang, seen):
+                if _upsert_word(phrase, per_lang, seen, freqs.get(phrase, 0.0)):
                     added += 1
                     batch += 1
                 if batch >= 500:
@@ -90,7 +109,7 @@ def import_words(csv_path, jsonl_path, limit):
                     continue
                 per_lang = {L: [rec.get(f"{L}_{i}", "") for i in (1, 2, 3)]
                             for L in languages}
-                if _upsert_word(phrase, per_lang, seen):
+                if _upsert_word(phrase, per_lang, seen, freqs.get(phrase, 0.0)):
                     added += 1
                     batch += 1
                 if batch >= 500:

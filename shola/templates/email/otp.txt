@@ -1,0 +1,14 @@
+{{ code }} is your SHOLA code.
+
+Hi {{ first }},
+
+Enter this code on the SHOLA page to confirm your email and start checking words:
+
+    {{ code }}
+
+It expires in {{ minutes }} minutes.
+
+If you did not sign up to SHOLA, ignore this email - nothing was created.
+
+--
+SHOLA - Share Your Language

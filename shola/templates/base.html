@@ -23,8 +23,8 @@
       <a href="{{ url_for('main.champions') }}" {% if request.endpoint == 'main.champions' %}class="here"{% endif %}>Champions</a>
       <a href="{{ url_for('main.stats') }}" {% if request.endpoint == 'main.stats' %}class="here"{% endif %}>Progress</a>
       <a href="{{ url_for('main.about') }}" {% if request.endpoint == 'main.about' %}class="here"{% endif %}>About</a>
-      {% if session.volunteer_id %}
-        <a href="{{ url_for('main.evaluate') }}" class="btn small">My words</a>
+      {% if session.token %}
+        <a href="{{ url_for('main.evaluate', token=session.token) }}" class="btn small">My words</a>
       {% else %}
         <a href="{{ url_for('main.join') }}" class="btn small">Join</a>
       {% endif %}

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}Confirm your email{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap narrow">
+    <p class="eyebrow">One last step</p>
+    <h1 style="font-size:clamp(1.8rem,6vw,2.4rem)">Enter the code we sent</h1>
+    <p class="muted">
+      We sent a six-digit code to <strong>{{ email }}</strong>. It is good for
+      15 minutes.
+    </p>
+
+    <form method="post" action="{{ url_for('main.verify') }}" style="margin-top:26px">
+      <input type="hidden" name="email" value="{{ email }}">
+      <div class="field">
+        <label for="code">Your code</label>
+        <input type="text" id="code" name="code" required autofocus
+               inputmode="numeric" pattern="[0-9 ]*" autocomplete="one-time-code"
+               maxlength="7" placeholder="000000"
+               style="font-family:var(--mono);font-size:1.6rem;letter-spacing:.3em;text-align:center">
+      </div>
+      <button class="btn wide" type="submit">Confirm and start</button>
+    </form>
+
+    <form method="post" action="{{ url_for('main.verify_resend') }}"
+          style="margin-top:14px; text-align:center">
+      <input type="hidden" name="email" value="{{ email }}">
+      <button class="linkish" type="submit">Send me a new code</button>
+    </form>
+
+    <p class="hint center" style="margin-top:20px">
+      Wrong address? <a href="{{ url_for('main.join') }}">Start again</a>.
+    </p>
+  </div>
+</section>
+{% endblock %}

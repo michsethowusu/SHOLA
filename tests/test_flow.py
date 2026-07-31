@@ -18,7 +18,7 @@ from shola.assignment import (assign_words, leaderboard,         # noqa: E402
 from shola.config import Config                                 # noqa: E402
 from shola.consensus import best, normalise, tally               # noqa: E402
 from shola.models import (Assignment, Candidate, Evaluation,      # noqa: E402
-                          Volunteer, Word, db)
+                          PendingSignup, Volunteer, Word, db)
 
 LANGS = ["twi", "ewe", "ga", "dagbani"]
 
@@ -39,7 +39,8 @@ def make_app():
 
 def seed(n_words=30):
     for i in range(n_words):
-        w = Word(phrase=f"word {i}")
+        # Descending frequency, so word 0 is the commonest.
+        w = Word(phrase=f"word {i}", frequency=float(n_words - i))
         db.session.add(w)
         db.session.flush()
         for lang in LANGS:
@@ -147,45 +148,96 @@ def main():
         board = leaderboard()
         ok &= check("most active first", board[0][1] >= board[-1][1])
 
-    print("\nHTTP flow")
+    print("\ncommon words go out first")
     with app.app_context():
-        db.create_all()
+        g = add_volunteer("g@example.com")
+        assign_words(g, 5)
+        picked = [a.word.phrase for a in g.assignments.order_by(Assignment.id)]
+        freqs = [db.session.get(Word, a.word_id).frequency
+                 for a in g.assignments.order_by(Assignment.id)]
+        ok &= check("frequency descending within a coverage level",
+                    freqs == sorted(freqs, reverse=True), str(picked))
+
+    print("\nsignup needs a code before anything is created")
+    sent = {}
+
+    def fake_send(to, subject, text, html):
+        sent["to"] = to
+        sent["code"] = "".join(ch for ch in subject if ch.isdigit())
+
+    import shola.mailer as mailer_mod
+    import shola.views as views_mod
+    mailer_mod.send = fake_send
+    views_mod.build_otp_email = mailer_mod.build_otp_email
+
     client = app.test_client()
-    with app.app_context():
-        seed_word = Word.query.first()
     r = client.post("/join", data={
         "name": "Ama Serwaa", "email": "ama@example.com", "language": "twi",
         "days": ["0", "1"], "time_window": "morning"}, follow_redirects=True)
-    ok &= check("join returns the welcome page", r.status_code == 200
-                and b"Akwaaba" in r.data)
-    r = client.get("/evaluate")
-    ok &= check("evaluate page renders", r.status_code == 200)
-    ok &= check("evaluate offers the typed-answer option",
-                b"Type your own translation" in r.data)
+    ok &= check("join asks for the code", r.status_code == 200
+                and b"Enter the code" in r.data)
+    with app.app_context():
+        ok &= check("no volunteer exists yet",
+                    Volunteer.query.filter_by(email="ama@example.com").first() is None)
+        ok &= check("signup is held pending",
+                    PendingSignup.query.filter_by(email="ama@example.com").first()
+                    is not None)
+    ok &= check("code was emailed", sent.get("to") == "ama@example.com")
 
+    r = client.post("/verify", data={"email": "ama@example.com",
+                                     "code": "000000"})
+    wrong_ok = r.status_code == 400
+    with app.app_context():
+        wrong_ok = wrong_ok and Volunteer.query.filter_by(
+            email="ama@example.com").first() is None
+    ok &= check("a wrong code creates nothing", wrong_ok)
+
+    r = client.post("/verify", data={"email": "ama@example.com",
+                                     "code": sent["code"]})
+    ok &= check("the right code completes signup", r.status_code == 200
+                and b"Akwaaba" in r.data)
     with app.app_context():
         vol = Volunteer.query.filter_by(email="ama@example.com").first()
-        item = vol.pending_today().first()
-        if item is None:                      # all words due later this week
-            item = vol.assignments.first()
-            item.due_date = date.today()
-            db.session.commit()
+        ok &= check("volunteer now exists", vol is not None)
+        ok &= check("pending record cleared",
+                    PendingSignup.query.filter_by(email="ama@example.com").first()
+                    is None)
+        ok &= check("words assigned on confirmation", vol.assignments.count() > 0)
+        with app.test_request_context():
+            from shola.mailer import make_token
+            token = make_token(vol)
+        item = vol.pending_today().first() or vol.assignments.first()
         wid = item.word_id
         cid = [c for c in item.word.candidates if c.language == "twi"][0].id
 
-    r = client.post(f"/evaluate/{wid}", data={"choice": str(cid)},
-                    headers={"X-Requested-With": "shola"})
-    ok &= check("verdict posts as JSON", r.status_code == 200
+    print("\nthe link alone is enough - no session, no cookies")
+    fresh = app.test_client()          # never visited, holds no cookie
+    r = fresh.get(f"/w/{token}")
+    ok &= check("personalised link opens the flow", r.status_code == 200
+                and b"Type your own translation" in r.data)
+
+    nocookie = app.test_client()
+    r = nocookie.post(f"/w/{token}/{wid}", data={"choice": str(cid)},
+                      headers={"X-Requested-With": "shola"})
+    ok &= check("verdict posts with no session at all", r.status_code == 200
                 and r.get_json().get("ok") is True)
 
-    r = client.post(f"/evaluate/{wid}", data={"choice": "custom",
-                                              "custom_text": ""},
-                    headers={"X-Requested-With": "shola"})
+    r = nocookie.post(f"/w/{token}xx/{wid}", data={"choice": str(cid)},
+                      headers={"X-Requested-With": "shola"})
+    ok &= check("a tampered link is refused", r.status_code == 401)
+
+    r = fresh.get("/w/not-a-real-token", follow_redirects=True)
+    ok &= check("a junk link sends you to get a new one",
+                r.status_code == 200 and b"Send me my link" in r.data)
+
+    r = nocookie.post(f"/w/{token}/{wid}", data={"choice": "custom",
+                                                 "custom_text": ""},
+                      headers={"X-Requested-With": "shola"})
     ok &= check("empty typed answer is rejected", r.status_code == 400)
 
-    r = client.get("/api/consensus/twi")
+    r = fresh.get("/api/consensus/twi")
     ok &= check("consensus API responds", r.status_code == 200)
-    r = client.get("/api/consensus/nope")
+    r = fresh.get("/api/consensus/nope")
     ok &= check("unknown language 404s", r.status_code == 404)
 
     print("\nemail rendering")
@@ -197,7 +249,7 @@ def main():
         ok &= check("subject names the volunteer", "Ama" in subject, subject)
         ok &= check("text lists the words", words[0].phrase in text)
         ok &= check("html lists the words", words[0].phrase in html)
-        ok &= check("html carries the daily link", "/start/" in html)
+        ok &= check("html carries the personalised link", "/w/" in html)
         link = daily_link(vol)
         token = link.rsplit("/", 1)[-1]
         ok &= check("token round-trips to the volunteer", read_token(token) == vol.id)

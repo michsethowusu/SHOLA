@@ -38,6 +38,15 @@ def read_token(token):
     return data.get("v")
 
 
+def build_otp_email(name, code, minutes):
+    """The one-time code that confirms an address at signup."""
+    first = (name or "").split()[0] if name else "there"
+    ctx = {"first": first, "code": code, "minutes": minutes}
+    return (f"{code} is your SHOLA code",
+            render_template("email/otp.txt", **ctx),
+            render_template("email/otp.html", **ctx))
+
+
 def daily_link(volunteer):
     """Absolute link to today's list.
 
@@ -46,7 +55,7 @@ def daily_link(volunteer):
     raises. SITE_URL is the single source of truth for the public address.
     """
     base = current_app.config["SITE_URL"].rstrip("/")
-    return f"{base}/start/{make_token(volunteer)}"
+    return f"{base}/w/{make_token(volunteer)}"
 
 
 def build_daily_email(volunteer, words, overdue_count=0):

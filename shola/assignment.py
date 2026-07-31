@@ -45,12 +45,19 @@ def spread(total, slots):
 
 
 def pick_words(volunteer, count):
-    """Least-assigned words first, skipping any this volunteer already has."""
+    """Least-assigned first, then most frequent.
+
+    The two orderings do different jobs and do not conflict: assign_count keeps
+    coverage ahead of duplication, and within one coverage level the commonest
+    words go out first, so the words people actually use are verified early
+    rather than whenever they happen to come up.
+    """
     already = db.session.query(Assignment.word_id).filter(
         Assignment.volunteer_id == volunteer.id)
     return (Word.query
             .filter(~Word.id.in_(already))
-            .order_by(Word.assign_count.asc(), Word.id.asc())
+            .order_by(Word.assign_count.asc(), Word.frequency.desc(),
+                      Word.id.asc())
             .limit(count)
             .all())
 
