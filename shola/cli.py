@@ -8,8 +8,10 @@ Typical operation:
 """
 
 import csv
+import glob
 import gzip
 import json
+import os
 import sys
 from datetime import date
 
@@ -370,3 +372,85 @@ def announce_language(language, dry_run):
             failed += 1
             click.echo(f"  failed {volunteer.email}: {exc}", err=True)
     click.echo(f"told {sent} people {name} is open; {failed} failed")
+
+
+@shola_cli.command("backup")
+@click.option("--out", default="instance/backups", show_default=True)
+@click.option("--keep", default=14, show_default=True,
+              help="how many previous backups to retain.")
+def backup(out, keep):
+    """Back up the database, and separately the part that cannot be rebuilt.
+
+    Coolify's scheduled backups only cover the databases it manages, so a
+    SQLite file inside an application volume is not backed up by anything. This
+    writes two things:
+
+      * a consistent copy of the whole database, compressed
+      * volunteers and their answers as JSON
+
+    The JSON matters more than its size suggests. Every word and translation
+    can be re-imported from the published dataset in minutes, but a volunteer's
+    email, their chosen days and the answers they gave exist nowhere else. That
+    file is a few hundred kilobytes and is the only irreplaceable part.
+    """
+    import gzip as _gzip
+    import shutil
+    import sqlite3
+    from datetime import datetime as _dt
+
+    from .models import Evaluation, Volunteer
+
+    uri = current_app.config["SQLALCHEMY_DATABASE_URI"]
+    if not uri.startswith("sqlite"):
+        raise click.UsageError("this command backs up SQLite databases only")
+    db_path = uri.split("sqlite:///")[-1]
+
+    out_dir = os.path.abspath(out)
+    os.makedirs(out_dir, exist_ok=True)
+    stamp = _dt.utcnow().strftime("%Y%m%d-%H%M%S")
+
+    # sqlite3's backup API copies a live database consistently; copying the
+    # file by hand can catch it mid-write.
+    tmp = os.path.join(out_dir, f".shola-{stamp}.db")
+    src = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+    dst = sqlite3.connect(tmp)
+    with dst:
+        src.backup(dst)
+    dst.close()
+    src.close()
+
+    db_gz = os.path.join(out_dir, f"shola-{stamp}.db.gz")
+    with open(tmp, "rb") as f, _gzip.open(db_gz, "wb", compresslevel=6) as g:
+        shutil.copyfileobj(f, g, 1 << 20)
+    os.remove(tmp)
+
+    people = []
+    for v in Volunteer.query.all():
+        people.append({
+            "name": v.name, "email": v.email, "language": v.language,
+            "available_days": v.available_days, "time_window": v.time_window,
+            "joined_at": v.joined_at.isoformat() if v.joined_at else None,
+            "photo": v.photo, "photo_consent": v.photo_consent,
+            "active": v.active,
+            "answers": [
+                {"phrase": e.word.phrase, "language": e.language,
+                 "chose": e.chosen_text, "skipped": e.skipped,
+                 "at": e.created_at.isoformat() if e.created_at else None}
+                for e in v.evaluations
+            ],
+        })
+    people_path = os.path.join(out_dir, f"volunteers-{stamp}.json.gz")
+    with _gzip.open(people_path, "wt", encoding="utf-8") as fh:
+        json.dump({"exported_at": stamp, "volunteers": people}, fh,
+                  ensure_ascii=False, indent=1)
+
+    for pattern in ("shola-*.db.gz", "volunteers-*.json.gz"):
+        old = sorted(glob.glob(os.path.join(out_dir, pattern)))[:-keep or None]
+        for f in old:
+            os.remove(f)
+
+    click.echo(f"database  {os.path.getsize(db_gz)//1048576} MB  {db_gz}")
+    click.echo(f"people    {os.path.getsize(people_path)//1024} KB  "
+               f"{len(people)} volunteers, "
+               f"{sum(len(p['answers']) for p in people)} answers")
+    click.echo(f"keeping the {keep} most recent of each")

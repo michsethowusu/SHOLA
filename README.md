@@ -293,13 +293,32 @@ On first boot the container fetches the published dataset and imports it —
 38 MB down, a few minutes to load 478,822 words. It is skipped on later boots,
 so a redeploy is quick. `SHOLA_SKIP_SEED=1` disables it entirely.
 
-Scheduled tasks, as Coolify cron entries on the same container:
+Scheduled tasks, as Coolify scheduled tasks on the same container:
 
 ```
-0 7,13,18 * * *   flask --app wsgi shola send-daily --window all
-0 4 * * *         flask --app wsgi shola release-leases
-30 3 * * 1        flask --app wsgi shola redistribute-missed
+0 7 * * *     flask --app wsgi shola send-daily --window morning
+0 13 * * *    flask --app wsgi shola send-daily --window afternoon
+0 18 * * *    flask --app wsgi shola send-daily --window evening
+0 4 * * *     flask --app wsgi shola release-leases
+30 3 * * 1    flask --app wsgi shola redistribute-missed
+15 1 * * *    flask --app wsgi shola backup --keep 14
 ```
+
+### Backups
+
+Coolify's scheduled backups only cover the databases it manages, so nothing
+backs up a SQLite file inside an application volume. `shola backup` writes two
+things into `instance/backups`:
+
+- a consistent compressed copy of the database, made through SQLite's backup
+  API rather than by copying a file that may be mid-write
+- `volunteers-*.json.gz`: every volunteer and every answer they have given
+
+The second is the one that matters. Words and translations can be re-imported
+from the published dataset in minutes; a volunteer's email, the days they chose
+and the answers they gave exist nowhere else, and the file is a few hundred
+kilobytes. Both land inside the mounted volume, so copy them off the host as
+well if the data matters.
 
 ## The live deployment
 
