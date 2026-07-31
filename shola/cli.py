@@ -454,3 +454,56 @@ def backup(out, keep):
                f"{len(people)} volunteers, "
                f"{sum(len(p['answers']) for p in people)} answers")
     click.echo(f"keeping the {keep} most recent of each")
+
+    # Off-site, if credentials are present. Done here rather than through
+    # Coolify's S3 feature so a backup does not depend on a helper container
+    # that has been failing silently.
+    if os.environ.get("SHOLA_S3_BUCKET"):
+        try:
+            uploaded = upload_to_s3([db_gz, people_path], keep=keep)
+            for key in uploaded:
+                click.echo(f"uploaded  {key}")
+        except Exception as exc:      # noqa: BLE001 - never fail the local backup
+            click.echo(f"S3 upload FAILED: {exc}", err=True)
+            raise SystemExit(1)
+    else:
+        click.echo("no SHOLA_S3_BUCKET set, so this backup stays on this host")
+
+
+def upload_to_s3(paths, keep=14, prefix=None):
+    """Copy backups to S3-compatible storage and prune old remote copies.
+
+    Raises on failure. A backup that silently fails to leave the machine is
+    worse than no backup, because it looks like protection that is not there.
+    """
+    import boto3
+    from botocore.config import Config
+
+    bucket = os.environ["SHOLA_S3_BUCKET"]
+    prefix = (prefix or os.environ.get("SHOLA_S3_PREFIX", "shola")).strip("/")
+    client = boto3.client(
+        "s3",
+        endpoint_url=os.environ.get("SHOLA_S3_ENDPOINT") or None,
+        aws_access_key_id=os.environ["SHOLA_S3_ACCESS_KEY"],
+        aws_secret_access_key=os.environ["SHOLA_S3_SECRET_KEY"],
+        region_name=os.environ.get("SHOLA_S3_REGION", "auto"),
+        config=Config(signature_version="s3v4", retries={"max_attempts": 3}),
+    )
+
+    keys = []
+    for path in paths:
+        key = f"{prefix}/{os.path.basename(path)}"
+        client.upload_file(path, bucket, key)
+        # Read it back: an upload that reports success but stores nothing is
+        # exactly the failure mode this command exists to avoid.
+        head = client.head_object(Bucket=bucket, Key=key)
+        if head["ContentLength"] != os.path.getsize(path):
+            raise RuntimeError(f"{key} uploaded at the wrong size")
+        keys.append(key)
+
+    for stem in ("shola-", "volunteers-"):
+        listed = client.list_objects_v2(Bucket=bucket, Prefix=f"{prefix}/{stem}")
+        objs = sorted(listed.get("Contents", []), key=lambda o: o["Key"])
+        for obj in objs[:-keep or None]:
+            client.delete_object(Bucket=bucket, Key=obj["Key"])
+    return keys

@@ -306,6 +306,23 @@ Scheduled tasks, as Coolify scheduled tasks on the same container:
 
 ### Backups
 
+Off-site upload is done by this command rather than Coolify's S3 feature.
+Coolify performs the upload in a helper container, and when that image is
+missing it records the backup as **success** while nothing leaves the machine —
+which is how four databases here went five days with no off-site copy while the
+dashboard stayed green. `shola backup` uploads directly, verifies the stored
+object's size, and exits non-zero if anything failed.
+
+```
+SHOLA_S3_BUCKET       eced-fln-platform
+SHOLA_S3_ENDPOINT     https://<account>.r2.cloudflarestorage.com
+SHOLA_S3_ACCESS_KEY   R2 access key
+SHOLA_S3_SECRET_KEY   R2 secret key
+SHOLA_S3_PREFIX       shola          (default)
+```
+
+Without `SHOLA_S3_BUCKET` the backup stays local and says so.
+
 Coolify's scheduled backups only cover the databases it manages, so nothing
 backs up a SQLite file inside an application volume. `shola backup` writes two
 things into `instance/backups`:
