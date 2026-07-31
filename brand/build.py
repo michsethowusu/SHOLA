@@ -135,6 +135,68 @@ def thumbnail():
 </div>"""
 
 
+def lower_third():
+    """1920x1080, transparent. Art sits in the lower-left third.
+
+    For talking-head video: the graphic goes on the timeline full-frame and the
+    speaker, and whatever else is on screen, stays visible around it.
+    """
+    return f"""<div style="width:100vw;height:100vh;position:relative">
+  <div style="position:absolute;left:70px;bottom:80px;width:840px;
+              background:{SAND};border-radius:26px;padding:38px 44px;
+              box-shadow:0 18px 60px rgba(0,0,0,.35);
+              border-left:12px solid {RED}">
+    <div style="display:flex;align-items:baseline;gap:18px">
+      <div class="mark" style="font-size:52px;color:{INK}">
+        SH<span class="o">Ɔ</span>LA</div>
+      <div style="font-size:26px;color:#57514a">Share Your Language</div>
+    </div>
+    <div style="font-size:40px;font-weight:700;letter-spacing:-.02em;
+                margin-top:14px;color:{INK};line-height:1.15">
+      Check translations in your language</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;
+                margin-top:18px">
+      <div class="glyphs" style="font-size:34px">ɛ ɔ ŋ ɖ ƒ ɣ ʋ ʒ</div>
+      <div class="url" style="font-size:32px">{SITE}</div>
+    </div>
+  </div>
+</div>"""
+
+
+def side_panel():
+    """1920x1080, transparent. A vertical panel down the left side.
+
+    Leaves roughly two thirds of the frame free, so it can sit alongside a
+    speaker for a whole segment rather than a few seconds.
+    """
+    return f"""<div style="width:100vw;height:100vh;position:relative">
+  <div style="position:absolute;left:0;top:0;bottom:0;width:620px;
+              background:{SAND};padding:80px 60px;display:flex;
+              flex-direction:column;justify-content:space-between;
+              box-shadow:26px 0 70px rgba(0,0,0,.32);
+              border-right:10px solid {RED}">
+    <div>
+      <div class="mark" style="font-size:64px;color:{INK}">
+        SH<span class="o">Ɔ</span>LA</div>
+      <div style="font-size:27px;color:#57514a;margin-top:8px">
+        Share Your Language</div>
+    </div>
+    <div>
+      <div style="font-size:60px;font-weight:800;line-height:1.08;
+                  letter-spacing:-.03em;color:{INK}">
+        Your language,<br>checked by<br>you.</div>
+      <div style="font-size:29px;color:#57514a;margin-top:24px;line-height:1.4">
+        Twi, Ewe, Ga and Dagbani.<br>Two minutes a day.</div>
+    </div>
+    <div>
+      <div class="glyphs" style="font-size:42px;margin-bottom:22px">
+        ɛ ɔ ŋ<br>ɖ ƒ ɣ ʋ ʒ</div>
+      <div class="tag" style="font-size:30px;padding:18px 30px">{SITE}</div>
+    </div>
+  </div>
+</div>"""
+
+
 def avatar():
     """1080x1080 profile picture."""
     return f"""<div style="width:100vw;height:100vh;background:{RED};
@@ -180,6 +242,8 @@ ASSETS = [
      wide("Your language, checked by you.",
           "A few words a day in Twi, Ewe, Ga or Dagbani.")),
     ("youtube-thumbnail", 1280, 720, False, thumbnail()),
+    ("youtube-lowerthird", 1920, 1080, False, lower_third()),
+    ("youtube-sidepanel", 1920, 1080, False, side_panel()),
     ("avatar", 1080, 1080, False, avatar()),
     ("wordmark-light", 1200, 400, False, wordmark(INK, SAND)),
     ("wordmark-dark", 1200, 400, False, wordmark(SAND, INK)),
@@ -193,17 +257,21 @@ def chrome():
     sys.exit("no Chrome or Chromium found")
 
 
+TRANSPARENT = {"youtube-lowerthird", "youtube-sidepanel"}
+
+
 def render(name, w, h, body, tmpdir, browser):
     html = (f"<!doctype html><html><head><meta charset='utf-8'>{FONTS}"
             f"<style>{BASE_CSS}</style></head><body>{body}</body></html>")
     page = Path(tmpdir) / f"{name}.html"
     page.write_text(html, encoding="utf-8")
     out = OUT / f"{name}-{w}x{h}.png"
-    subprocess.run(
-        [browser, "--headless=new", "--disable-gpu", "--no-sandbox",
-         "--hide-scrollbars", f"--window-size={w},{h}",
-         "--virtual-time-budget=4000", f"--screenshot={out}", f"file://{page}"],
-        check=True, capture_output=True, timeout=120)
+    cmd = [browser, "--headless=new", "--disable-gpu", "--no-sandbox",
+           "--hide-scrollbars", f"--window-size={w},{h}",
+           "--virtual-time-budget=4000", f"--screenshot={out}", f"file://{page}"]
+    if name in TRANSPARENT:
+        cmd.insert(1, "--default-background-color=00000000")
+    subprocess.run(cmd, check=True, capture_output=True, timeout=120)
     return out
 
 

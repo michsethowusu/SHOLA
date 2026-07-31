@@ -34,10 +34,17 @@ which days suit them.
 | `square-ask` | 1080×1080 | Instagram and Facebook feed |
 | `x-post` | 1600×900 | X |
 | `facebook-link` | 1200×630 | Facebook link preview |
-| `youtube-thumbnail` | 1280×720 | YouTube |
+| `youtube-lowerthird` | 1920×1080 | YouTube overlay, lower third — transparent PNG |
+| `youtube-sidepanel` | 1920×1080 | YouTube overlay, left panel — transparent PNG |
+| `youtube-thumbnail` | 1280×720 | YouTube thumbnail |
 | `avatar` | 1080×1080 | Profile picture |
 | `wordmark-light` / `wordmark-dark` | 1200×400 | Logo on light or dark backgrounds |
 | `logo-mark.svg` | vector | The Ɔ mark on its own |
+
+**The YouTube overlays** are transparent PNGs sized to a 1920×1080 timeline.
+Place one full-frame over your footage and it sits where it should: the lower
+third leaves about 80% of the picture clear, the side panel about 60%, so you
+stay visible while it is on screen.
 
 ## Colours
 

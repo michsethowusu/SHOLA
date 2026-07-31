@@ -23,14 +23,20 @@
     </div>
 
     <h2 style="margin-top:44px">Artwork</h2>
+    <p class="muted" style="max-width:60ch">
+      The two YouTube overlays are transparent PNGs on a 1920×1080 canvas. Drop
+      one on your timeline full-frame and it lands in the right place, leaving
+      the rest of the picture clear while you talk.
+    </p>
     <div class="cards" style="margin-top:18px">
       {% for f, w, h, use in assets %}
         <a class="lang-card" href="{{ url_for('static', filename='brand/' ~ f) }}"
            download style="padding:0;overflow:hidden">
           <img src="{{ url_for('static', filename='brand/' ~ f) }}" alt="{{ use }}"
                loading="lazy"
-               style="width:100%;display:block;background:var(--sand-deep);
-                      max-height:230px;object-fit:cover;object-position:top">
+               style="width:100%;display:block;max-height:230px;
+                      object-fit:cover;object-position:top;
+                      background:{% if 'transparent' in use %}#2a323d{% else %}var(--sand-deep){% endif %}">
           <div style="padding:14px 16px">
             <div class="name" style="font-size:1rem">{{ use }}</div>
             <div class="native">{{ w }} × {{ h }}</div>
