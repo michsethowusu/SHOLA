@@ -103,8 +103,13 @@ def build_daily_email(volunteer, words, overdue_count=0):
 def send(to_email, subject, text, html):
     """Send one message. Raises on failure so the caller can count it."""
     cfg = current_app.config
-    if not cfg["SMTP_USER"] or not cfg["SMTP_PASSWORD"]:
-        raise RuntimeError("SHOLA_SMTP_USER / SHOLA_SMTP_PASSWORD are not set")
+    missing = [name for name in ("SMTP_USER", "SMTP_PASSWORD")
+               if not cfg[name]]
+    if missing:
+        # Name the one that is actually missing: the pair was reported together
+        # once and cost a round of looking at the wrong variable.
+        raise RuntimeError("not set: "
+                           + ", ".join(f"SHOLA_{n}" for n in missing))
 
     msg = EmailMessage()
     msg["Subject"] = subject

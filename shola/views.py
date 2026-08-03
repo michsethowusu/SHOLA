@@ -269,9 +269,13 @@ def join():
         issue_code(pending)
     except Exception as exc:      # noqa: BLE001 - surface a usable message
         current_app.logger.warning("otp send failed: %s", exc)
-        flash("We could not send the code to that address just now. "
-              "Check it and try again.", "error")
-        return render_template("join.html", form=request.form), 502
+        flash("We could not send the code just now. Your details are saved — "
+              "try again in a few minutes and we will send a fresh code.",
+              "error")
+        # Deliberately not 502: Cloudflare replaces a 502 from the origin with
+        # its own error page, so the volunteer saw a gateway error instead of
+        # this message. 503 reaches them, and still reads as our fault.
+        return render_template("join.html", form=request.form), 503
 
     session["signup_email"] = email
     return redirect(url_for("main.verify"))
@@ -594,5 +598,9 @@ def healthz():
     rolling update, so a deploy that only waits for 200 reports success before
     the new code is live.
     """
+    # Whether we can email at all. Nothing else on the site reveals this, and
+    # a missing password only surfaced when a volunteer tried to sign up.
+    cfg = current_app.config
     return {"ok": True, "today": date.today().isoformat(),
-            "build": current_app.config.get("BUILD", "unknown")}
+            "build": cfg.get("BUILD", "unknown"),
+            "email": bool(cfg.get("SMTP_USER") and cfg.get("SMTP_PASSWORD"))}
