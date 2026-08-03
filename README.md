@@ -285,7 +285,7 @@ SHOLA_SECRET_KEY      generate: python3 -c "import secrets;print(secrets.token_u
 SHOLA_SITE_URL        https://sholaproject.org
 SHOLA_SMTP_HOST       smtp.gmail.com
 SHOLA_SMTP_PORT       587
-SHOLA_SMTP_USER       the sending Gmail address
+SHOLA_SMTP_USER       the sending address the app password belongs to (michseth@ghananlp.org)
 SHOLA_SMTP_PASSWORD   a Gmail app password, not the account password
 SHOLA_MAIL_FROM_NAME  SHOLA
 SHOLA_OLD_HOSTS       hostnames to 301 to SHOLA_SITE_URL (default shola.inkika.org)
