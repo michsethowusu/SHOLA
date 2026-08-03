@@ -43,6 +43,30 @@ LANGUAGES = {
 
 from .languages import OTHER_BY_CODE, OTHER_LANGUAGES   # noqa: E402,F401
 
+# Characters a phone keyboard hides, across the Ghanaian orthographies. Used for
+# every language that does not have its own set listed above: better to offer a
+# few unneeded letters than to leave a speaker unable to type their own.
+DEFAULT_SPECIAL = ["ɛ", "Ɛ", "ɔ", "Ɔ", "ŋ", "Ŋ", "ɖ", "Ɖ", "ƒ", "Ƒ",
+                   "ɣ", "Ɣ", "ʋ", "Ʋ", "ʒ", "Ʒ"]
+DEFAULT_LONGPRESS = {"d": ["ɖ", "Ɖ"], "e": ["ɛ", "Ɛ"], "f": ["ƒ", "Ƒ"],
+                     "g": ["ɣ", "Ɣ"], "n": ["ŋ", "Ŋ"], "o": ["ɔ", "Ɔ"],
+                     "v": ["ʋ", "Ʋ"], "z": ["ʒ", "Ʒ"]}
+
+# Every language a volunteer can sign up for. The four above start with machine
+# translations to check; the rest start empty, and the first speakers to arrive
+# type the options everyone after them votes on.
+ALL_LANGUAGES = dict(LANGUAGES)
+for _code, _name, _alt in OTHER_LANGUAGES:
+    ALL_LANGUAGES[_code] = {
+        "name": _name,
+        "note": _alt[0] if _alt else "",
+        "special": DEFAULT_SPECIAL,
+        "longpress": DEFAULT_LONGPRESS,
+        "seeded": False,
+    }
+for _info in LANGUAGES.values():
+    _info["seeded"] = True
+
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
              "Saturday", "Sunday"]
 

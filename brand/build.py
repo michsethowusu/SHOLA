@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -23,6 +24,13 @@ HERE = Path(__file__).resolve().parent
 # influencer should not need a GitHub account to get a logo.
 OUT = HERE.parent / "shola" / "static" / "brand"
 SITE = "shola.inkika.org"
+
+# Every Ghanaian language is open, so the artwork counts them rather than
+# naming a few — naming four read as a promise that the rest were shut out.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from shola.config import ALL_LANGUAGES  # noqa: E402
+
+N_LANG = len(ALL_LANGUAGES)
 
 RED = "#c0392b"
 INK = "#1a1815"
@@ -125,7 +133,7 @@ def thumbnail():
                 letter-spacing:.02em">DO YOU SPEAK</div>
     <div style="font-size:88px;font-weight:800;line-height:1.02;
                 letter-spacing:-.04em;margin-top:6px">
-      TWI · EWE<br>GA · DAGBANI?</div>
+      A GHANAIAN<br>LANGUAGE?</div>
     <div style="font-size:36px;color:{GOLD};margin-top:20px;font-weight:700">
       Your language needs you — 2 minutes a day</div>
   </div>
@@ -188,7 +196,7 @@ def side_panel():
                   letter-spacing:-.03em;color:{INK}">
         Your language,<br>checked by<br>you.</div>
       <div style="font-size:29px;color:#57514a;margin-top:24px;line-height:1.4">
-        Twi, Ewe, Ga and Dagbani.<br>Two minutes a day.</div>
+        {N_LANG} Ghanaian languages.<br>Two minutes a day.</div>
     </div>
     <div>
       <div class="glyphs" style="font-size:42px;margin-bottom:22px">
@@ -219,30 +227,30 @@ def wordmark(colour, bg):
 
 ASSETS = [
     ("story-why", 1080, 1920, False,
-     story("Your language,<br>checked by you.",
-           "Twi, Ewe, Ga and Dagbani.<br>A few words a day, by email.")),
+     story("Keep your<br>language<br>alive.",
+           f"{N_LANG} Ghanaian languages.<br>A few words a day, by email.")),
     ("story-how", 1080, 1920, False,
      story("2 minutes<br>a day.",
            "Tap the right translation. Skip what you<br>are unsure of. "
            "That is the whole job.")),
     ("story-ask", 1080, 1920, False,
      story("Do you speak<br>a Ghanaian<br>language?",
-           "83 more languages are on the list.<br>Add yours and we will "
-           "tell you when it opens.")),
+           f"All {N_LANG} of them are open.<br>Nobody has added yours yet? "
+           "Then<br>you go first.")),
     ("square-why", 1080, 1080, False,
-     square("Your language, checked by you.",
-            "Help confirm translations in Twi, Ewe, Ga and Dagbani. "
+     square("Keep your language alive.",
+            f"Help confirm translations in {N_LANG} Ghanaian languages. "
             "A few words a day.")),
     ("square-ask", 1080, 1080, False,
-     square("Speak Twi, Ewe, Ga or Dagbani?",
-            "Two minutes a day puts your language in the record.")),
+     square("Speak a Ghanaian language?",
+            "Two minutes a day keeps your language alive.")),
     ("x-post", 1600, 900, False,
      wide("Your language, checked by the people who speak it.",
-          "Confirm translations in Twi, Ewe, Ga and Dagbani. "
+          f"Confirm translations in {N_LANG} Ghanaian languages. "
           "A few words a day, by email.")),
     ("facebook-link", 1200, 630, True,
-     wide("Your language, checked by you.",
-          "A few words a day in Twi, Ewe, Ga or Dagbani.")),
+     wide("Keep your language alive.",
+          f"A few words a day, in any of {N_LANG} Ghanaian languages.")),
     ("youtube-thumbnail", 1280, 720, False, thumbnail()),
     ("youtube-lowerthird", 1920, 1080, False, lower_third()),
     ("youtube-sidepanel", 1920, 1080, False, side_panel()),
@@ -277,14 +285,54 @@ def render(name, w, h, body, tmpdir, browser):
     return out
 
 
+ZIP = OUT / "shola-brand-kit.zip"
+
+# The mark on its own, for anyone who needs it as vector. Same file as the
+# favicon, written here so the kit is never missing it.
+LOGO_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="SHOLA">
+  <!-- Filled tile so the mark reads at 16px in a browser tab. -->
+  <rect width="32" height="32" rx="7" fill="#c0392b"/>
+  <!-- Open O (U+0186), drawn as an arc rather than text: a text favicon needs
+       the viewer to have a font containing the glyph, and many do not. -->
+  <path d="M 8.37 20.77 A 9 9 0 1 0 8.37 11.23"
+        fill="none" stroke="#ffffff" stroke-width="4.6" stroke-linecap="round"/>
+</svg>
+"""
+
+
+def bundle():
+    """Pack the kit for download.
+
+    Built here rather than by hand, so the zip cannot fall behind the artwork
+    and the captions it ships with.
+    """
+    extras = [OUT / "logo-mark.svg", Path(__file__).with_name("README.md")]
+    # Write to a temporary name and move it into place, so nothing ever reads a
+    # half-written archive.
+    tmp_zip = ZIP.with_suffix(".zip.new")
+    with zipfile.ZipFile(tmp_zip, "w", zipfile.ZIP_DEFLATED) as z:
+        for png in sorted(OUT.glob("*.png")):
+            z.write(png, f"shola-brand-kit/{png.name}")
+        for extra in extras:
+            if extra.exists():
+                z.write(extra, f"shola-brand-kit/{extra.name}")
+    tmp_zip.replace(ZIP)
+    with zipfile.ZipFile(ZIP) as z:
+        assert z.testzip() is None
+        return len(z.namelist())
+
+
 def main():
     OUT.mkdir(exist_ok=True)
+    (OUT / "logo-mark.svg").write_text(LOGO_SVG, encoding="utf-8")
     browser = chrome()
     with tempfile.TemporaryDirectory() as tmp:
         for name, w, h, _big, body in ASSETS:
             out = render(name, w, h, body, tmp, browser)
             print(f"  {out.name:38s} {out.stat().st_size // 1024:>5} KB")
     print(f"\n{len(ASSETS)} assets in {OUT}")
+    n = bundle()
+    print(f"{ZIP.name}: {n} files, {ZIP.stat().st_size // 1024} KB")
 
 
 if __name__ == "__main__":

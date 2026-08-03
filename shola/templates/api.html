@@ -15,8 +15,8 @@
     <div class="notice" style="margin-top:22px">
       <strong>What "verified" means.</strong> Each English word is shown to
       speakers alongside three possible translations. They choose one or write
-      their own. A word appears here only once <strong>two or more speakers
-      independently chose the same wording</strong>. Words where speakers
+      their own. A word appears here only once <strong>{{ VOTES_TO_SETTLE }} or
+      more speakers independently chose the same wording</strong>. Words where speakers
       disagreed are left out. Raise <code>min_votes</code> for a stricter list.
     </div>
 
@@ -27,7 +27,7 @@
           <tr><th>Language</th><th>Verified entries</th><th>JSON</th><th>CSV</th></tr>
         </thead>
         <tbody>
-          {% for code, lang in LANGUAGES.items() %}
+          {% for code, lang in SHOWN_LANGUAGES.items() %}
             <tr>
               <td><strong>{{ lang.name }}</strong> <span class="faint">{{ lang.note }}</span></td>
               <td>{{ counts.get(code, 0) | thousands }}</td>
@@ -47,8 +47,9 @@
     <div class="card" style="margin-top:14px">
       <p style="margin:0 0 10px"><code>GET /api/words/&lt;language&gt;</code></p>
       <p class="muted" style="margin:0">
-        <code>language</code> is one of
-        {% for code in LANGUAGES %}<code>{{ code }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
+        <code>language</code> is an ISO 639-3 code. {{ LANGUAGE_COUNT }}
+        Ghanaian languages are accepted; these have words to serve so far:
+        {% for code in SHOWN_LANGUAGES %}<code>{{ code }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
       </p>
     </div>
 
@@ -174,7 +175,7 @@ print(len(entries), "verified entries")</code></pre>
 
     <h2 style="margin-top:44px">Notes</h2>
     <ul class="muted" style="padding-left:20px">
-      <li>Responses are UTF-8. Twi, Ewe, Ga and Dagbani use characters like
+      <li>Responses are UTF-8. Ghanaian orthographies use characters like
           <strong>ɛ ɔ ŋ ɖ ƒ ɣ ʋ ʒ</strong>, so decode as UTF-8 rather than
           Latin-1 or they will arrive mangled.</li>
       <li>Nothing is cached. Every request reflects the answers given up to

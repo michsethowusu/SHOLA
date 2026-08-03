@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="SHOLA">
+  <!-- Filled tile so the mark reads at 16px in a browser tab. -->
+  <rect width="32" height="32" rx="7" fill="#c0392b"/>
+  <!-- Open O (U+0186), drawn as an arc rather than text: a text favicon needs
+       the viewer to have a font containing the glyph, and many do not. -->
+  <path d="M 8.37 20.77 A 9 9 0 1 0 8.37 11.23"
+        fill="none" stroke="#ffffff" stroke-width="4.6" stroke-linecap="round"/>
+</svg>

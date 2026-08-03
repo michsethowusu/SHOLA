@@ -64,7 +64,7 @@
             </tr>
           </thead>
           <tbody>
-            {% for code, lang in LANGUAGES.items() %}
+            {% for code, lang in SHOWN_LANGUAGES.items() %}
               {% set r = by_language[code].recruit %}
               <tr>
                 <td><strong>{{ lang.name }}</strong></td>
@@ -100,7 +100,7 @@
         confirmed soonest.
       </p>
 
-      {% for code, lang in LANGUAGES.items() %}
+      {% for code, lang in SHOWN_LANGUAGES.items() %}
         {% set info = by_language.get(code) %}
         <h3 style="margin-top:26px">{{ lang.name }}</h3>
         <div class="scroll-x" style="margin-top:10px">
@@ -134,8 +134,8 @@
       {% endfor %}
 
       <p class="hint" style="margin-top:14px">
-        A word is <strong>confirmed</strong> once two speakers of that language
-        choose the same wording. Some words have several equally good
+        A word is <strong>confirmed</strong> once {{ VOTES_TO_SETTLE }}
+        speakers of that language choose the same wording. Some words have several equally good
         translations and never reach agreement — those are marked
         <strong>no agreement</strong> and every answer given is kept.
       </p>
@@ -144,8 +144,9 @@
     <div style="margin-top:40px">
       <h2>By language</h2>
       <p class="muted">
-        Two speakers must agree before a translation is confirmed, so the
-        confirmed count is always lower than the number of words checked.
+        {{ VOTES_TO_SETTLE }} speakers must agree before a translation is
+        confirmed, so the confirmed count is always lower than the number of
+        words checked.
       </p>
       <div class="scroll-x" style="margin-top:16px">
         <table class="plain">
@@ -158,7 +159,7 @@
             </tr>
           </thead>
           <tbody>
-            {% for code, lang in LANGUAGES.items() %}
+            {% for code, lang in SHOWN_LANGUAGES.items() %}
               {% set d = per_language.get(code, {'verdicts': 0, 'words': 0, 'agreed': 0}) %}
               <tr>
                 <td>
@@ -182,7 +183,7 @@
         <a href="{{ url_for('main.api_docs') }}">API</a> for details.
       </p>
       <p style="margin:0">
-        {% for code in LANGUAGES %}
+        {% for code in SHOWN_LANGUAGES %}
           <a href="{{ url_for('main.api_words', language=code) }}"><code>/api/words/{{ code }}</code></a>{% if not loop.last %} · {% endif %}
         {% endfor %}
       </p>

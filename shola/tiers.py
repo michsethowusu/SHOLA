@@ -2,7 +2,7 @@
 
 The project is finished tier by tier rather than word by word. Tier 1 is the
 commonest ~11k words; none of tier 2 is handed out until every word in tier 1
-has two speakers agreeing on the same wording. That way the words people
+has five speakers agreeing on the same wording. That way the words people
 actually use are settled first, and a half-finished project is still a usable
 resource rather than a thin scatter across half a million entries.
 
@@ -30,24 +30,22 @@ TIER_THRESHOLDS = [
     (5, 0),       # everything else     ~407,808
 ]
 
-# A word is settled when one wording has this many votes. Two speakers who
-# disagree do not settle it: the top wording still has only one vote, so a
-# third verdict is needed to break the tie.
-VOTES_TO_SETTLE = 2
+# A word is settled when one wording has this many votes. Speakers who disagree
+# do not settle it - only matching answers count towards the total.
+VOTES_TO_SETTLE = 5
 
 # How long a leased word waits for an answer before returning to the queue.
 LEASE_DAYS = 10
 
 # Give up on agreement after this many verdicts.
 #
-# Voting between the three options always resolves on its own: the worst case
-# is one vote each, and the fourth verdict has to create a pair. This limit
-# exists for typed answers, which are free text and so unbounded - five
-# speakers can each write a genuinely different wording and no pair ever forms.
-# (Case and Unicode differences are folded first, so those merge rather than
-# splitting the vote.) Such a word is a finding, not a failure: it is closed as
-# contested, every variant is kept, and the tier can finish.
-MAX_VERDICTS_BEFORE_CONTESTED = 5
+# This has to sit well clear of VOTES_TO_SETTLE. With five needed and only
+# three options, four votes could sit on each without any reaching five: twelve
+# verdicts, all legitimate, none settling. Volunteers can also add options of
+# their own, so the ceiling is not fixed. Closing at 20 leaves room for genuine
+# disagreement while stopping one word absorbing effort for ever. A contested
+# word keeps every variant offered; it simply stops being handed out.
+MAX_VERDICTS_BEFORE_CONTESTED = 20
 
 
 def tier_for(occurrences):

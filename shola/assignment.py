@@ -18,7 +18,7 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy import func
 
-from .models import Assignment, Evaluation, Volunteer, Word, db
+from .models import Assignment, Candidate, Evaluation, Volunteer, Word, db
 
 
 def available_dates(day_numbers, start, horizon_days):
@@ -135,6 +135,38 @@ def redistribute(volunteer, today=None, horizon_days=365):
     return moved
 
 
+def adopt_wording(word_id, language, text):
+    """Turn a volunteer's own wording into an option others can choose.
+
+    A typed answer is worth no less than a machine-proposed one, so it joins
+    the list of options for that word: the next speaker sees it and can agree
+    with it rather than typing the same thing again. This is also what lets a
+    language with nothing loaded get started - the first speaker types, and
+    everyone after has something to vote on.
+
+    Returns the Candidate. An answer matching an existing option becomes a vote
+    for that option instead of a duplicate entry, so agreement is not split
+    between two spellings of the same thing.
+    """
+    from .tiers import normalise
+
+    wanted = normalise(text)
+    if not wanted:
+        return None
+
+    existing = Candidate.query.filter_by(word_id=word_id, language=language).all()
+    for cand in existing:
+        if normalise(cand.text) == wanted:
+            return cand
+
+    position = max((c.position for c in existing), default=0) + 1
+    cand = Candidate(word_id=word_id, language=language, position=position,
+                     text=text.strip(), source="volunteer")
+    db.session.add(cand)
+    db.session.flush()
+    return cand
+
+
 def record_verdict(volunteer, word_id, candidate_id=None, custom_text=None,
                    skipped=False):
     """Store a verdict, or revise the one already there.
@@ -144,6 +176,13 @@ def record_verdict(volunteer, word_id, candidate_id=None, custom_text=None,
     being ignored. It stays one verdict per volunteer per word, so nobody votes
     twice and consensus is unaffected.
     """
+    if custom_text and not skipped:
+        adopted = adopt_wording(word_id, volunteer.language, custom_text)
+        if adopted is not None:
+            # Recorded against the option so it counts as a vote for it, with
+            # the typed text kept for provenance.
+            candidate_id = adopted.id
+
     existing = Evaluation.query.filter_by(volunteer_id=volunteer.id,
                                           word_id=word_id).first()
     if existing:

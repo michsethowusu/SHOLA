@@ -93,7 +93,7 @@ def build_daily_email(volunteer, words, overdue_count=0):
     ctx = {"volunteer": volunteer, "words": shown, "more": more,
            "total": n, "link": link, "first": first,
            "overdue_count": overdue_count,
-           "language_name": current_app.config["LANGUAGES"][
+           "language_name": current_app.config["ALL_LANGUAGES"][
                volunteer.language]["name"]}
     text = render_template("email/daily.txt", **ctx)
     html = render_template("email/daily.html", **ctx)

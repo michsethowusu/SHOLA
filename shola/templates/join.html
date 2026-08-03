@@ -40,14 +40,15 @@
             <input type="radio" name="language" value="other"
                    {% if chosen == 'other' %}checked{% endif %}>
             <span class="t">Another language</span>
-            <span class="s">Coming soon</span>
+            <span class="s">{{ LANGUAGE_COUNT - LANGUAGES|length }} more</span>
           </label>
         </div>
 
         <div id="other-picker" hidden style="margin-top:12px">
           <label for="other_language">Which one?</label>
           <p class="hint">
-            Choose it and we will email you the day we start.
+            Nobody has added words in most of these yet, so you will type the
+            wording yourself and speakers after you vote on it.
           </p>
           <select id="other_language" name="other_language">
             <option value="">Choose a language</option>

@@ -5,14 +5,14 @@
   <div class="wrap hero-grid">
     <div>
       <p class="eyebrow">Share Your Language</p>
-      <h1>Your language, checked by the people who speak it.</h1>
+      <h1>Keep your language alive in a fun way</h1>
       <p class="lede">
-        We have {{ stats.words | thousands }} translations for everyday words in
-        Twi, Ewe, Ga and Dagbani. Some are right, some are not.
+        SHOLA makes it easy for everyone to contribute to keeping their language
+        alive.
       </p>
       <p class="lede">
-        Your contribution here helps us build a set of human-verified words for
-        Ghanaian languages.
+        Your contribution here helps us build accurate translations of common
+        Ghanaian words in your language.
       </p>
       <div class="hero-actions">
         <a class="btn" href="{{ url_for('main.join') }}">Start with your language</a>
@@ -62,8 +62,8 @@
 
 <section class="section">
   <div class="wrap">
-    <p class="eyebrow">Four languages, more to come</p>
-    <h2>Choose your language</h2>
+    <p class="eyebrow">{{ LANGUAGE_COUNT }} Ghanaian languages</p>
+    <h2>Which one do you speak?</h2>
     <div class="cards" style="margin-top:22px">
       {% for code, lang in LANGUAGES.items() %}
         <a class="lang-card" href="{{ url_for('main.join') }}?language={{ code }}">
@@ -74,8 +74,10 @@
       {% endfor %}
     </div>
     <p class="hint" style="margin-top:16px">
-      Speak another Ghanaian language? <a href="{{ url_for('main.join') }}">Add
-      your name</a> and we will tell you the day it opens.
+      These four already have translations to check. Speak another of the
+      {{ LANGUAGE_COUNT }}? <a href="{{ url_for('main.join') }}">Sign up</a> and
+      you can start it off — what you type becomes the first option others vote
+      on.
     </p>
   </div>
 </section>

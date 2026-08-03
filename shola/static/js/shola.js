@@ -69,10 +69,28 @@
     var own = document.createElement("button");
     own.type = "button";
     own.className = "option own";
+    // With nothing loaded for a language, typing is the only thing to do, so
+    // the button says so rather than offering an alternative that is not there.
+    var empty = item.options.length === 0;
     own.innerHTML = '<span class="mark" aria-hidden="true">✎</span>' +
-      "<span>Type your own translation</span>";
+      "<span>" + (empty ? "Type the translation"
+                        : "Type your own translation") + "</span>";
+    if (empty) { own.classList.remove("own"); own.classList.add("option"); }
     own.addEventListener("click", openSheet);
     els.options.appendChild(own);
+
+    var hint = document.getElementById("eval-hint");
+    var hintEmpty = document.getElementById("eval-hint-empty");
+    if (hint && hintEmpty) { hint.hidden = empty; hintEmpty.hidden = !empty; }
+
+    var title = document.getElementById("sheet-title");
+    if (title) {
+      title.textContent = empty ? "How would you say this?"
+                                : "Type your own translation";
+    }
+    // Nothing to choose from, so go straight to the keyboard rather than
+    // making them tap a button that is the only thing on the screen.
+    if (empty) { openSheet(); }
 
     var pos = atStart - remaining + 1;
     els.left.textContent = remaining === 1 ? "1 word left"

@@ -47,12 +47,14 @@ def tally(word_id, language):
             "skips": sum(1 for e in evals if e.skipped)}
 
 
-def best(word_id, language, min_votes=2):
+def best(word_id, language, min_votes=None):
     """The winning translation, or None while the evidence is too thin.
 
     A single vote is not consensus, so `min_votes` guards against publishing one
     person's opinion as the answer.
     """
+    from .tiers import VOTES_TO_SETTLE
+    min_votes = VOTES_TO_SETTLE if min_votes is None else min_votes
     t = tally(word_id, language)
     if not t["ranked"] or t["votes"] < min_votes:
         return None
@@ -63,7 +65,7 @@ def best(word_id, language, min_votes=2):
              "margin": top["votes"] - runner_up}
 
 
-def export_rows(language, min_votes=2):
+def export_rows(language, min_votes=None):
     """Yield (phrase, agreed translation, votes, share, total) for export."""
     word_ids = [r[0] for r in db.session.query(Evaluation.word_id)
                 .filter_by(language=language, skipped=False).distinct()]
@@ -86,7 +88,8 @@ def language_progress():
     for language, _word_id, n in rows:
         out[language]["verdicts"] += n
         out[language]["words"] += 1
-        if n >= 2:
+        from .tiers import VOTES_TO_SETTLE
+        if n >= VOTES_TO_SETTLE:
             out[language]["agreed"] += 1
     return dict(out)
 
@@ -95,7 +98,7 @@ def candidate_by_id(candidate_id):
     return db.session.get(Candidate, candidate_id)
 
 
-def verified_count(language, min_votes=2):
+def verified_count(language, min_votes=None):
     """How many words in this language have reached agreement."""
     from .models import WordState
     return WordState.query.filter_by(language=language, done=True).count()

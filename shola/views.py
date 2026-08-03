@@ -46,20 +46,33 @@ def volunteer_from_token(token):
     return volunteer
 
 
+def language_info(code):
+    """Name, special characters and long-press map for any language."""
+    return current_app.config["ALL_LANGUAGES"].get(code)
+
+
 def language_label(code):
-    """Display name for any language, open or still on the list."""
-    open_langs = current_app.config["LANGUAGES"]
-    if code in open_langs:
-        return open_langs[code]["name"]
-    for c, name, _alt in current_app.config["OTHER_LANGUAGES"]:
-        if c == code:
-            return name
-    return code
+    info = language_info(code)
+    return info["name"] if info else code
 
 
 def remembered_token():
     """Token kept from an earlier visit, only so the nav can link onward."""
     return session.get("token")
+
+
+def shown_languages():
+    """Languages worth a row on a table.
+
+    All 88 are open, but a table of 88 mostly-empty rows tells nobody
+    anything. A language appears once it has translations loaded, someone
+    signed up for it, or a wording typed in it.
+    """
+    all_langs = current_app.config["ALL_LANGUAGES"]
+    live = {code for code, in db.session.query(Volunteer.language).distinct()}
+    live |= {code for code, in db.session.query(Candidate.language).distinct()}
+    return {code: info for code, info in all_langs.items()
+            if info.get("seeded") or code in live}
 
 
 # ----------------------------------------------------------------- public pages
@@ -86,8 +99,9 @@ def stats():
     rate = current_app.config["COMPLETION_RATE"]
     target = current_app.config["WORDS_PER_VOLUNTEER"]
 
+    shown = shown_languages()
     by_language = {}
-    for code in current_app.config["LANGUAGES"]:
+    for code in shown:
         by_language[code] = {
             "tiers": tier_progress(code),
             "active": active_tier(code),
@@ -105,7 +119,8 @@ def stats():
     return render_template("stats.html", stats=site_stats(),
                            per_language=consensus.language_progress(),
                            by_language=by_language, totals=totals,
-                           completion_rate=rate, words_per_volunteer=target)
+                           completion_rate=rate, words_per_volunteer=target,
+                           SHOWN_LANGUAGES=shown)
 
 
 @main.route("/brand")
@@ -128,18 +143,20 @@ def brand():
         ("wordmark-light-1200x400.png", 1200, 400, "Logo, light background"),
         ("wordmark-dark-1200x400.png", 1200, 400, "Logo, dark background"),
     ]
+    n = len(current_app.config["ALL_LANGUAGES"])
     captions = [
-        ("Short", "Your language, checked by the people who speak it. "
-                  "Two minutes a day. shola.inkika.org"),
-        ("Short", "Twi, Ewe, Ga, Dagbani. A few words a day and you help build "
-                  "a proper record of our languages. shola.inkika.org"),
-        ("Pidgin", "You fit speak Twi, Ewe, Ga or Dagbani? Give am 2 minutes "
-                   "every day make we put your language for the record. "
+        ("Short", "Keep your language alive. Two minutes a day. "
+                  "shola.inkika.org"),
+        ("Short", f"{n} Ghanaian languages, and yours is one of them. A few "
+                  "words a day helps build accurate translations everyone can "
+                  "use. shola.inkika.org"),
+        ("Pidgin", "You fit speak any Ghanaian language? Give am 2 minutes "
+                   "every day make we keep your language alive. "
                    "shola.inkika.org"),
-        ("Not yet open", "SHOLA is collecting Twi, Ewe, Ga and Dagbani now — "
-                         "and 83 more Ghanaian languages are on the list. Add "
-                         "your name and they will email you the day yours "
-                         "opens. shola.inkika.org"),
+        ("Starting a language", "Nobody has added words in your language yet? "
+                               "Then you go be the first. Whatever you type "
+                               "becomes the option others vote on. "
+                               "shola.inkika.org"),
     ]
     palette = [
         ("Kente red", "#c0392b", "The Ɔ, buttons, links"),
@@ -214,9 +231,7 @@ def join():
         errors.append("Tell us the name you want on the leaderboard.")
     if "@" not in email or "." not in email.split("@")[-1]:
         errors.append("That email address does not look complete.")
-    known = (set(current_app.config["LANGUAGES"])
-             | {code for code, _n, _a in current_app.config["OTHER_LANGUAGES"]})
-    if language not in known:
+    if language not in current_app.config["ALL_LANGUAGES"]:
         errors.append("Choose the language you speak.")
     if Volunteer.query.filter_by(email=email).first():
         errors.append("That email is already signed up. Ask for your link "
@@ -311,10 +326,6 @@ def verify():
     session["token"] = token
     session.pop("signup_email", None)
 
-    if volunteer.is_waiting(current_app.config["LANGUAGES"]):
-        return render_template("waiting.html", volunteer=volunteer,
-                               language_name=language_label(volunteer.language))
-
     given = top_up(volunteer, target=current_app.config["WORDS_PER_VOLUNTEER"])
     return render_template("joined.html", volunteer=volunteer, assigned=given,
                            token=token)
@@ -354,27 +365,19 @@ def resend():
         from .mailer import (build_daily_email, build_link_email, daily_link,
                              send)
         try:
-            if volunteer.is_waiting(current_app.config["LANGUAGES"]):
+            # Someone asking for a link has time to spare. If they have
+            # already cleared today's list, give them a fresh one rather than
+            # an email announcing zero words.
+            top_up(volunteer, target=current_app.config["WORDS_PER_VOLUNTEER"])
+            words = [a.word for a in volunteer.pending_today().limit(400)]
+            if words:
+                message = build_daily_email(volunteer, words)
+            else:
                 message = build_link_email(
                     volunteer, daily_link(volunteer),
-                    f"{language_label(volunteer.language)} is not open yet. "
-                    "You are on the list and we will email you the day it "
-                    "starts.")
-            else:
-                # Someone asking for a link has time to spare. If they have
-                # already cleared today's list, give them a fresh one rather
-                # than an email announcing zero words.
-                top_up(volunteer,
-                       target=current_app.config["WORDS_PER_VOLUNTEER"])
-                words = [a.word for a in volunteer.pending_today().limit(400)]
-                if words:
-                    message = build_daily_email(volunteer, words)
-                else:
-                    message = build_link_email(
-                        volunteer, daily_link(volunteer),
-                        "Nothing is waiting for you right now — every word in "
-                        "your language is either confirmed or with another "
-                        "speaker. We will email you as soon as there is more.")
+                    "Nothing is waiting for you right now — every word in "
+                    "your language is either confirmed or with another "
+                    "speaker. We will email you as soon as there is more.")
             send(volunteer.email, *message)
         except Exception as exc:      # noqa: BLE001 - show the operator cause
             current_app.logger.warning("resend failed: %s", exc)
@@ -433,17 +436,13 @@ def evaluate(token):
     # Remembered only so the nav bar can offer a way back; never trusted.
     session["token"] = token
 
-    if volunteer.is_waiting(current_app.config["LANGUAGES"]):
-        return render_template("waiting.html", volunteer=volunteer,
-                               language_name=language_label(volunteer.language))
-
     # Lease whatever the project needs right now, up to today's quota.
     top_up(volunteer, target=current_app.config["WORDS_PER_VOLUNTEER"])
 
     queue, working_ahead = queue_payload(volunteer)
     remaining = (volunteer.upcoming().count() if working_ahead
                  else volunteer.pending_today().count())
-    lang = current_app.config["LANGUAGES"][volunteer.language]
+    lang = language_info(volunteer.language)
     return render_template("evaluate.html", volunteer=volunteer, queue=queue,
                            remaining=remaining, lang=lang, token=token,
                            working_ahead=working_ahead,
@@ -503,11 +502,11 @@ def done(token):
 @main.route("/api")
 def api_docs():
     """Human-readable documentation for the words API."""
-    counts = {}
-    for code in current_app.config["LANGUAGES"]:
-        counts[code] = consensus.verified_count(code)
+    shown = shown_languages()
+    counts = {code: consensus.verified_count(code) for code in shown}
     sample = consensus.sample_entries("twi", limit=3)
-    return render_template("api.html", counts=counts, sample=sample)
+    return render_template("api.html", counts=counts, sample=sample,
+                           SHOWN_LANGUAGES=shown)
 
 
 def _words(language, min_votes, limit, offset):
@@ -529,11 +528,12 @@ def api_words(language):
 
     Only entries where at least `min_votes` speakers chose the same wording.
     """
-    if language not in current_app.config["LANGUAGES"]:
+    if language not in current_app.config["ALL_LANGUAGES"]:
         return jsonify({"error": "unknown language",
-                        "languages": list(current_app.config["LANGUAGES"])}), 404
+                        "languages": list(current_app.config["ALL_LANGUAGES"])}), 404
 
-    min_votes = max(1, request.args.get("min_votes", 2, type=int))
+    from .tiers import VOTES_TO_SETTLE
+    min_votes = max(1, request.args.get("min_votes", VOTES_TO_SETTLE, type=int))
     limit = min(max(1, request.args.get("limit", 100, type=int)), 1000)
     offset = max(0, request.args.get("offset", 0, type=int))
     fmt = (request.args.get("format") or "json").lower()
@@ -554,7 +554,7 @@ def api_words(language):
 
     return jsonify({
         "language": language,
-        "language_name": current_app.config["LANGUAGES"][language]["name"],
+        "language_name": current_app.config["ALL_LANGUAGES"][language]["name"],
         "min_votes": min_votes,
         "offset": offset,
         "limit": limit,
@@ -575,7 +575,7 @@ def api_consensus(language):
 @main.route("/api/word/<int:word_id>/<language>")
 def api_word(word_id, language):
     """Every vote on one entry, including wordings that did not win."""
-    if language not in current_app.config["LANGUAGES"]:
+    if language not in current_app.config["ALL_LANGUAGES"]:
         abort(404)
     word = db.session.get(Word, word_id)
     if not word:

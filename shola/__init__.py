@@ -4,9 +4,10 @@ import os
 
 from flask import Flask
 
-from .config import (DAY_NAMES, INSTANCE_DIR, LANGUAGES, OTHER_LANGUAGES,
-                     TIME_WINDOWS, Config)
+from .config import (ALL_LANGUAGES, DAY_NAMES, INSTANCE_DIR, LANGUAGES,
+                     OTHER_LANGUAGES, TIME_WINDOWS, Config)
 from .models import db
+from .tiers import VOTES_TO_SETTLE
 
 
 def create_app(config_object=Config):
@@ -17,6 +18,7 @@ def create_app(config_object=Config):
     app.config["DAY_NAMES"] = DAY_NAMES
     app.config["TIME_WINDOWS"] = TIME_WINDOWS
     app.config["OTHER_LANGUAGES"] = OTHER_LANGUAGES
+    app.config["ALL_LANGUAGES"] = ALL_LANGUAGES
 
     os.makedirs(app.config["UPLOAD_DIR"], exist_ok=True)
 
@@ -53,7 +55,10 @@ def create_app(config_object=Config):
     @app.context_processor
     def inject_globals():
         return {"LANGUAGES": LANGUAGES, "DAY_NAMES": DAY_NAMES,
-                "TIME_WINDOWS": TIME_WINDOWS, "OTHER_LANGUAGES": OTHER_LANGUAGES}
+                "TIME_WINDOWS": TIME_WINDOWS, "OTHER_LANGUAGES": OTHER_LANGUAGES,
+                "ALL_LANGUAGES": ALL_LANGUAGES,
+                "LANGUAGE_COUNT": len(ALL_LANGUAGES),
+                "VOTES_TO_SETTLE": VOTES_TO_SETTLE}
 
     @app.url_defaults
     def version_static(endpoint, values):

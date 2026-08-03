@@ -12,7 +12,8 @@ Regenerate the artwork with `python3 brand/build.py`.
 ## What SHOLA is, in one line
 
 A place where Ghanaians confirm translations of everyday words in their own
-language — a handful of words a day, by email, on the phone.
+language — all 88 of them — a handful of words a day, by email, on the phone
+or the laptop.
 
 Two minutes a day. No app to install, no account, no password.
 
@@ -29,7 +30,7 @@ which days suit them.
 |------|------|-----------|
 | `story-why` | 1080×1920 | WhatsApp Status, IG story, TikTok |
 | `story-how` | 1080×1920 | WhatsApp Status — explains the two minutes |
-| `story-ask` | 1080×1920 | For speakers of the other 83 languages |
+| `story-ask` | 1080×1920 | For speakers of a language nobody has started yet |
 | `square-why` | 1080×1080 | Instagram and Facebook feed |
 | `square-ask` | 1080×1080 | Instagram and Facebook feed |
 | `x-post` | 1600×900 | X |
@@ -76,13 +77,13 @@ Short, for WhatsApp Status and TikTok:
 > Your language, checked by the people who speak it. Two minutes a day.
 > shola.inkika.org
 
-> Twi, Ewe, Ga, Dagbani. A few words a day and you help build a proper record
-> of our languages. shola.inkika.org
+> 88 Ghanaian languages, and yours is one of them. A few words a day helps
+> build accurate translations everyone can use. shola.inkika.org
 
 Ghanaian Pidgin, for a more casual audience:
 
-> You fit speak Twi, Ewe, Ga or Dagbani? Give am 2 minutes every day make we
-> put your language for the record. shola.inkika.org
+> You fit speak any Ghanaian language? Give am 2 minutes every day make we keep
+> your language alive. shola.inkika.org
 
 Longer, for Instagram, Facebook or a YouTube description:
 
@@ -91,29 +92,31 @@ Longer, for Instagram, Facebook or a YouTube description:
 >
 > SHOLA sends you a few English words a day with three possible translations in
 > your language. You tap the one you would actually use, or type your own. When
-> two speakers agree, that translation is recorded and released free for anyone
-> building tools in our languages.
+> five speakers agree, that translation is recorded and released free for
+> anyone building tools in our languages.
 >
 > It takes two minutes. No app, no password.
 >
 > Sign up: shola.inkika.org
 
-For speakers of a language not yet open:
+For a language nobody has started yet:
 
-> SHOLA is collecting Twi, Ewe, Ga and Dagbani now — and 83 more Ghanaian
-> languages are on the list. Add your name and they will email you the day
-> yours opens. shola.inkika.org
+> Nobody has added words in your language yet? Then you go be the first.
+> Whatever you type becomes the option others vote on. shola.inkika.org
 
-**Local-language captions:** we have deliberately not written these. Copy in
-Twi, Ewe, Ga or Dagbani should be written by a speaker, not translated by us —
+**Local-language captions:** we have deliberately not written these. Copy in a
+Ghanaian language should be written by a speaker, not translated by us —
 getting it slightly wrong in a campaign about language accuracy would undercut
 the whole point. If you write one, send it to michsethowusu@gmail.com and we will add
 it here with credit.
 
 ## Hashtags
 
-`#SHOLA` `#ShareYourLanguage` `#GhanaOpenData` `#Twi` `#Ewe` `#Ga` `#Dagbani`
-`#GhanaianLanguages` `#AIforGhana`
+`#SHOLA` `#ShareYourLanguage` `#GhanaOpenData` `#GhanaianLanguages`
+`#AIforGhana`
+
+Add the tag for the language you are posting in — `#Twi`, `#Ewe`, `#Ga`,
+`#Dagbani`, `#Nzema`, whichever it is.
 
 ## What to say
 
@@ -127,8 +130,9 @@ it here with credit.
 
 - **Say it pays.** It is volunteer work. Nobody is paid, and implying otherwise
   brings people who leave immediately.
-- **Promise a language that is not open.** Only Twi, Ewe, Ga and Dagbani are
-  collecting today. For the rest, say they can join the list.
+- **Say a language is missing.** All 88 are open. Four have translations
+  loaded to check; for the rest, the first speaker to arrive types the wording
+  and everyone after votes on it.
 - **Recolour or stretch the logo,** or set the wordmark in another typeface.
 - **Ask for anything beyond the sign-up.** No phone numbers, no payment details,
   no group to join first.

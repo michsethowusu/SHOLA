@@ -161,13 +161,8 @@ def send_daily(window, dry_run, force):
     if window != "all":
         query = query.filter(Volunteer.time_window.in_([window, "anytime"]))
 
-    open_langs = current_app.config["LANGUAGES"]
     sent = skipped = failed = 0
     for volunteer in query.all():
-        # Nothing to send to someone whose language has not opened yet.
-        if volunteer.is_waiting(open_langs):
-            skipped += 1
-            continue
         if not force and volunteer.last_emailed_on == today:
             skipped += 1
             continue
@@ -308,70 +303,26 @@ def refresh_words_cmd(do_all):
     click.echo(f"refreshed {n:,} word/language pairs")
 
 
-@shola_cli.command("waitlist")
-def waitlist():
-    """Who is waiting, and for which language.
-
-    Use it to decide which language to open next: the number here is people
-    ready to start the day it does.
-    """
+@shola_cli.command("languages")
+def languages_cmd():
+    """Volunteers per language, and whether that language has options yet."""
     from collections import Counter
 
-    open_langs = current_app.config["LANGUAGES"]
-    names = {c: n for c, n, _a in current_app.config["OTHER_LANGUAGES"]}
-    waiting = Counter(v.language for v in Volunteer.query.all()
-                      if v.is_waiting(open_langs))
-    if not waiting:
-        click.echo("nobody is waiting")
-        return
-    click.echo(f"{sum(waiting.values())} waiting across "
-               f"{len(waiting)} languages:")
-    for code, n in waiting.most_common():
-        click.echo(f"  {names.get(code, code):24s} {n:>4}")
+    from .models import Candidate
 
+    all_langs = current_app.config["ALL_LANGUAGES"]
+    signed = Counter(v.language for v in Volunteer.query.all())
+    with_options = {r[0] for r in db.session.query(
+        db.distinct(Candidate.language))}
 
-@shola_cli.command("announce-language")
-@click.option("--language", required=True,
-              help="the code as it now appears in LANGUAGES.")
-@click.option("--dry-run", is_flag=True)
-def announce_language(language, dry_run):
-    """Tell everyone waiting for a language that it has opened.
-
-    Run this once, after adding the language to LANGUAGES and importing its
-    translations. The waiting page promises this email, so opening a language
-    without sending it breaks that promise.
-    """
-    from .mailer import build_opened_email, daily_link, send
-
-    open_langs = current_app.config["LANGUAGES"]
-    if language not in open_langs:
-        raise click.UsageError(
-            f"{language!r} is not open yet. Add it to LANGUAGES and import its "
-            "translations first, or nobody will have words to check.")
-
-    people = Volunteer.query.filter_by(language=language, active=True).all()
-    if not people:
-        click.echo("nobody was waiting for that language")
-        return
-
-    name = open_langs[language]["name"]
-    sent = failed = 0
-    for volunteer in people:
-        if not dry_run:
-            top_up(volunteer, target=current_app.config["WORDS_PER_VOLUNTEER"])
-        subject, text, html = build_opened_email(volunteer, name,
-                                                 daily_link(volunteer))
-        if dry_run:
-            click.echo(f"[dry-run] {volunteer.email}: {subject}")
-            sent += 1
+    click.echo(f"{len(all_langs)} languages, "
+               f"{len(with_options)} with options to vote on\n")
+    for code, info in sorted(all_langs.items(), key=lambda kv: kv[1]["name"]):
+        n = signed.get(code, 0)
+        if not n and code not in with_options:
             continue
-        try:
-            send(volunteer.email, subject, text, html)
-            sent += 1
-        except Exception as exc:      # noqa: BLE001
-            failed += 1
-            click.echo(f"  failed {volunteer.email}: {exc}", err=True)
-    click.echo(f"told {sent} people {name} is open; {failed} failed")
+        mark = "has options" if code in with_options else "empty, awaiting a first speaker"
+        click.echo(f"  {info['name']:24s} {n:>4} volunteers   {mark}")
 
 
 @shola_cli.command("backup")

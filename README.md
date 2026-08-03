@@ -4,8 +4,8 @@
 up](https://shola.inkika.org/join) · [champions](https://shola.inkika.org/champions)
 · [progress](https://shola.inkika.org/stats) · [API](https://shola.inkika.org/api)
 
-A volunteer app for confirming translations of everyday words in **Twi, Ewe, Ga
-and Dagbani**.
+A volunteer app for confirming translations of everyday words in **88 Ghanaian
+languages**.
 
 Machine translation produced three candidate translations for each word. Much of
 it is good, some is word-for-word and no speaker would say it, and some is
@@ -28,8 +28,10 @@ deployment.
 3. For each word they tap one of three translations, skip it, or type their own.
    Choosing an option and typing your own are mutually exclusive, and they can
    step back to change their last answer.
-4. When two speakers of that language choose the same wording, the translation
-   is confirmed and the word leaves the queue.
+4. When five speakers of that language choose the same wording, the translation
+   is confirmed and the word leaves the queue. A typed answer becomes an option
+   the next speaker can agree with, so a language with no loaded translations
+   still builds up choices.
 
 ### There is no login
 

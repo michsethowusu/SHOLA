@@ -18,7 +18,7 @@ from shola.assignment import (assign_words, leaderboard,         # noqa: E402
 from shola.config import Config                                 # noqa: E402
 from shola.consensus import best, normalise, tally               # noqa: E402
 from shola.tiers import (MAX_VERDICTS_BEFORE_CONTESTED,           # noqa: E402
-                         active_tier, assign_tiers, daily_quota,
+                         VOTES_TO_SETTLE, active_tier, assign_tiers, daily_quota,
                          lease_words, refresh_word, release_expired,
                          answers_needed, recruitment, state_for,
                          tier_for, tier_progress, top_up)
@@ -131,24 +131,35 @@ def main():
         print("\nconsensus counts a typed answer equal to a machine option")
         target = Word.query.filter(Word.phrase == "word 7").first()
         v1 = add_volunteer("d@example.com")
-        v2 = add_volunteer("e@example.com")
-        v3 = add_volunteer("f@example.com")
-        record_verdict(v1, target.id, custom_text="mepɛ nsuo")
-        record_verdict(v2, target.id, custom_text="Mepɛ Nsuo")     # case differs
+        typers = [add_volunteer(f"typer{i}@example.com")
+                  for i in range(VOTES_TO_SETTLE)]
+        for i, v in enumerate(typers):
+            # Alternating case: the same wording however it was capitalised.
+            record_verdict(v, target.id,
+                           custom_text="mepɛ nsuo" if i % 2 else "Mepɛ Nsuo")
         opt = [x for x in target.candidates if x.language == "twi"][0]
-        record_verdict(v3, target.id, candidate_id=opt.id)
+        record_verdict(add_volunteer("f@example.com"), target.id,
+                       candidate_id=opt.id)
         t = tally(target.id, "twi")
-        ok &= check("case-folded votes merge", t["ranked"][0]["votes"] == 2,
+        ok &= check("case-folded votes merge",
+                    t["ranked"][0]["votes"] == VOTES_TO_SETTLE,
                     str(t["ranked"]))
         agreed = best(target.id, "twi")
         ok &= check("typed wording can beat the machine option",
-                    agreed["text"].lower() == "mepɛ nsuo", str(agreed))
+                    agreed and agreed["text"].lower() == "mepɛ nsuo", str(agreed))
+        ok &= check("a typed answer became a selectable option",
+                    any(c.source == "volunteer" and c.language == "twi"
+                        for c in target.candidates))
         ok &= check("NFC folding", normalise("nsuo") == "nsuo")
 
-        print("\na single vote is not consensus")
+        print(f"\nfewer than {VOTES_TO_SETTLE} matching answers is not consensus")
         lone = Word.query.filter(Word.phrase == "word 9").first()
-        record_verdict(v1, lone.id, custom_text="only me")
-        ok &= check("one vote yields no answer", best(lone.id, "twi") is None)
+        shy = [add_volunteer(f"shy{i}@example.com")
+               for i in range(VOTES_TO_SETTLE - 1)]
+        for v in shy:
+            record_verdict(v, lone.id, custom_text="nearly there")
+        ok &= check(f"{VOTES_TO_SETTLE - 1} votes yield no answer",
+                    best(lone.id, "twi") is None)
 
         print("\nleaderboard ranks by verdicts")
         board = leaderboard()
@@ -200,16 +211,17 @@ def main():
         ok &= check("nothing was pre-allocated beyond the lease",
                     h.assignments.count() == 6)
 
-    print("\na word stops being handed out once two agree")
+    print("\na word stops being handed out once enough speakers agree")
     with app.app_context():
         w = Word.query.filter_by(tier=1).order_by(Word.id).first()
-        v1 = add_volunteer("i@example.com")
-        v2 = add_volunteer("j@example.com")
-        record_verdict(v1, w.id, custom_text="same answer")
-        ok &= check("one vote does not settle it",
+        agreeing = [add_volunteer(f"agree{i}@example.com")
+                    for i in range(VOTES_TO_SETTLE)]
+        for v in agreeing[:-1]:
+            record_verdict(v, w.id, custom_text="same answer")
+        ok &= check(f"{VOTES_TO_SETTLE - 1} votes do not settle it",
                     not state_for(w.id, "twi").done)
-        record_verdict(v2, w.id, custom_text="same answer")
-        ok &= check("two matching votes settle it",
+        record_verdict(agreeing[-1], w.id, custom_text="same answer")
+        ok &= check(f"{VOTES_TO_SETTLE} matching votes settle it",
                     state_for(w.id, "twi").done)
         later = add_volunteer("k@example.com")
         lease_words(later, 10)
@@ -220,7 +232,8 @@ def main():
     with app.app_context():
         w2 = next(x for x in Word.query.filter(Word.tier == 1).all()
                   if not state_for(x.id, "twi").done)
-        voters = [add_volunteer(f"dis{i}@example.com") for i in range(6)]
+        voters = [add_volunteer(f"dis{i}@example.com")
+                  for i in range(MAX_VERDICTS_BEFORE_CONTESTED)]
         for i, v in enumerate(voters[:3]):
             record_verdict(v, w2.id, custom_text=f"different {i}")
         st = state_for(w2.id, "twi")
@@ -243,10 +256,9 @@ def main():
     print("\neach language is settled on its own")
     with app.app_context():
         shared = Word.query.filter(Word.tier == 1).order_by(Word.id.desc()).first()
-        a1 = add_volunteer("twi1@example.com", language="twi")
-        a2 = add_volunteer("twi2@example.com", language="twi")
-        record_verdict(a1, shared.id, custom_text="agreed twi wording")
-        record_verdict(a2, shared.id, custom_text="agreed twi wording")
+        for i in range(VOTES_TO_SETTLE):
+            record_verdict(add_volunteer(f"twi{i}@example.com", language="twi"),
+                           shared.id, custom_text="agreed twi wording")
         ok &= check("settled in Twi", state_for(shared.id, "twi").done)
         ok &= check("untouched in Ga", not state_for(shared.id, "ga").done)
         gaman = add_volunteer("ga1@example.com", language="ga")
@@ -366,31 +378,52 @@ def main():
         wid = item.word_id
         cid = [c for c in item.word.candidates if c.language == "twi"][0].id
 
-    print("\nsigning up for a language we do not collect yet")
+    print("\nsigning up for a language nobody has translations for")
     wl = app.test_client()
     r = wl.post("/join", data={
         "name": "Kwesi Mensah", "email": "kwesi@example.com",
         "language": "other", "other_language": "nzi",
         "time_window": "anytime"}, follow_redirects=True)
-    ok &= check("waiting signup asks for the code too", r.status_code == 200
+    ok &= check("signup asks for the code too", r.status_code == 200
                 and b"Enter the code" in r.data)
     r = wl.post("/verify", data={"email": "kwesi@example.com",
                                  "code": sent["code"]})
-    ok &= check("they are told they are on the list",
-                r.status_code == 200 and b"on the list" in r.data)
     with app.app_context():
         w = Volunteer.query.filter_by(email="kwesi@example.com").first()
         ok &= check("the volunteer exists", w is not None)
-        ok &= check("but no words were leased", w.assignments.count() == 0,
+        # The point of the change: an unseeded language is not a dead end. They
+        # get words with no options and type the first wording themselves.
+        ok &= check("words are leased even with nothing to choose from",
+                    w.assignments.count() > 0,
                     f"{w.assignments.count() if w else '-'} leased")
-        ok &= check("and they count as waiting",
-                    w.is_waiting(app.config["LANGUAGES"]))
+        nzi_item = w.assignments.first()
+        nzi_wid = nzi_item.word_id
+        ok &= check("and that word has no options in their language",
+                    not [c for c in nzi_item.word.candidates
+                         if c.language == "nzi"])
         with app.test_request_context():
             from shola.mailer import make_token as mt
             wtok = mt(w)
     r = app.test_client().get(f"/w/{wtok}")
-    ok &= check("their link shows the waiting page, not an empty queue",
-                r.status_code == 200 and b"on the list" in r.data)
+    ok &= check("their link opens the words, not a holding page",
+                r.status_code == 200 and b"class=\"focus\"" in r.data)
+
+    print("\na typed answer becomes an option the next speaker can pick")
+    r = wl.post(f"/w/{wtok}/{nzi_wid}",
+                data={"choice": "custom", "custom_text": "nrɛnkyi"})
+    ok &= check("the typed answer is accepted",
+                r.status_code in (200, 302), f"HTTP {r.status_code}")
+    with app.app_context():
+        from shola.models import Candidate
+        cands = Candidate.query.filter_by(word_id=nzi_wid, language="nzi").all()
+        ok &= check("it is stored as a selectable option", len(cands) == 1,
+                    f"{len(cands)} options")
+        ok &= check("marked as coming from a volunteer",
+                    bool(cands) and cands[0].source == "volunteer")
+        ok &= check("and it counts as a vote for that option",
+                    bool(cands) and Evaluation.query.filter_by(
+                        word_id=nzi_wid, candidate_id=cands[0].id).count() == 1)
+
     r = wl.post("/join", data={"name": "No Such", "email": "no@example.com",
                                "language": "other", "other_language": "zzz"})
     ok &= check("an unknown language code is refused", r.status_code == 400)
@@ -481,12 +514,12 @@ def main():
     ok &= check("the email lists words rather than an empty list",
                 "TODAY'S WORDS" in captured.get("text", ""))
 
-    print("\nsomeone still on the waiting list gets their status, not a word list")
+    print("\na speaker of an unseeded language is emailed words too")
     captured.clear()
     fresh.post("/resend", data={"email": "kwesi@example.com"})
     ok &= check("they are emailed too", captured.get("to") == "kwesi@example.com")
-    ok &= check("and told their language is not open",
-                "not open yet" in captured.get("text", ""),
+    ok &= check("with words, not a holding message",
+                "TODAY'S WORDS" in captured.get("text", ""),
                 captured.get("text", "")[:80])
 
     print("\nthe header cannot cover the options while checking words")
@@ -526,8 +559,9 @@ def main():
     r = fresh.get("/api")
     ok &= check("API docs page renders", r.status_code == 200
                 and b"Words API" in r.data)
-    ok &= check("docs explain what verified means", b"two or more" in r.data.lower()
-                or b"two or more speakers" in r.data.lower())
+    ok &= check("docs explain what verified means",
+                f"{VOTES_TO_SETTLE} or\n      more speakers".encode()
+                in r.data or b"more speakers independently chose" in r.data)
 
     print("\nemail rendering")
     with app.app_context():
