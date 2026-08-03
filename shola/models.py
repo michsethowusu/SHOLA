@@ -30,7 +30,24 @@ class Volunteer(db.Model):
 
     joined_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     last_emailed_on = db.Column(db.Date)
+
+    # Receiving emails at all. False means they stopped; reversible from their
+    # own link, so it is not a deletion.
     active = db.Column(db.Boolean, default=True, nullable=False)
+
+    # A pause with an end date. Sending resumes by itself when it passes, so a
+    # break does not depend on remembering to come back.
+    paused_until = db.Column(db.Date)
+
+    @property
+    def paused(self):
+        """True while a pause is running."""
+        return bool(self.paused_until and self.paused_until > date.today())
+
+    @property
+    def receiving(self):
+        """Whether a send should reach them today."""
+        return self.active and not self.paused
 
     assignments = db.relationship("Assignment", back_populates="volunteer",
                                   lazy="dynamic")
@@ -257,3 +274,36 @@ def site_stats():
     return {"verdicts": verdicts, "volunteers": volunteers, "words": words,
             "covered": covered,
             "coverage_pct": (covered / words * 100) if words else 0.0}
+
+def ensure_columns():
+    """Add columns that models declare but an existing database lacks.
+
+    `db.create_all()` creates missing tables and nothing else, so a new column
+    on a table that already holds rows is silently absent until something reads
+    it and the query fails. There is no Alembic here on purpose: the schema is
+    small and the alternative is a migrations directory for one ALTER. Adding a
+    column to the list below is enough.
+
+    Only additive, nullable columns belong here. Anything that needs data moved
+    or a column dropped is a real migration and should be written as one.
+    """
+    from sqlalchemy import inspect, text
+
+    wanted = {
+        "volunteers": {"paused_until": "DATE"},
+    }
+    inspector = inspect(db.engine)
+    added = []
+    for table, columns in wanted.items():
+        if table not in inspector.get_table_names():
+            continue
+        have = {c["name"] for c in inspector.get_columns(table)}
+        for name, sql_type in columns.items():
+            if name in have:
+                continue
+            db.session.execute(
+                text(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}"))
+            added.append(f"{table}.{name}")
+    if added:
+        db.session.commit()
+    return added

@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% block title %}Your settings{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap narrow">
+    <p class="eyebrow">Your settings</p>
+    <h1 style="font-size:clamp(1.8rem,6vw,2.4rem)">
+      {{ volunteer.name.split()[0] }}, this is yours to change
+    </h1>
+    <p class="lede">
+      There is no end date. You get {{ WORDS_PER_DAY }} words on the days you
+      choose, for as long as you want to keep going.
+    </p>
+
+    {% if not volunteer.active %}
+      <div class="notice" style="margin-top:22px">
+        <strong>You are not receiving words.</strong> Start again whenever you
+        like — nothing was lost.
+        <form method="post" style="margin-top:14px">
+          <input type="hidden" name="action" value="resume">
+          <button class="btn" type="submit">Start again</button>
+        </form>
+      </div>
+    {% elif volunteer.paused %}
+      <div class="notice" style="margin-top:22px">
+        <strong>Paused until
+          {{ volunteer.paused_until.strftime('%-d %B') }}.</strong>
+        Words start arriving again by themselves that morning.
+        <form method="post" style="margin-top:14px">
+          <input type="hidden" name="action" value="resume">
+          <button class="btn ghost" type="submit">Start again now</button>
+        </form>
+      </div>
+    {% endif %}
+
+    <form method="post" style="margin-top:28px">
+      <input type="hidden" name="action" value="save">
+
+      <div class="field">
+        <span class="label">Which days do you want words?</span>
+        <p class="hint">Change these whenever your week changes. Leave them all
+           unticked to receive words any day.</p>
+        <div class="day-row">
+          {% for i in range(7) %}
+            <label class="day">
+              <input type="checkbox" name="days" value="{{ i }}"
+                     {% if i in volunteer.day_numbers %}checked{% endif %}>
+              {{ DAY_NAMES[i][:3] }}
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="label">Roughly what time suits you?</span>
+        <div class="choice-grid">
+          {% for code, label in TIME_WINDOWS.items() %}
+            <label class="choice">
+              <input type="radio" name="time_window" value="{{ code }}"
+                     {% if volunteer.time_window == code %}checked{% endif %}>
+              <span class="t">{{ label }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <button class="btn" type="submit">Save changes</button>
+    </form>
+
+    {% if volunteer.receiving %}
+    <div class="card" style="margin-top:34px; text-align:left">
+      <h3>Need a break?</h3>
+      <p class="muted">
+        Take one. Your words go back to other speakers while you are away, so
+        nothing sits waiting on you, and the emails restart on their own.
+      </p>
+      <form method="post" style="margin-top:16px">
+        <input type="hidden" name="action" value="pause">
+        <div class="choice-grid">
+          {% for days, label in pause_lengths %}
+            <button class="btn ghost" type="submit" name="pause_days"
+                    value="{{ days }}">Pause for {{ label }}</button>
+          {% endfor %}
+        </div>
+      </form>
+      <form method="post" style="margin-top:10px">
+        <input type="hidden" name="action" value="pause">
+        <input type="hidden" name="pause_days" value="0">
+        <button class="btn ghost" type="submit">
+          Pause until I say otherwise
+        </button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if volunteer.active %}
+    <div style="margin-top:34px">
+      <h3>Stop for good</h3>
+      <p class="muted">
+        No more emails. Everything you have already checked stays in the
+        dataset with your name on the leaderboard, and this link keeps working
+        if you change your mind.
+      </p>
+      <form method="post" style="margin-top:14px"
+            onsubmit="return confirm('Stop receiving words? You can start again from this same link.')">
+        <input type="hidden" name="action" value="stop">
+        <button class="btn ghost" type="submit">Stop sending me words</button>
+      </form>
+    </div>
+    {% endif %}
+
+    {% if volunteer.active and not volunteer.paused %}
+      <p class="hint" style="margin-top:30px">
+        <a href="{{ url_for('main.evaluate', token=token) }}">Back to your
+        words</a>
+      </p>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

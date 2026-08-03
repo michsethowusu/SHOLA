@@ -22,3 +22,7 @@ No time today? Leave it. These words come back in your next email.
 
 --
 You get this because you signed up to check {{ language_name }} words for SHOLA.
+There is no end date - keep going as long as you like.
+
+Change your days, take a break, or stop:
+{{ settings_link }}

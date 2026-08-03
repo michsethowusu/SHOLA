@@ -8,14 +8,15 @@
     <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">Akwaaba, {{ volunteer.name.split()[0] }}.</h1>
     <p class="lede" style="margin:0 auto 8px">
       {{ assigned | thousands }} {{ ALL_LANGUAGES[volunteer.language].name }} words are
-      now yours to check, spread across
+      waiting for you, and {{ WORDS_PER_DAY }} more arrive
       {% if volunteer.available_days %}
+        on each of the
         {{ volunteer.day_numbers | length }}
-        {{ 'day' if volunteer.day_numbers | length == 1 else 'days' }} a week
+        {{ 'day' if volunteer.day_numbers | length == 1 else 'days' }} you chose
       {% else %}
-        every day of the week
+        every day
       {% endif %}
-      for the year ahead.
+      — for as long as you want to keep going.
     </p>
 
     <div class="card" style="margin:28px 0; text-align:left">
@@ -25,7 +26,13 @@
         {% if volunteer.time_window != 'anytime' %}
           in the {{ TIME_WINDOWS[volunteer.time_window] | lower }}{% endif %},
         with that day's words. If you miss a day, nothing is lost — those words
-        come back in your next email.
+        come back in your next email, and if you are away long enough they go
+        to another speaker so nothing stalls on you.
+      </p>
+      <p class="muted" style="margin:14px 0 0">
+        Your days are not fixed. Change them, take a break, or stop from
+        <a href="{{ url_for('main.settings', token=token) }}">your settings</a>
+        — the link is in the footer of every email too.
       </p>
     </div>
 

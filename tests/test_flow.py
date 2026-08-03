@@ -567,6 +567,109 @@ def main():
                 f"{VOTES_TO_SETTLE} or\n      more speakers".encode()
                 in r.data or b"more speakers independently chose" in r.data)
 
+    print("\nsettings: days, a break, stopping, and coming back")
+    with app.app_context():
+        sv = add_volunteer("settings@example.com", days="0,3")
+        with app.test_request_context():
+            from shola.mailer import make_token as mt2
+            stok = mt2(sv)
+        sid = sv.id
+
+    sc = app.test_client()
+    r = sc.get(f"/w/{stok}/settings")
+    ok &= check("the settings page opens from the link alone",
+                r.status_code == 200 and b"this is yours to change" in r.data)
+
+    r = sc.post(f"/w/{stok}/settings",
+                data={"action": "save", "days": ["1", "5"],
+                      "time_window": "evening"}, follow_redirects=True)
+    with app.app_context():
+        sv = db.session.get(Volunteer, sid)
+        ok &= check("days can be changed", sv.available_days == "1,5",
+                    sv.available_days)
+        ok &= check("so can the time of day", sv.time_window == "evening")
+
+    r = sc.post(f"/w/{stok}/settings",
+                data={"action": "pause", "pause_days": "7"},
+                follow_redirects=True)
+    with app.app_context():
+        sv = db.session.get(Volunteer, sid)
+        ok &= check("a pause has an end date", sv.paused, str(sv.paused_until))
+        ok &= check("and is not the same as leaving", sv.active)
+        ok &= check("a paused volunteer is not emailed", not sv.receiving)
+        # The end date is the point: it clears itself.
+        sv.paused_until = date.today() - timedelta(days=1)
+        db.session.commit()
+        ok &= check("the pause expires on its own",
+                    db.session.get(Volunteer, sid).receiving)
+
+    r = sc.post(f"/w/{stok}/settings", data={"action": "stop"},
+                follow_redirects=True)
+    with app.app_context():
+        sv = db.session.get(Volunteer, sid)
+        ok &= check("stopping stops the emails", not sv.active)
+        ok &= check("and hands their words back",
+                    sv.assignments.filter_by(status="pending").count() == 0,
+                    f"{sv.assignments.filter_by(status='pending').count()} held")
+    r = sc.get(f"/w/{stok}/settings")
+    ok &= check("their link still opens after stopping", r.status_code == 200)
+    r = sc.post(f"/w/{stok}/settings", data={"action": "resume"},
+                follow_redirects=True)
+    with app.app_context():
+        ok &= check("and they can start again",
+                    db.session.get(Volunteer, sid).receiving)
+
+    with app.app_context():
+        paused = add_volunteer("paused@example.com")
+        paused.paused_until = date.today() + timedelta(days=7)
+        db.session.commit()
+        with app.test_request_context():
+            from shola.mailer import make_token as mt3
+            ptok = mt3(paused)
+    body = app.test_client().get(f"/w/{ptok}/settings").data
+    ok &= check("a paused volunteer can still stop for good",
+                b"Stop for good" in body)
+    ok &= check("but is not offered another pause",
+                b"Need a break" not in body)
+
+    print("\nmissing days loses nothing and stalls nothing")
+    with app.app_context():
+        misser = add_volunteer("misser@example.com")
+        n = top_up(misser)
+        ok &= check("one send is one day's worth",
+                    n == app.config["WORDS_PER_DAY"], f"leased {n}")
+        held = [a.id for a in misser.assignments]
+        # Backdate the lease past its expiry, as a long absence would.
+        for a in misser.assignments:
+            a.due_date = date.today() - timedelta(days=20)
+            a.expires_at = datetime.utcnow() - timedelta(days=1)
+        db.session.commit()
+        ok &= check("the words are still theirs until the lease runs out",
+                    misser.pending_today().count() == len(held))
+        release_expired()
+        ok &= check("then they go back to the queue",
+                    misser.pending_today().count() == 0)
+        other = add_volunteer("other@example.com")
+        top_up(other)
+        ok &= check("and another speaker is offered them",
+                    bool(set(a.word_id for a in other.assignments)
+                         & set(db.session.get(Assignment, i).word_id
+                               for i in held)))
+
+    print("\nevery email carries a way to change or stop")
+    with app.app_context():
+        mailed = add_volunteer("mailed@example.com")
+        top_up(mailed)
+        words = [a.word for a in mailed.pending_today()]
+        with app.test_request_context():
+            from shola.mailer import build_daily_email as bde
+            _, text, html = bde(mailed, words)
+        ok &= check("the text email links to settings",
+                    "/settings" in text, text[-200:])
+        ok &= check("so does the html", "/settings" in html)
+        ok &= check("and it says there is no end date",
+                    "no end date" in text)
+
     print("\nthe retired hostname redirects to the current one")
     old_host = app.config["OLD_HOSTS"][0]
     r = app.test_client().get("/stats?x=1",

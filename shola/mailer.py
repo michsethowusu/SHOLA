@@ -75,6 +75,12 @@ def daily_link(volunteer):
     return f"{base}/w/{make_token(volunteer)}"
 
 
+def settings_link(volunteer):
+    """Absolute link to their own settings, for the footer of every email."""
+    base = current_app.config["SITE_URL"].rstrip("/")
+    return f"{base}/w/{make_token(volunteer)}/settings"
+
+
 def build_daily_email(volunteer, words, overdue_count=0):
     """Return (subject, text, html) for today's list."""
     shown = words[:MAX_WORDS_IN_EMAIL]
@@ -93,6 +99,7 @@ def build_daily_email(volunteer, words, overdue_count=0):
     ctx = {"volunteer": volunteer, "words": shown, "more": more,
            "total": n, "link": link, "first": first,
            "overdue_count": overdue_count,
+           "settings_link": settings_link(volunteer),
            "language_name": current_app.config["ALL_LANGUAGES"][
                volunteer.language]["name"]}
     text = render_template("email/daily.txt", **ctx)

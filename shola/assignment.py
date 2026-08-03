@@ -93,13 +93,17 @@ def assign_words(volunteer, count, start=None, horizon_days=365):
     return i
 
 
-def redistribute(volunteer, today=None, horizon_days=365):
-    """Re-date overdue work across the volunteer's remaining available days.
+def redistribute(volunteer, today=None, horizon_days=None):
+    """Re-date overdue work across the volunteer's next available days.
 
     Missing a week should not produce one crushing list; it should raise each
-    remaining day slightly. Work is never removed, only moved, so the 1000
-    still land inside the commitment window.
+    of the next few days slightly. The horizon is the lease window rather than
+    a year: a word re-dated beyond it would have gone back to the queue for
+    another speaker before its new day arrived, so scheduling it there is a
+    promise nobody keeps.
     """
+    from .tiers import LEASE_DAYS
+    horizon_days = horizon_days or LEASE_DAYS
     today = today or date.today()
     overdue = (volunteer.assignments
                .filter(Assignment.status == "pending",

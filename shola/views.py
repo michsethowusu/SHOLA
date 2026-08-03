@@ -26,7 +26,8 @@ from . import consensus
 from .assignment import leaderboard, record_verdict, redistribute
 from .tiers import active_tier, recruitment, tier_progress, top_up
 from .mailer import build_otp_email, make_token, read_token
-from .models import Candidate, PendingSignup, Volunteer, Word, db, site_stats
+from .models import (Assignment, Candidate, PendingSignup, Volunteer, Word,
+                     db, site_stats)
 
 main = Blueprint("main", __name__)
 
@@ -35,13 +36,20 @@ MAX_CODE_ATTEMPTS = 6
 MAX_CODE_SENDS = 5
 
 
-def volunteer_from_token(token):
-    """The volunteer a personalised link belongs to, or None."""
+def volunteer_from_token(token, require_active=True):
+    """The volunteer a personalised link belongs to, or None.
+
+    `require_active=False` is for the settings page: someone who stopped must
+    still be able to open their own link and start again, or stopping would be
+    a one-way door.
+    """
     vid = read_token(token)
     if not vid:
         return None
     volunteer = db.session.get(Volunteer, vid)
-    if not volunteer or not volunteer.active:
+    if not volunteer:
+        return None
+    if require_active and not volunteer.active:
         return None
     return volunteer
 
@@ -92,9 +100,13 @@ def champions():
 @main.route("/stats")
 def stats():
     # Each language works through the tiers at its own pace.
+    # Paused volunteers are not counted as capacity: they are not answering
+    # this week, and the forecast is meant to be pessimistic.
     signed_up = dict(db.session.query(Volunteer.language,
                                       db.func.count(Volunteer.id))
                      .filter(Volunteer.active.is_(True))
+                     .filter(db.or_(Volunteer.paused_until.is_(None),
+                                    Volunteer.paused_until <= date.today()))
                      .group_by(Volunteer.language).all())
     rate = current_app.config["COMPLETION_RATE"]
     target = current_app.config["WORDS_PER_VOLUNTEER"]
@@ -120,6 +132,7 @@ def stats():
                            per_language=consensus.language_progress(),
                            by_language=by_language, totals=totals,
                            completion_rate=rate, words_per_volunteer=target,
+                           words_per_day=current_app.config["WORDS_PER_DAY"],
                            SHOWN_LANGUAGES=shown)
 
 
@@ -371,7 +384,8 @@ def resend():
             # already cleared today's list, give them a fresh one rather than
             # an email announcing zero words.
             top_up(volunteer)
-            words = [a.word for a in volunteer.pending_today().limit(400)]
+            words = [a.word for a in volunteer.pending_today()
+                     .limit(current_app.config["WORDS_PER_DAY"])]
             if words:
                 message = build_daily_email(volunteer, words)
             else:
@@ -489,14 +503,100 @@ def submit(token, word_id):
     return redirect(url_for("main.evaluate", token=token))
 
 
+PAUSE_LENGTHS = [(7, "a week"), (30, "a month"), (90, "three months")]
+
+
+@main.route("/w/<token>/settings", methods=["GET", "POST"])
+def settings(token):
+    """Change days, take a break, or stop - all from the emailed link.
+
+    No login here either. The signed token is the credential, the same one the
+    daily email already carries.
+    """
+    volunteer = volunteer_from_token(token, require_active=False)
+    if not volunteer:
+        flash("That link is not valid any more. We can email you a new one.",
+              "error")
+        return redirect(url_for("main.resend"))
+
+    if request.method == "GET":
+        if volunteer.active:
+            # So the nav offers a way back to their words, as on the evaluate
+            # page. Remembered only for that; never trusted as a credential.
+            session["token"] = token
+        return render_template("settings.html", volunteer=volunteer,
+                               token=token, pause_lengths=PAUSE_LENGTHS)
+
+    action = request.form.get("action") or "save"
+
+    if action == "save":
+        days = [d for d in request.form.getlist("days") if d.isdigit()
+                and 0 <= int(d) <= 6]
+        volunteer.available_days = ",".join(sorted(days, key=int))
+        window = request.form.get("time_window") or "anytime"
+        volunteer.time_window = (window if window in
+                                 current_app.config["TIME_WINDOWS"]
+                                 else "anytime")
+        # Saving settings is also a way back: someone who paused and then
+        # changed their days plainly means to carry on.
+        volunteer.active = True
+        volunteer.paused_until = None
+        db.session.commit()
+        flash("Saved. Your next words arrive on the days you chose.", "ok")
+
+    elif action == "pause":
+        try:
+            days = int(request.form.get("pause_days") or 0)
+        except ValueError:
+            days = 0
+        if days > 0:
+            volunteer.paused_until = date.today() + timedelta(days=days)
+            volunteer.active = True     # a pause is not a stop
+            db.session.commit()
+            flash(f"Paused. Nothing arrives until "
+                  f"{volunteer.paused_until.strftime('%-d %B')}.", "ok")
+        else:
+            # No end date: stopped until they say otherwise.
+            volunteer.active = False
+            volunteer.paused_until = None
+            db.session.commit()
+            flash("Paused. Nothing arrives until you start again.", "ok")
+
+    elif action == "resume":
+        volunteer.active = True
+        volunteer.paused_until = None
+        db.session.commit()
+        flash("Welcome back. Your next words arrive on your next day.", "ok")
+
+    elif action == "stop":
+        volunteer.active = False
+        volunteer.paused_until = None
+        # Outstanding words go back to the queue rather than sitting with
+        # someone who has left.
+        released = (volunteer.assignments
+                    .filter(Assignment.status == "pending")
+                    .update({"status": "expired"}, synchronize_session=False))
+        db.session.commit()
+        current_app.logger.info("volunteer %s stopped, released %s words",
+                                volunteer.id, released)
+        flash("Stopped. No more emails. This link still works if you change "
+              "your mind.", "ok")
+
+    return redirect(url_for("main.settings", token=token))
+
+
 @main.route("/w/<token>/done")
 def done(token):
     volunteer = volunteer_from_token(token)
     if not volunteer:
         return redirect(url_for("main.index"))
-    return render_template("done.html", volunteer=volunteer, token=token,
-                           done_total=volunteer.done_count(),
-                           target=current_app.config["WORDS_PER_VOLUNTEER"])
+    # Their own count, plus what their language has confirmed - a shared
+    # total to belong to, now that there is no personal target to finish.
+    return render_template(
+        "done.html", volunteer=volunteer, token=token,
+        done_total=volunteer.done_count(),
+        language_confirmed=consensus.verified_count(volunteer.language),
+        language_name=language_label(volunteer.language))
 
 
 # ------------------------------------------------------------------------- api

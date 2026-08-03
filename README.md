@@ -33,6 +33,26 @@ deployment.
    the next speaker can agree with, so a language with no loaded translations
    still builds up choices.
 
+### It is open-ended
+
+Nobody signs up for a fixed number of words or a fixed length of time. Every
+send is `SHOLA_WORDS_PER_DAY` words on the days they chose, and they keep going
+until they say otherwise.
+
+From `/w/<token>/settings`, reached from the footer of every email, a volunteer
+can change their days and time of day, pause for a week, a month, three months
+or until they say otherwise, stop entirely, or start again. A timed pause
+clears itself, so a break does not depend on remembering to come back, and
+stopping is reversible from the same link - which is why
+`volunteer_from_token(require_active=False)` exists.
+
+**Missing days costs nothing.** Words stay leased to that volunteer and reappear
+in their next email; `release-leases` returns anything unanswered after
+`LEASE_DAYS` to the queue for another speaker, so an absence never stalls a
+word. One send is never more than a day's worth - a backlog waits or expires
+rather than arriving as one crushing email. Stopping releases outstanding words
+immediately.
+
 ### There is no login
 
 The link in the email carries a signed token identifying the volunteer, and

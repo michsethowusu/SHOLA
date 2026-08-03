@@ -14,28 +14,32 @@
     <p class="eyebrow">Today</p>
     <h1 style="font-size:clamp(1.8rem,6vw,2.5rem)">You are done for today</h1>
     <p class="lede" style="margin:0 auto">
-      You have checked {{ done_total | thousands }} of your
-      {{ target | thousands }} words. Your next list arrives by email on the
-      next day you chose.
+      {{ WORDS_PER_DAY }} more arrive by email on the next day you chose.
+      There is no finish line — keep going as long as you like.
     </p>
 
     <div class="stat-strip" style="margin-top:32px; text-align:left">
       <div class="stat">
         <span class="n">{{ done_total | thousands }}</span>
-        <span class="k">words checked</span>
+        <span class="k">words you have checked</span>
       </div>
       <div class="stat">
-        <span class="n">{{ (target - done_total) | thousands if target > done_total else 0 }}</span>
-        <span class="k">left to check</span>
+        <span class="n">{{ language_confirmed | thousands }}</span>
+        <span class="k">confirmed in {{ language_name }}</span>
       </div>
       <div class="stat">
-        <span class="n">{{ '%.0f' % (done_total / target * 100 if target else 0) }}%</span>
-        <span class="k">complete</span>
+        <span class="n">{{ WORDS_PER_DAY }}</span>
+        <span class="k">in your next email</span>
       </div>
     </div>
 
     <p style="margin-top:30px">
       <a class="btn ghost" href="{{ url_for('main.champions') }}">See the leaderboard</a>
+    </p>
+    <p class="hint" style="margin-top:20px">
+      Need different days, or a break?
+      <a href="{{ url_for('main.settings', token=token) }}">Change your
+      settings</a>.
     </p>
   </div>
 </section>

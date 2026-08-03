@@ -6,7 +6,7 @@ from flask import Flask
 
 from .config import (ALL_LANGUAGES, DAY_NAMES, INSTANCE_DIR, LANGUAGES,
                      OTHER_LANGUAGES, TIME_WINDOWS, Config)
-from .models import db
+from .models import db, ensure_columns
 from .tiers import VOTES_TO_SETTLE
 
 
@@ -65,6 +65,9 @@ def create_app(config_object=Config):
                 conn.exec_driver_sql("PRAGMA journal_mode=WAL")
 
         db.create_all()
+        added = ensure_columns()
+        if added:
+            app.logger.info("added columns: %s", ", ".join(added))
 
     @app.context_processor
     def inject_globals():

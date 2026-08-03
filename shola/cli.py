@@ -160,6 +160,10 @@ def send_daily(window, dry_run, force):
     query = Volunteer.query.filter(Volunteer.active.is_(True))
     if window != "all":
         query = query.filter(Volunteer.time_window.in_([window, "anytime"]))
+    # A pause has an end date and clears itself, so it is filtered here rather
+    # than by flipping `active` and hoping someone remembers to flip it back.
+    query = query.filter(db.or_(Volunteer.paused_until.is_(None),
+                                Volunteer.paused_until <= today))
 
     sent = skipped = failed = 0
     for volunteer in query.all():
@@ -173,7 +177,11 @@ def send_daily(window, dry_run, force):
 
         # Lease today's words first: nothing is reserved in advance any more.
         top_up(volunteer, today=today)
-        due = volunteer.pending_today(today).limit(400).all()
+        # One send is one send. A backlog from missed days does not become a
+        # hundred-word email; the rest wait for the next one, or go back to the
+        # queue when the lease expires.
+        due = (volunteer.pending_today(today)
+               .limit(current_app.config["WORDS_PER_DAY"]).all())
         if not due:
             skipped += 1
             continue

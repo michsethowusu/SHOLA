@@ -29,11 +29,13 @@
     <div style="margin-top:44px">
       <h2>Volunteers we still need</h2>
       <p class="muted">
-        To finish the group each language is on within a year. We assume only
-        {{ (completion_rate * 100) | round | int }}% of volunteers complete
-        their {{ words_per_volunteer | thousands }} words and that the rest
-        contribute nothing, so these numbers are deliberately cautious — meeting
-        them should put us ahead of schedule, not behind.
+        To finish the group each language is on within a year. Nobody signs up
+        for a fixed number of words — people keep going for as long as they
+        want — so this is a planning figure, not a promise anyone made: we
+        assume {{ (completion_rate * 100) | round | int }}% of volunteers stay
+        a year at {{ words_per_day }} words a day and that the rest contribute
+        nothing. Deliberately cautious — meeting these numbers should put us
+        ahead of schedule, not behind.
       </p>
 
       <div class="stat-strip" style="margin-top:18px">
@@ -85,10 +87,11 @@
         </table>
       </div>
       <p class="hint" style="margin-top:10px">
-        Each completing volunteer covers {{ words_per_volunteer | thousands }}
-        answers a year, so we plan on
+        {{ words_per_day }} words a day is
+        {{ words_per_volunteer | thousands }} answers over a year, so we plan on
         {{ (words_per_volunteer * completion_rate) | round | int }} per person
-        recruited.
+        recruited. Volunteers who pause or choose fewer days do less; that is
+        what the {{ (completion_rate * 100) | round | int }}% is for.
       </p>
     </div>
 
