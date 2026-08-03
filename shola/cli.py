@@ -172,8 +172,7 @@ def send_daily(window, dry_run, force):
             continue
 
         # Lease today's words first: nothing is reserved in advance any more.
-        top_up(volunteer, target=current_app.config["WORDS_PER_VOLUNTEER"],
-               today=today)
+        top_up(volunteer, today=today)
         due = volunteer.pending_today(today).limit(400).all()
         if not due:
             skipped += 1

@@ -36,6 +36,7 @@ def make_app():
         SECRET_KEY = "test"
         SQLALCHEMY_DATABASE_URI = f"sqlite:///{tmp}/t.db"
         WORDS_PER_VOLUNTEER = 20
+        WORDS_PER_DAY = 4          # small, so a 30-word fixture is not drained
         SMTP_USER = "x@example.com"
         SMTP_PASSWORD = "y"
 
@@ -291,13 +292,16 @@ def main():
         ok &= check("they leave the volunteer queue",
                     stuck.pending_today().count() == 0)
 
-    print("\ndaily quota still follows the days they chose")
+    print("\nevery send is the same length, whatever days they chose")
     with app.app_context():
         everyday = add_volunteer("o@example.com")
         twodays = add_volunteer("p@example.com", days="0,3")
         q1, q2 = daily_quota(everyday), daily_quota(twodays)
-        ok &= check("fewer days means a bigger daily list", q2 > q1,
+        ok &= check("the days chosen do not change the list length", q1 == q2,
                     f"7-day={q1}, 2-day={q2}")
+        ok &= check("and it is the configured length",
+                    q1 == app.config["WORDS_PER_DAY"],
+                    f"{q1} vs {app.config['WORDS_PER_DAY']}")
 
     print("\nrecruitment target is conservative")
     with app.app_context():

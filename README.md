@@ -10,7 +10,7 @@ languages**.
 Machine translation produced three candidate translations for each word. Much of
 it is good, some is word-for-word and no speaker would say it, and some is
 wrong. Software cannot tell the difference; a speaker can, in a couple of
-seconds. SHOLA sends each volunteer a handful of words a day by email and
+seconds. SHOLA sends each volunteer ten words a day by email and
 records the wording they would actually use.
 
 The words come from [GhanaNouns](https://github.com/GhanaNLP/GhanaNouns):
@@ -289,6 +289,7 @@ SHOLA_SMTP_USER       the sending address the app password belongs to (michseth@
 SHOLA_SMTP_PASSWORD   a Gmail app password, not the account password
 SHOLA_MAIL_FROM_NAME  SHOLA
 SHOLA_OLD_HOSTS       hostnames to 301 to SHOLA_SITE_URL (default shola.inkika.org)
+SHOLA_WORDS_PER_DAY   words in one send (default 10)
 ```
 
 On first boot the container fetches the published dataset and imports it —

@@ -210,23 +210,22 @@ def lease_words(volunteer, count, today=None):
     return given
 
 
-def daily_quota(volunteer, target=None, horizon_days=365):
-    """How many words a volunteer should see on one of their days.
+def daily_quota(volunteer=None):
+    """How many words go out in one send.
 
-    Still the brief's arithmetic - an annual goal spread over the days they
-    chose - but now it sets the size of each day's lease rather than carving up
-    a fixed list at signup.
+    A flat number, not an annual goal divided by the days someone chose. Two
+    minutes of work is two minutes whether you signed up for two days a week
+    or seven, and dividing a yearly target gave a volunteer with fewer days a
+    longer list for no reason they would recognise.
     """
-    target = target or 1000
-    days_a_week = len(volunteer.day_numbers) or 7
-    days_a_year = max(1, round(horizon_days * days_a_week / 7))
-    return max(1, -(-target // days_a_year))      # ceiling division
+    from flask import current_app
+    return max(1, current_app.config["WORDS_PER_DAY"])
 
 
-def top_up(volunteer, target=None, today=None):
+def top_up(volunteer, today=None):
     """Bring a volunteer's outstanding words up to their daily quota."""
     today = today or date.today()
-    quota = daily_quota(volunteer, target=target)
+    quota = daily_quota(volunteer)
     pending = volunteer.pending_today(today).count()
     return lease_words(volunteer, quota - pending, today=today)
 

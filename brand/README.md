@@ -141,8 +141,8 @@ Add the tag for the language you are posting in — `#Twi`, `#Ewe`, `#Ga`,
 
 **Does it cost anything?** No, and it never will.
 
-**How much time?** Around two minutes on the days you choose. About 1,000 words
-over a year.
+**How much time?** Around two minutes on the days you choose — ten words each
+time.
 
 **What if I miss a day?** Nothing is lost. Those words come back in your next
 email.

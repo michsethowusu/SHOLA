@@ -328,7 +328,7 @@ def verify():
     session["token"] = token
     session.pop("signup_email", None)
 
-    given = top_up(volunteer, target=current_app.config["WORDS_PER_VOLUNTEER"])
+    given = top_up(volunteer)
     return render_template("joined.html", volunteer=volunteer, assigned=given,
                            token=token)
 
@@ -370,7 +370,7 @@ def resend():
             # Someone asking for a link has time to spare. If they have
             # already cleared today's list, give them a fresh one rather than
             # an email announcing zero words.
-            top_up(volunteer, target=current_app.config["WORDS_PER_VOLUNTEER"])
+            top_up(volunteer)
             words = [a.word for a in volunteer.pending_today().limit(400)]
             if words:
                 message = build_daily_email(volunteer, words)
@@ -439,7 +439,7 @@ def evaluate(token):
     session["token"] = token
 
     # Lease whatever the project needs right now, up to today's quota.
-    top_up(volunteer, target=current_app.config["WORDS_PER_VOLUNTEER"])
+    top_up(volunteer)
 
     queue, working_ahead = queue_payload(volunteer)
     remaining = (volunteer.upcoming().count() if working_ahead

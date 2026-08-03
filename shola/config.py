@@ -117,9 +117,17 @@ class Config:
         "SHOLA_DATABASE_URL", f"sqlite:///{INSTANCE_DIR / 'shola.db'}")
     SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
 
-    # How many words each volunteer commits to, and over how long.
-    WORDS_PER_VOLUNTEER = int(os.environ.get("SHOLA_WORDS_PER_VOLUNTEER", 1000))
+    # The length of one day's list. This is the primary number: what a
+    # volunteer experiences is the size of today's email, so the annual
+    # commitment follows from it rather than the other way round.
+    WORDS_PER_DAY = int(os.environ.get("SHOLA_WORDS_PER_DAY", 10))
     COMMITMENT_DAYS = int(os.environ.get("SHOLA_COMMITMENT_DAYS", 365))
+
+    # What one volunteer covers in a year, used only by the recruitment
+    # forecast. Derived so it cannot quietly disagree with the emails we
+    # actually send; set SHOLA_WORDS_PER_VOLUNTEER to override.
+    WORDS_PER_VOLUNTEER = (int(os.environ.get("SHOLA_WORDS_PER_VOLUNTEER", 0))
+                           or WORDS_PER_DAY * COMMITMENT_DAYS)
 
     # Share of volunteers expected to finish their full commitment. Recruitment
     # targets assume the rest contribute nothing, which is deliberately

@@ -1,22 +1,21 @@
 {% if total == 1 -%}
-One {{ language_name }} word for you, {{ first }}.
+One word for you, {{ first }}
 {%- else -%}
-{{ total }} {{ language_name }} words for you, {{ first }}.
+{{ total }} words for you, {{ first }}
 {%- endif %}
 
 {% if overdue_count and overdue_count >= total -%}
 These have been waiting since your last few days - nothing was lost.
-{%- elif overdue_count -%}
+{% elif overdue_count -%}
 Includes {{ overdue_count }} from days you missed.
-{%- else -%}
-Tap the wording you would use. It takes about two minutes.
-{%- endif %}
+{% endif -%}
+Tap the link to start translating them to {{ language_name }}. It takes about two minutes.
 
 TODAY'S WORDS
 {% for word in words %}  - {{ word.phrase }}
 {% endfor %}{% if more %}  ...and {{ more }} more
 {% endif %}
-Check these words:
+Start translating:
 {{ link }}
 
 No time today? Leave it. These words come back in your next email.
