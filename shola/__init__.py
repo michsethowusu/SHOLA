@@ -27,6 +27,20 @@ def create_app(config_object=Config):
     from .views import main
     app.register_blueprint(main)
 
+    @app.before_request
+    def canonical_host():
+        """Send a retired hostname to the one the site answers on now.
+
+        301 rather than 302: the old address is not coming back, and search
+        engines and browsers should stop asking for it.
+        """
+        from flask import redirect, request
+        host = (request.host or "").split(":")[0].lower()
+        if host and host in app.config["OLD_HOSTS"]:
+            target = (app.config["SITE_URL"].rstrip("/")
+                      + request.full_path.rstrip("?"))
+            return redirect(target, code=301)
+
     from .cli import shola_cli
     app.cli.add_command(shola_cli)
 

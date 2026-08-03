@@ -1,8 +1,8 @@
 # SHOLA — Share Your Language
 
-**Live: [shola.inkika.org](https://shola.inkika.org)** — [sign
-up](https://shola.inkika.org/join) · [champions](https://shola.inkika.org/champions)
-· [progress](https://shola.inkika.org/stats) · [API](https://shola.inkika.org/api)
+**Live: [sholaproject.org](https://sholaproject.org)** — [sign
+up](https://sholaproject.org/join) · [champions](https://sholaproject.org/champions)
+· [progress](https://sholaproject.org/stats) · [API](https://sholaproject.org/api)
 
 A volunteer app for confirming translations of everyday words in **88 Ghanaian
 languages**.
@@ -188,7 +188,7 @@ flask --app wsgi shola export --language twi --min-votes 2 --out twi-agreed.csv
 flask --app wsgi shola stats
 ```
 
-Or over HTTP — see **[/api](https://shola.inkika.org/api)** for the documented
+Or over HTTP — see **[/api](https://sholaproject.org/api)** for the documented
 endpoint:
 
 ```
@@ -282,12 +282,13 @@ Environment:
 
 ```
 SHOLA_SECRET_KEY      generate: python3 -c "import secrets;print(secrets.token_urlsafe(48))"
-SHOLA_SITE_URL        https://shola.inkika.org
+SHOLA_SITE_URL        https://sholaproject.org
 SHOLA_SMTP_HOST       smtp.gmail.com
 SHOLA_SMTP_PORT       587
 SHOLA_SMTP_USER       the sending Gmail address
-SHOLA_SMTP_PASSWORD   a Gmail app password, set in the Coolify UI rather than over the API
+SHOLA_SMTP_PASSWORD   a Gmail app password, not the account password
 SHOLA_MAIL_FROM_NAME  SHOLA
+SHOLA_OLD_HOSTS       hostnames to 301 to SHOLA_SITE_URL (default shola.inkika.org)
 ```
 
 On first boot the container fetches the published dataset and imports it —
@@ -340,29 +341,43 @@ well if the data matters.
 
 ## The live deployment
 
-[shola.inkika.org](https://shola.inkika.org) runs on the Coolify VPS:
+[sholaproject.org](https://sholaproject.org) runs on the Coolify VPS
+(`82.29.179.121`), built from this repository:
 
 | | |
 |---|---|
-| Code | `/mnt/volume_d2wey28/projects/shola` |
-| Service | `shola.service` — gunicorn, 3 workers, `127.0.0.1:8110` |
-| Public address | Cloudflare named tunnel `ghana-tts`, ingress `shola.inkika.org` → `localhost:8110` |
-| Database | SQLite at `instance/shola.db`, all 478,822 words loaded |
-| Email | Gmail SMTP as `michseth@ghananlp.org`, port 587 STARTTLS |
-| Schedule | cron at 07:00 / 13:00 / 18:00 for the three time windows, plus Monday 03:30 redistribute |
+| App | Coolify application `fj2jijjl9gavv683vcfuhuep`, dockerfile build pack |
+| Server | gunicorn, 3 gthread workers, port 8000 in the container |
+| Public address | Cloudflare proxied A record → the VPS; Coolify terminates and routes by hostname |
+| Database | SQLite on a persistent volume at `instance/shola.db`, all 478,822 words loaded |
+| Email | Gmail SMTP as `michsethowusu@gmail.com`, port 587 STARTTLS |
+| Schedule | Coolify scheduled tasks: `send-daily` at 07:00 / 13:00 / 18:00, `release-leases` 04:00, `redistribute-missed` Monday 03:30, `backup` 01:15 |
+
+Deploy with `COOLIFY_TOKEN=... ./deploy.sh`: it pushes to GitHub, triggers the
+build, and waits for the new commit to appear in `/healthz`. Waiting for a 200
+is not enough — the old container answers 200 throughout a rolling update, which
+reported success early twice before the commit check was added.
+
+`/healthz` reports the serving commit and whether SMTP is configured:
 
 ```bash
-sudo systemctl status shola          # is it up
-sudo journalctl -u shola -f          # what it is doing
-tail -f /mnt/volume_d2wey28/projects/shola/mail.log   # what cron sent
+curl -s https://sholaproject.org/healthz
+# {"build":"34c3bef","email":true,"ok":true,"today":"2026-08-03"}
 ```
 
-Adding a hostname to the tunnel means editing `~/.cloudflared/config.yml` (new
-rules go **above** the `http_status:404` catch-all), running `cloudflared tunnel
-route dns ghana-tts <hostname>`, then restarting the tunnel. Note that
-cloudflared only reads its config at startup, and that box has had stray
-hand-started `cloudflared` processes outside systemd — if a config change
-appears to do nothing, check `pgrep -af cloudflared` for a process no unit owns.
+### Moving to another hostname
+
+1. Point the new name at the VPS with a proxied Cloudflare A record.
+2. Add it to the application's domains in Coolify, keeping the old one so it
+   still resolves.
+3. Set `SHOLA_SITE_URL` to the new address, and put the old hostname in
+   `SHOLA_OLD_HOSTS` (comma-separated).
+
+The app 301s any request arriving on a hostname in `SHOLA_OLD_HOSTS`, so old
+links and anything already printed keep working. Only those hostnames are
+redirected, not everything that is not canonical: Coolify's health check
+arrives with a container hostname, and redirecting that would fail every
+deploy.
 
 ## Notes for whoever runs this
 
@@ -382,7 +397,7 @@ appears to do nothing, check `pgrep -af cloudflared` for a process no unit owns.
 ## Media kit
 
 Artwork and captions for recruiting volunteers live in `brand/`, are served at
-[shola.inkika.org/brand](https://shola.inkika.org/brand), and are published as a
+[sholaproject.org/brand](https://sholaproject.org/brand), and are published as a
 [release asset](https://github.com/michsethowusu/SHOLA/releases/latest/download/shola-brand-kit.zip).
 
 ```bash

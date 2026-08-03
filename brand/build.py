@@ -23,7 +23,7 @@ HERE = Path(__file__).resolve().parent
 # Written into static so the site can hand them out directly: an
 # influencer should not need a GitHub account to get a logo.
 OUT = HERE.parent / "shola" / "static" / "brand"
-SITE = "shola.inkika.org"
+SITE = os.environ.get("SHOLA_SITE_HOST", "sholaproject.org")
 
 # Every Ghanaian language is open, so the artwork counts them rather than
 # naming a few — naming four read as a promise that the rest were shut out.

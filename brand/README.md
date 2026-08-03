@@ -4,8 +4,8 @@ Everything needed to post about SHOLA and send volunteers our way.
 
 **Download it all:**
 [shola-brand-kit.zip](https://github.com/michsethowusu/SHOLA/releases/latest/download/shola-brand-kit.zip)
-· **Web page:** [shola.inkika.org/brand](https://shola.inkika.org/brand)
-· **Link to share:** `shola.inkika.org`
+· **Web page:** [sholaproject.org/brand](https://sholaproject.org/brand)
+· **Link to share:** `sholaproject.org`
 
 Regenerate the artwork with `python3 brand/build.py`.
 
@@ -19,7 +19,7 @@ Two minutes a day. No app to install, no account, no password.
 
 ## The one thing to ask people to do
 
-**Go to shola.inkika.org and sign up in the language they speak best.**
+**Go to sholaproject.org and sign up in the language they speak best.**
 
 That is the whole call to action. No download, no form beyond name, email and
 which days suit them.
@@ -75,15 +75,15 @@ an O with a slash.
 Short, for WhatsApp Status and TikTok:
 
 > Your language, checked by the people who speak it. Two minutes a day.
-> shola.inkika.org
+> sholaproject.org
 
 > 88 Ghanaian languages, and yours is one of them. A few words a day helps
-> build accurate translations everyone can use. shola.inkika.org
+> build accurate translations everyone can use. sholaproject.org
 
 Ghanaian Pidgin, for a more casual audience:
 
 > You fit speak any Ghanaian language? Give am 2 minutes every day make we keep
-> your language alive. shola.inkika.org
+> your language alive. sholaproject.org
 
 Longer, for Instagram, Facebook or a YouTube description:
 
@@ -97,12 +97,12 @@ Longer, for Instagram, Facebook or a YouTube description:
 >
 > It takes two minutes. No app, no password.
 >
-> Sign up: shola.inkika.org
+> Sign up: sholaproject.org
 
 For a language nobody has started yet:
 
 > Nobody has added words in your language yet? Then you go be the first.
-> Whatever you type becomes the option others vote on. shola.inkika.org
+> Whatever you type becomes the option others vote on. sholaproject.org
 
 **Local-language captions:** we have deliberately not written these. Copy in a
 Ghanaian language should be written by a speaker, not translated by us —

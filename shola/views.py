@@ -144,19 +144,17 @@ def brand():
         ("wordmark-dark-1200x400.png", 1200, 400, "Logo, dark background"),
     ]
     n = len(current_app.config["ALL_LANGUAGES"])
+    site = current_app.config["SITE_HOST"]
     captions = [
-        ("Short", "Keep your language alive. Two minutes a day. "
-                  "shola.inkika.org"),
+        ("Short", f"Keep your language alive. Two minutes a day. {site}"),
         ("Short", f"{n} Ghanaian languages, and yours is one of them. A few "
                   "words a day helps build accurate translations everyone can "
-                  "use. shola.inkika.org"),
+                  f"use. {site}"),
         ("Pidgin", "You fit speak any Ghanaian language? Give am 2 minutes "
-                   "every day make we keep your language alive. "
-                   "shola.inkika.org"),
+                   f"every day make we keep your language alive. {site}"),
         ("Starting a language", "Nobody has added words in your language yet? "
                                "Then you go be the first. Whatever you type "
-                               "becomes the option others vote on. "
-                               "shola.inkika.org"),
+                               f"becomes the option others vote on. {site}"),
     ]
     palette = [
         ("Kente red", "#c0392b", "The Ɔ, buttons, links"),

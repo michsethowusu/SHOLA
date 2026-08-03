@@ -11,7 +11,7 @@ set -euo pipefail
 
 APP_UUID="${SHOLA_APP_UUID:-fj2jijjl9gavv683vcfuhuep}"
 COOLIFY_URL="${COOLIFY_URL:-http://82.29.179.121:8000}"
-SITE="${SHOLA_SITE:-https://shola.inkika.org}"
+SITE="${SHOLA_SITE:-https://sholaproject.org}"
 TOKEN="${COOLIFY_TOKEN:-}"
 
 if [ -z "$TOKEN" ]; then

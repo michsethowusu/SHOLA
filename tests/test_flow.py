@@ -563,6 +563,20 @@ def main():
                 f"{VOTES_TO_SETTLE} or\n      more speakers".encode()
                 in r.data or b"more speakers independently chose" in r.data)
 
+    print("\nthe retired hostname redirects to the current one")
+    old_host = app.config["OLD_HOSTS"][0]
+    r = app.test_client().get("/stats?x=1",
+                              headers={"Host": old_host})
+    ok &= check("old hostname gets a permanent redirect",
+                r.status_code == 301, f"HTTP {r.status_code}")
+    ok &= check("to the same path on the canonical host",
+                r.headers.get("Location", "").startswith(
+                    app.config["SITE_URL"].rstrip("/") + "/stats?x=1"),
+                r.headers.get("Location", ""))
+    r = app.test_client().get("/healthz", headers={"Host": "shola-container"})
+    ok &= check("an unknown hostname is served, not redirected",
+                r.status_code == 200, f"HTTP {r.status_code}")
+
     print("\nemail rendering")
     with app.app_context():
         from shola.mailer import build_daily_email, daily_link, read_token

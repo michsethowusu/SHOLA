@@ -96,6 +96,20 @@ def _build_id():
         return "unknown"
 
 
+def _old_hosts(site_host):
+    """Hostnames to redirect away from, never including the current one.
+
+    A class body cannot read its own names from inside a comprehension, and
+    filtering matters: redirecting a host to itself is an infinite loop, and
+    SHOLA_SITE_URL and SHOLA_OLD_HOSTS get changed by hand at different
+    moments during a move.
+    """
+    current = site_host.split(":")[0].lower()
+    listed = os.environ.get("SHOLA_OLD_HOSTS", "shola.inkika.org").split(",")
+    return [h for h in (x.strip().lower() for x in listed)
+            if h and h != current]
+
+
 class Config:
     SECRET_KEY = os.environ.get("SHOLA_SECRET_KEY", "dev-only-change-me")
     BUILD = _build_id()
@@ -115,6 +129,20 @@ class Config:
 
     # Public base URL used in emails.
     SITE_URL = os.environ.get("SHOLA_SITE_URL", "http://localhost:5000")
+
+    # The bare hostname, for copy and captions where a full URL would read
+    # badly. Derived so a move needs only SHOLA_SITE_URL changed.
+    SITE_HOST = SITE_URL.split("//", 1)[-1].rstrip("/")
+
+    # Hostnames the site used to answer on. Requests arriving on one are
+    # redirected to SITE_URL, so old links and printed media keep working.
+    # Listed explicitly rather than redirecting anything that is not the
+    # canonical host: Coolify's health check arrives with a container hostname,
+    # and redirecting that would fail every deploy.
+    # The canonical host is filtered out even if it is listed: redirecting a
+    # host to itself is an infinite loop, and the two settings are changed by
+    # hand at different moments during a move.
+    OLD_HOSTS = _old_hosts(SITE_HOST)
 
     # Gmail SMTP. Use a Google app password, not the account password.
     SMTP_HOST = os.environ.get("SHOLA_SMTP_HOST", "smtp.gmail.com")
