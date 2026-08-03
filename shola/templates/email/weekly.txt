@@ -4,7 +4,7 @@ The last few emails went unanswered, which usually means daily is the wrong
 shape for the week rather than anything else. Nothing is owed and nothing was
 lost - the words went back to other speakers.
 
-Switch to one email a week, with {{ weekly_size }} words in it:
+Switch to one email a week:
 {{ weekly_link }}
 
 {% if words %}Or carry on as you are - here is what is waiting:

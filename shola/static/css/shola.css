@@ -358,7 +358,7 @@ body.focus .topbar { position: static; }
 }
 .hint { font-size: .88rem; color: var(--ink-faint); margin: 4px 0 9px; }
 
-input[type=text], input[type=email], textarea, select {
+input[type=text], input[type=email], input[type=number], textarea, select {
   width: 100%;
   min-height: 52px;
   padding: 13px 15px;

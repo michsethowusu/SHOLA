@@ -125,7 +125,6 @@ def build_weekly_offer_email(volunteer, words):
         "link": f"{base}/w/{token}",
         "weekly_link": f"{base}/w/{token}/weekly",
         "settings_link": settings_link(volunteer),
-        "weekly_size": current_app.config["WORDS_PER_WEEKLY_SEND"],
         "language_name": current_app.config["ALL_LANGUAGES"][
             volunteer.language]["name"],
     }

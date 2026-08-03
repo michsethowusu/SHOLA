@@ -40,9 +40,7 @@
       <div class="field">
         <span class="label">Which days do you want words?</span>
         <p class="hint">Change these whenever your week changes. Leave them all
-           unticked to receive words any day. Pick one day and each email
-           carries {{ WORDS_PER_WEEKLY_SEND }} words instead of
-           {{ WORDS_PER_DAY }}.</p>
+           unticked to receive words any day.</p>
         <div class="day-row">
           {% for i in range(7) %}
             <label class="day">
@@ -52,6 +50,16 @@
             </label>
           {% endfor %}
         </div>
+      </div>
+
+      <div class="field">
+        <label class="label" for="words_per_send">How many words in each
+          email?</label>
+        <p class="hint">Your call. Fewer for a quick look, more if you have
+           the time.</p>
+        <input type="number" id="words_per_send" name="words_per_send"
+               min="1" max="{{ WORDS_PER_SEND_MAX }}" step="1"
+               value="{{ send_size }}" style="max-width:140px">
       </div>
 
       <div class="field">

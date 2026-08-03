@@ -663,23 +663,67 @@ def main():
                          & set(db.session.get(Assignment, i).word_id
                                for i in held)))
 
-    print("\na light schedule gets a longer list")
+    print("\nhow many words a send carries is the volunteer's choice")
     with app.app_context():
+        # Enough open words that the queue, not the setting, is not the limit.
+        for k in range(120):
+            db.session.add(Word(phrase=f"choice word {k}",
+                                occurrences=800 - k, frequency=800 - k))
+        db.session.commit()
+        assign_tiers()
         every_day = add_volunteer("daily@example.com")
-        twice = add_volunteer("twice@example.com", days="0,3")
         weekly = add_volunteer("weekly@example.com", days="5")
-        ok &= check("seven days a week gets the daily size",
+        ok &= check("the default applies until they choose",
                     daily_quota(every_day) == app.config["WORDS_PER_DAY"],
                     str(daily_quota(every_day)))
-        ok &= check("twice a week still gets the daily size",
-                    daily_quota(twice) == app.config["WORDS_PER_DAY"],
-                    str(daily_quota(twice)))
-        ok &= check("once a week gets the longer list",
-                    daily_quota(weekly) == app.config["WORDS_PER_WEEKLY_SEND"],
+        ok &= check("including for a once-a-week schedule",
+                    daily_quota(weekly) == app.config["WORDS_PER_DAY"],
+                    str(daily_quota(weekly)))
+        weekly.words_per_send = 25
+        db.session.commit()
+        ok &= check("their own number is used", daily_quota(weekly) == 25,
                     str(daily_quota(weekly)))
         n = top_up(weekly)
-        ok &= check("and that is what is actually leased",
-                    n == app.config["WORDS_PER_WEEKLY_SEND"], f"leased {n}")
+        ok &= check("and that is what is actually leased", n == 25,
+                    f"leased {n}")
+        # Bounds exist so a stray keystroke cannot lease thousands of words.
+        weekly.words_per_send = 100000
+        db.session.commit()
+        ok &= check("an absurd number is capped",
+                    daily_quota(weekly) == app.config["WORDS_PER_SEND_MAX"],
+                    str(daily_quota(weekly)))
+        weekly.words_per_send = None
+        db.session.commit()
+
+    print("\nthe settings form sets it, and refuses nonsense")
+    with app.app_context():
+        chooser = add_volunteer("chooser@example.com")
+        cid = chooser.id
+        with app.test_request_context():
+            from shola.mailer import make_token as mt5
+            ctok = mt5(chooser)
+    cc = app.test_client()
+    cc.post(f"/w/{ctok}/settings",
+            data={"action": "save", "words_per_send": "30",
+                  "time_window": "anytime"}, follow_redirects=True)
+    with app.app_context():
+        ok &= check("a chosen number is saved",
+                    db.session.get(Volunteer, cid).words_per_send == 30,
+                    str(db.session.get(Volunteer, cid).words_per_send))
+    r = cc.post(f"/w/{ctok}/settings",
+                data={"action": "save", "words_per_send": "9999",
+                      "time_window": "anytime"}, follow_redirects=True)
+    with app.app_context():
+        ok &= check("an out-of-range number is refused, not silently changed",
+                    db.session.get(Volunteer, cid).words_per_send == 30,
+                    str(db.session.get(Volunteer, cid).words_per_send))
+    ok &= check("and they are told why", b"Choose between" in r.data)
+    r = cc.post(f"/w/{ctok}/settings",
+                data={"action": "save", "words_per_send": "lots",
+                      "time_window": "anytime"}, follow_redirects=True)
+    with app.app_context():
+        ok &= check("so is nonsense",
+                    db.session.get(Volunteer, cid).words_per_send == 30)
 
     print("\nthree unanswered sends offers a lighter schedule")
     with app.app_context():
@@ -758,8 +802,8 @@ def main():
         days, quota, left = (v.day_numbers, daily_quota(v), v.missed_in_a_row)
     ok &= check("the link switches them to one day a week", len(days) == 1,
                 str(days))
-    ok &= check("their send is the longer one now",
-                quota == app.config["WORDS_PER_WEEKLY_SEND"], str(quota))
+    ok &= check("the size of their send is untouched by the change",
+                quota == app.config["WORDS_PER_DAY"], str(quota))
     ok &= check("and the miss count is cleared", left == 0, str(left))
     ok &= check("landing on settings with confirmation",
                 b"one email a week" in r.data)

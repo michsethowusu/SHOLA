@@ -213,17 +213,16 @@ def lease_words(volunteer, count, today=None):
 def daily_quota(volunteer=None):
     """How many words go out in one send.
 
-    A flat number per send, not an annual goal divided by the days someone
-    chose. The one exception is a schedule of once a week or less: a single
-    email a week carrying ten words is barely worth opening, so those sends
-    are longer.
+    Theirs to decide. The configured default applies until they choose, and
+    how often they are sent words makes no difference to how many they get -
+    the two are separate choices and it is not for us to couple them.
     """
     from flask import current_app
     cfg = current_app.config
-    sends_a_week = len(volunteer.day_numbers) if volunteer else 7
-    if volunteer and sends_a_week and sends_a_week < 2:
-        return max(1, cfg["WORDS_PER_WEEKLY_SEND"])
-    return max(1, cfg["WORDS_PER_DAY"])
+    chosen = getattr(volunteer, "words_per_send", None) if volunteer else None
+    wanted = chosen or cfg["WORDS_PER_DAY"]
+    return max(cfg["WORDS_PER_SEND_MIN"],
+               min(int(wanted), cfg["WORDS_PER_SEND_MAX"]))
 
 
 def release_stale(volunteer, today=None):

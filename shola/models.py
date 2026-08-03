@@ -35,6 +35,10 @@ class Volunteer(db.Model):
     # own link, so it is not a deletion.
     active = db.Column(db.Boolean, default=True, nullable=False)
 
+    # How many words they want in one send. NULL means they have not chosen,
+    # so the configured default applies.
+    words_per_send = db.Column(db.Integer)
+
     # A pause with an end date. Sending resumes by itself when it passes, so a
     # break does not depend on remembering to come back.
     paused_until = db.Column(db.Date)
@@ -300,7 +304,8 @@ def ensure_columns():
     wanted = {
         "volunteers": {"paused_until": "DATE",
                        "missed_in_a_row": "INTEGER NOT NULL DEFAULT 0",
-                       "nudged_on": "DATE"},
+                       "nudged_on": "DATE",
+                       "words_per_send": "INTEGER"},
     }
     inspector = inspect(db.engine)
     added = []

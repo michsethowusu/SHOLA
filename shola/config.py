@@ -120,12 +120,15 @@ class Config:
     # The length of one day's list. This is the primary number: what a
     # volunteer experiences is the size of today's email, so the annual
     # commitment follows from it rather than the other way round.
+    # The default length of one send. Volunteers can set their own; this is
+    # only what they get until they do.
     WORDS_PER_DAY = int(os.environ.get("SHOLA_WORDS_PER_DAY", 10))
 
-    # Someone who only wants words once a week gets a longer list, so a light
-    # schedule is still worth their while and worth ours.
-    WORDS_PER_WEEKLY_SEND = int(os.environ.get("SHOLA_WORDS_PER_WEEKLY_SEND",
-                                               20))
+    # Bounds on what a volunteer may choose for themselves. The ceiling is not
+    # a judgement about how much anyone can do - it stops a stray keystroke
+    # leasing thousands of words that then sit unanswered for ten days.
+    WORDS_PER_SEND_MIN = int(os.environ.get("SHOLA_WORDS_PER_SEND_MIN", 1))
+    WORDS_PER_SEND_MAX = int(os.environ.get("SHOLA_WORDS_PER_SEND_MAX", 100))
 
     # Sends that came and went with no answer before we suggest a lighter
     # schedule. Three is enough to tell a busy week from a wrong schedule.
