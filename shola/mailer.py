@@ -107,6 +107,34 @@ def build_daily_email(volunteer, words, overdue_count=0):
     return subject, text, html
 
 
+def build_weekly_offer_email(volunteer, words):
+    """Offer a lighter schedule after several sends went unanswered.
+
+    Sent once. The tone matters: nothing is owed, nothing was lost, and the
+    likeliest explanation is that daily is the wrong shape for their week - not
+    that they have failed at anything.
+    """
+    base = current_app.config["SITE_URL"].rstrip("/")
+    token = make_token(volunteer)
+    first = volunteer.name.split()[0] if volunteer.name else "there"
+    ctx = {
+        "first": first,
+        "words": words[:MAX_WORDS_IN_EMAIL],
+        "more": max(0, len(words) - MAX_WORDS_IN_EMAIL),
+        "total": len(words),
+        "link": f"{base}/w/{token}",
+        "weekly_link": f"{base}/w/{token}/weekly",
+        "settings_link": settings_link(volunteer),
+        "weekly_size": current_app.config["WORDS_PER_WEEKLY_SEND"],
+        "language_name": current_app.config["ALL_LANGUAGES"][
+            volunteer.language]["name"],
+    }
+    subject = f"Would once a week suit you better, {first}?"
+    return (subject,
+            render_template("email/weekly.txt", **ctx),
+            render_template("email/weekly.html", **ctx))
+
+
 def send(to_email, subject, text, html):
     """Send one message. Raises on failure so the caller can count it."""
     cfg = current_app.config

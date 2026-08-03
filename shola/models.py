@@ -39,6 +39,12 @@ class Volunteer(db.Model):
     # break does not depend on remembering to come back.
     paused_until = db.Column(db.Date)
 
+    # Consecutive sends that went unanswered. Not a penalty - words are never
+    # held against anyone - just the signal that their schedule is wrong for
+    # them, so we can offer a lighter one.
+    missed_in_a_row = db.Column(db.Integer, default=0, nullable=False)
+    nudged_on = db.Column(db.Date)
+
     @property
     def paused(self):
         """True while a pause is running."""
@@ -71,8 +77,10 @@ class Volunteer(db.Model):
     def pending_today(self, today=None):
         """Assignments due on or before today that still have no verdict.
 
-        Overdue work is included deliberately: a missed day carries forward so
-        nothing is quietly dropped from the volunteer's 1000.
+        Earlier days are included so a list opened just after midnight, or a
+        link followed hours late, still works. They are not a backlog: a send
+        hands anything from an earlier day back to the queue first, so nothing
+        accumulates against anyone.
         """
         today = today or date.today()
         return (self.assignments
@@ -290,7 +298,9 @@ def ensure_columns():
     from sqlalchemy import inspect, text
 
     wanted = {
-        "volunteers": {"paused_until": "DATE"},
+        "volunteers": {"paused_until": "DATE",
+                       "missed_in_a_row": "INTEGER NOT NULL DEFAULT 0",
+                       "nudged_on": "DATE"},
     }
     inspector = inspect(db.engine)
     added = []

@@ -46,12 +46,21 @@ clears itself, so a break does not depend on remembering to come back, and
 stopping is reversible from the same link - which is why
 `volunteer_from_token(require_active=False)` exists.
 
-**Missing days costs nothing.** Words stay leased to that volunteer and reappear
-in their next email; `release-leases` returns anything unanswered after
-`LEASE_DAYS` to the queue for another speaker, so an absence never stalls a
-word. One send is never more than a day's worth - a backlog waits or expires
-rather than arriving as one crushing email. Stopping releases outstanding words
+**Missing days costs nothing, and builds no backlog.** A send hands back
+anything from an earlier day and leases a fresh list, so a missed day is not a
+debt collected later - the words go straight to other speakers, and the next
+email is whatever the project needs then. Stopping releases outstanding words
 immediately.
+
+**A wrong schedule gets a suggestion, not a nag.** After
+`SHOLA_MISSES_BEFORE_NUDGE` sends go unanswered in a row, one email offers a
+lighter schedule with a link that switches them to a single day a week. Sent
+once, tracked by `nudged_on`. A miss only counts when an email actually went
+out, and answering anything resets the count.
+
+**A light schedule gets a longer list.** One send a week or less carries
+`SHOLA_WORDS_PER_WEEKLY_SEND` words instead of `SHOLA_WORDS_PER_DAY`, because a
+single weekly email with ten words in it is barely worth opening.
 
 ### There is no login
 
@@ -100,11 +109,17 @@ towards settling it in Ga.
 
 ### Missing days costs nothing
 
-Words that go unanswered stay pending and appear in the next email —
-`Volunteer.pending_today()` selects everything due *on or before* today. To stop
-a missed week turning into one crushing list, `shola redistribute-missed`
-re-dates overdue words across the volunteer's remaining days. Work is only ever
-moved, never dropped.
+A send calls `release_stale()` first, handing back anything from an earlier day,
+then leases a fresh list. Nothing accumulates: a missed day is not a debt to
+work through later, and the words go where they are useful — to another speaker
+— rather than sitting with someone who is busy. `pending_today()` still selects
+everything due on or before today, so a list opened just after midnight or a
+link followed hours late still works.
+
+There used to be a `redistribute-missed` command that re-dated overdue words
+across the coming weeks. It is gone: with nothing carried over there is nothing
+to re-date, and it had been scheduling words for days long after their lease
+would have handed them to someone else.
 
 ### When agreement never comes
 
@@ -188,7 +203,6 @@ run hourly.
 0 7  * * *  cd /srv/shola && .venv/bin/flask --app wsgi shola send-daily --window morning
 0 13 * * *  cd /srv/shola && .venv/bin/flask --app wsgi shola send-daily --window afternoon
 0 18 * * *  cd /srv/shola && .venv/bin/flask --app wsgi shola send-daily --window evening
-0 3  * * 1  cd /srv/shola && .venv/bin/flask --app wsgi shola redistribute-missed
 0 4  * * *  cd /srv/shola && .venv/bin/flask --app wsgi shola release-leases
 ```
 
@@ -253,7 +267,7 @@ shola/
 ├── consensus.py     # votes -> confirmed translation
 ├── mailer.py        # Gmail SMTP + signed daily links
 ├── views.py         # routes
-├── cli.py           # import-words, send-daily, redistribute-missed, export
+├── cli.py           # import-words, send-daily, release-leases, backup, export
 ├── templates/
 └── static/
 tests/test_flow.py   # end-to-end checks
@@ -310,6 +324,8 @@ SHOLA_SMTP_PASSWORD   a Gmail app password, not the account password
 SHOLA_MAIL_FROM_NAME  SHOLA
 SHOLA_OLD_HOSTS       hostnames to 301 to SHOLA_SITE_URL (default shola.inkika.org)
 SHOLA_WORDS_PER_DAY   words in one send (default 10)
+SHOLA_WORDS_PER_WEEKLY_SEND  words when someone gets one send a week or less (20)
+SHOLA_MISSES_BEFORE_NUDGE    unanswered sends before offering weekly (3)
 ```
 
 On first boot the container fetches the published dataset and imports it —
@@ -323,7 +339,6 @@ Scheduled tasks, as Coolify scheduled tasks on the same container:
 0 13 * * *    flask --app wsgi shola send-daily --window afternoon
 0 18 * * *    flask --app wsgi shola send-daily --window evening
 0 4 * * *     flask --app wsgi shola release-leases
-30 3 * * 1    flask --app wsgi shola redistribute-missed
 15 1 * * *    flask --app wsgi shola backup --keep 14
 ```
 
@@ -372,7 +387,7 @@ well if the data matters.
 | Public address | Cloudflare proxied A record → the VPS; Coolify terminates and routes by hostname |
 | Database | SQLite on a persistent volume at `instance/shola.db`, all 478,822 words loaded |
 | Email | Gmail SMTP as `michsethowusu@gmail.com`, port 587 STARTTLS |
-| Schedule | Coolify scheduled tasks: `send-daily` at 07:00 / 13:00 / 18:00, `release-leases` 04:00, `redistribute-missed` Monday 03:30, `backup` 01:15 |
+| Schedule | Coolify scheduled tasks: `send-daily` at 07:00 / 13:00 / 18:00, `release-leases` 04:00, `backup` 01:15 |
 
 Deploy with `COOLIFY_TOKEN=... ./deploy.sh`: it pushes to GitHub, triggers the
 build, and waits for the new commit to appear in `/healthz`. Waiting for a 200

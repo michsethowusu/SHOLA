@@ -76,7 +76,8 @@ def create_app(config_object=Config):
                 "ALL_LANGUAGES": ALL_LANGUAGES,
                 "LANGUAGE_COUNT": len(ALL_LANGUAGES),
                 "VOTES_TO_SETTLE": VOTES_TO_SETTLE,
-                "WORDS_PER_DAY": app.config["WORDS_PER_DAY"]}
+                "WORDS_PER_DAY": app.config["WORDS_PER_DAY"],
+                "WORDS_PER_WEEKLY_SEND": app.config["WORDS_PER_WEEKLY_SEND"]}
 
     @app.url_defaults
     def version_static(endpoint, values):

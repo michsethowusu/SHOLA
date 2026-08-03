@@ -23,8 +23,8 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
 from . import consensus
-from .assignment import leaderboard, record_verdict, redistribute
-from .tiers import active_tier, recruitment, tier_progress, top_up
+from .assignment import leaderboard, record_verdict
+from .tiers import active_tier, daily_quota, recruitment, tier_progress, top_up
 from .mailer import build_otp_email, make_token, read_token
 from .models import (Assignment, Candidate, PendingSignup, Volunteer, Word,
                      db, site_stats)
@@ -506,6 +506,37 @@ def submit(token, word_id):
 PAUSE_LENGTHS = [(7, "a week"), (30, "a month"), (90, "three months")]
 
 
+@main.route("/w/<token>/weekly")
+def go_weekly(token):
+    """One tap from the email: switch to a single, longer send each week.
+
+    A GET because it is a link in an email, and mail clients cannot POST. It is
+    safe to repeat and simple to undo from the settings page, which is where it
+    lands.
+    """
+    volunteer = volunteer_from_token(token, require_active=False)
+    if not volunteer:
+        flash("That link is not valid any more. We can email you a new one.",
+              "error")
+        return redirect(url_for("main.resend"))
+
+    # Keep the day they already had if they had one, so the change is only to
+    # how often. Saturday otherwise - most people's freest day.
+    days = volunteer.day_numbers
+    chosen = days[0] if days else 5
+    volunteer.available_days = str(chosen)
+    volunteer.active = True
+    volunteer.paused_until = None
+    volunteer.missed_in_a_row = 0
+    db.session.commit()
+
+    day = current_app.config["DAY_NAMES"][chosen]
+    size = current_app.config["WORDS_PER_WEEKLY_SEND"]
+    flash(f"Done — one email a week now, on {day}, with {size} words in it.",
+          "ok")
+    return redirect(url_for("main.settings", token=token))
+
+
 @main.route("/w/<token>/settings", methods=["GET", "POST"])
 def settings(token):
     """Change days, take a break, or stop - all from the emailed link.
@@ -525,7 +556,8 @@ def settings(token):
             # page. Remembered only for that; never trusted as a credential.
             session["token"] = token
         return render_template("settings.html", volunteer=volunteer,
-                               token=token, pause_lengths=PAUSE_LENGTHS)
+                               token=token, pause_lengths=PAUSE_LENGTHS,
+                               send_size=daily_quota(volunteer))
 
     action = request.form.get("action") or "save"
 

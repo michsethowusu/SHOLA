@@ -213,18 +213,40 @@ def lease_words(volunteer, count, today=None):
 def daily_quota(volunteer=None):
     """How many words go out in one send.
 
-    A flat number, not an annual goal divided by the days someone chose. Two
-    minutes of work is two minutes whether you signed up for two days a week
-    or seven, and dividing a yearly target gave a volunteer with fewer days a
-    longer list for no reason they would recognise.
+    A flat number per send, not an annual goal divided by the days someone
+    chose. The one exception is a schedule of once a week or less: a single
+    email a week carrying ten words is barely worth opening, so those sends
+    are longer.
     """
     from flask import current_app
-    return max(1, current_app.config["WORDS_PER_DAY"])
+    cfg = current_app.config
+    sends_a_week = len(volunteer.day_numbers) if volunteer else 7
+    if volunteer and sends_a_week and sends_a_week < 2:
+        return max(1, cfg["WORDS_PER_WEEKLY_SEND"])
+    return max(1, cfg["WORDS_PER_DAY"])
+
+
+def release_stale(volunteer, today=None):
+    """Hand back words this volunteer was offered on an earlier day.
+
+    Nothing carries over. A missed day does not become a debt collected later:
+    the words go straight back to the queue where another speaker can reach
+    them, and the next send is a fresh list of whatever the project needs then.
+    """
+    today = today or date.today()
+    n = (volunteer.assignments
+         .filter(Assignment.status == "pending",
+                 Assignment.due_date < today)
+         .update({"status": "expired"}, synchronize_session=False))
+    if n:
+        db.session.commit()
+    return n
 
 
 def top_up(volunteer, today=None):
-    """Bring a volunteer's outstanding words up to their daily quota."""
+    """Give this volunteer a fresh list for today, up to their quota."""
     today = today or date.today()
+    release_stale(volunteer, today)
     quota = daily_quota(volunteer)
     pending = volunteer.pending_today(today).count()
     return lease_words(volunteer, quota - pending, today=today)

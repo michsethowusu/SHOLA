@@ -14,12 +14,13 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shola import create_app                                    # noqa: E402
 from shola.assignment import (assign_words, leaderboard,         # noqa: E402
-                              record_verdict, redistribute, spread)
+                              record_verdict, spread)
 from shola.config import Config                                 # noqa: E402
 from shola.consensus import best, normalise, tally               # noqa: E402
 from shola.tiers import (MAX_VERDICTS_BEFORE_CONTESTED,           # noqa: E402
                          VOTES_TO_SETTLE, active_tier, assign_tiers, daily_quota,
                          lease_words, refresh_word, release_expired,
+                         release_stale,
                          answers_needed, recruitment, state_for,
                          tier_for, tier_progress, top_up)
 from shola.models import (Assignment, Candidate, Evaluation,      # noqa: E402
@@ -104,19 +105,22 @@ def main():
         weekdays = {x.due_date.weekday() for x in c.assignments}
         ok &= check("only Mon/Thu used", weekdays <= {0, 3}, str(weekdays))
 
-        print("\nmissed days carry forward, then redistribute")
+        print("\na missed day is handed back, not carried as a debt")
         past = date.today() - timedelta(days=5)
         for item in a.assignments.limit(6):
             item.due_date = past
         db.session.commit()
-        ok &= check("overdue work shows in today's queue",
+        ok &= check("an older list still opens from the link",
                     a.pending_today().count() >= 6)
-        moved = redistribute(a)
-        ok &= check("redistribute moves overdue forward", moved == 6, f"moved={moved}")
-        ok &= check("nothing left in the past",
-                    all(x.due_date >= date.today()
-                        for x in a.assignments.filter_by(status="pending")))
-        ok &= check("no assignment was destroyed", a.assignments.count() == 20)
+        released = release_stale(a)
+        ok &= check("a send hands those words back", released == 6,
+                    f"released={released}")
+        ok &= check("nothing from an earlier day is still owed",
+                    a.assignments.filter(
+                        Assignment.status == "pending",
+                        Assignment.due_date < date.today()).count() == 0)
+        ok &= check("and the words themselves are not destroyed",
+                    Word.query.count() == 30)
 
         print("\none verdict per word, and it closes the assignment")
         first = a.assignments.first()
@@ -492,10 +496,13 @@ def main():
     print("\nasking for a link after finishing the day gives you more words")
     captured = {}
 
+    mailbox = {}          # every message, by recipient
+
     def capture(to, subject, text, html):
         captured["to"] = to
         captured["subject"] = subject
         captured["text"] = text
+        mailbox[to] = {"subject": subject, "text": text, "html": html}
 
     mailer_mod.send = capture
 
@@ -655,6 +662,124 @@ def main():
                     bool(set(a.word_id for a in other.assignments)
                          & set(db.session.get(Assignment, i).word_id
                                for i in held)))
+
+    print("\na light schedule gets a longer list")
+    with app.app_context():
+        every_day = add_volunteer("daily@example.com")
+        twice = add_volunteer("twice@example.com", days="0,3")
+        weekly = add_volunteer("weekly@example.com", days="5")
+        ok &= check("seven days a week gets the daily size",
+                    daily_quota(every_day) == app.config["WORDS_PER_DAY"],
+                    str(daily_quota(every_day)))
+        ok &= check("twice a week still gets the daily size",
+                    daily_quota(twice) == app.config["WORDS_PER_DAY"],
+                    str(daily_quota(twice)))
+        ok &= check("once a week gets the longer list",
+                    daily_quota(weekly) == app.config["WORDS_PER_WEEKLY_SEND"],
+                    str(daily_quota(weekly)))
+        n = top_up(weekly)
+        ok &= check("and that is what is actually leased",
+                    n == app.config["WORDS_PER_WEEKLY_SEND"], f"leased {n}")
+
+    print("\nthree unanswered sends offers a lighter schedule")
+    with app.app_context():
+        # Plenty of fresh words. By this point the fixture is shared by 60-odd
+        # test volunteers, and a dry queue means send-daily skips people - which
+        # is correct behaviour (a send we never made is not one they missed) but
+        # would make this block test nothing.
+        for k in range(600):
+            w = Word(phrase=f"nudge word {k}", occurrences=900 - k,
+                     frequency=900 - k)
+            db.session.add(w)
+        db.session.commit()
+        assign_tiers()
+        quiet = add_volunteer("quiet@example.com")
+        qid = quiet.id
+        # They must be holding words for a send to happen at all: send-daily
+        # skips anyone with nothing to send, and rightly so.
+        top_up(quiet)
+        with app.test_request_context():
+            from shola.mailer import make_token as mt4
+            qtok = mt4(quiet)
+
+    runner = app.test_cli_runner()
+
+    def send_round():
+        """One send where the previous one went unanswered."""
+        with app.app_context():
+            v = db.session.get(Volunteer, qid)
+            v.last_emailed_on = date.today() - timedelta(days=1)
+            db.session.commit()
+        mailbox.clear()
+        res = runner.invoke(args=["shola", "send-daily", "--force"])
+        if res.exit_code:
+            print("   send-daily exited", res.exit_code, res.output[-300:])
+        return mailbox.get("quiet@example.com", {})
+
+    def misses_now():
+        """Read straight from the file: no session, no identity map, no doubt."""
+        import sqlite3
+        path = app.config["SQLALCHEMY_DATABASE_URI"].replace("sqlite:///", "")
+        con = sqlite3.connect(path)
+        row = con.execute("SELECT missed_in_a_row, nudged_on, last_emailed_on,"
+                          " active, available_days FROM volunteers WHERE id=?",
+                          (qid,)).fetchone()
+        con.close()
+        return row[0] if row else None
+
+    for round_no in (1, 2):
+        msg = send_round()
+        ok &= check(f"send {round_no}: the ordinary email",
+                    "Would once a week" not in msg.get("subject", ""),
+                    msg.get("subject", "(nothing sent)"))
+        seen = misses_now()
+        ok &= check(f"send {round_no}: the miss is counted", seen == round_no,
+                    f"{seen} vs {round_no}")
+
+    msg = send_round()
+    ok &= check("send 3: weekly is offered",
+                "Would once a week" in msg.get("subject", ""),
+                msg.get("subject", "(nothing sent)"))
+    ok &= check("with a one-tap link", "/weekly" in msg.get("text", ""))
+    ok &= check("and it does not scold them",
+                "Nothing is owed" in msg.get("text", ""),
+                msg.get("text", "")[:120])
+    ok &= check("the words are still offered alongside",
+                "TODAY'S WORDS" in msg.get("text", ""))
+
+    msg = send_round()
+    ok &= check("the offer is made once, not every time",
+                "Would once a week" not in msg.get("subject", ""),
+                msg.get("subject", "(nothing sent)"))
+
+    r = app.test_client().get(f"/w/{qtok}/weekly", follow_redirects=True)
+    with app.app_context():
+        v = db.session.get(Volunteer, qid)
+        days, quota, left = (v.day_numbers, daily_quota(v), v.missed_in_a_row)
+    ok &= check("the link switches them to one day a week", len(days) == 1,
+                str(days))
+    ok &= check("their send is the longer one now",
+                quota == app.config["WORDS_PER_WEEKLY_SEND"], str(quota))
+    ok &= check("and the miss count is cleared", left == 0, str(left))
+    ok &= check("landing on settings with confirmation",
+                b"one email a week" in r.data)
+
+    print("\nanswering clears the count, so a busy fortnight is not permanent")
+    with app.app_context():
+        v = db.session.get(Volunteer, qid)
+        v.available_days = ""          # back to any day, so a send can happen
+        v.missed_in_a_row = 2
+        v.last_emailed_on = date.today() - timedelta(days=1)
+        db.session.commit()
+        top_up(v)
+        pending = v.assignments.filter_by(status="pending").first()
+        ok &= check("they have something to answer", pending is not None)
+        if pending:
+            record_verdict(v, pending.word_id, custom_text="answered")
+    mailbox.clear()
+    runner.invoke(args=["shola", "send-daily", "--force"])
+    after = misses_now()
+    ok &= check("answering clears the miss count", after == 0, str(after))
 
     print("\nevery email carries a way to change or stop")
     with app.app_context():

@@ -93,52 +93,6 @@ def assign_words(volunteer, count, start=None, horizon_days=365):
     return i
 
 
-def redistribute(volunteer, today=None, horizon_days=None):
-    """Re-date overdue work across the volunteer's next available days.
-
-    Missing a week should not produce one crushing list; it should raise each
-    of the next few days slightly. The horizon is the lease window rather than
-    a year: a word re-dated beyond it would have gone back to the queue for
-    another speaker before its new day arrived, so scheduling it there is a
-    promise nobody keeps.
-    """
-    from .tiers import LEASE_DAYS
-    horizon_days = horizon_days or LEASE_DAYS
-    today = today or date.today()
-    overdue = (volunteer.assignments
-               .filter(Assignment.status == "pending",
-                       Assignment.due_date < today)
-               .order_by(Assignment.due_date, Assignment.id)
-               .all())
-    if not overdue:
-        return 0
-
-    future = (volunteer.assignments
-              .filter(Assignment.status == "pending",
-                      Assignment.due_date >= today)
-              .count())
-    dates = available_dates(volunteer.day_numbers, today, horizon_days)
-    if not dates:
-        return 0
-
-    # Blend overdue back in with what is already scheduled ahead.
-    per_day = spread(len(overdue) + future, len(dates))
-    room = [max(0, n) for n in per_day]
-
-    moved, slot = 0, 0
-    for item in overdue:
-        while slot < len(dates) and room[slot] == 0:
-            slot += 1
-        if slot >= len(dates):
-            item.due_date = dates[-1]
-        else:
-            item.due_date = dates[slot]
-            room[slot] -= 1
-        moved += 1
-    db.session.commit()
-    return moved
-
-
 def adopt_wording(word_id, language, text):
     """Turn a volunteer's own wording into an option others can choose.
 

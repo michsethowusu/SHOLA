@@ -1,0 +1,23 @@
+Would once a week suit you better, {{ first }}?
+
+The last few emails went unanswered, which usually means daily is the wrong
+shape for the week rather than anything else. Nothing is owed and nothing was
+lost - the words went back to other speakers.
+
+Switch to one email a week, with {{ weekly_size }} words in it:
+{{ weekly_link }}
+
+{% if words %}Or carry on as you are - here is what is waiting:
+
+TODAY'S WORDS
+{% for word in words %}  - {{ word.phrase }}
+{% endfor %}{% if more %}  ...and {{ more }} more
+{% endif %}
+Start translating:
+{{ link }}
+{% endif %}
+--
+You get this because you signed up to check {{ language_name }} words for SHOLA.
+
+Change your days, take a break, or stop:
+{{ settings_link }}

@@ -121,6 +121,15 @@ class Config:
     # volunteer experiences is the size of today's email, so the annual
     # commitment follows from it rather than the other way round.
     WORDS_PER_DAY = int(os.environ.get("SHOLA_WORDS_PER_DAY", 10))
+
+    # Someone who only wants words once a week gets a longer list, so a light
+    # schedule is still worth their while and worth ours.
+    WORDS_PER_WEEKLY_SEND = int(os.environ.get("SHOLA_WORDS_PER_WEEKLY_SEND",
+                                               20))
+
+    # Sends that came and went with no answer before we suggest a lighter
+    # schedule. Three is enough to tell a busy week from a wrong schedule.
+    MISSES_BEFORE_NUDGE = int(os.environ.get("SHOLA_MISSES_BEFORE_NUDGE", 3))
     COMMITMENT_DAYS = int(os.environ.get("SHOLA_COMMITMENT_DAYS", 365))
 
     # What one volunteer covers in a year, used only by the recruitment

@@ -13,17 +13,16 @@ import gzip
 import json
 import os
 import sys
-from datetime import date
+from datetime import date, datetime, time
 
 import click
 from flask import current_app
 from flask.cli import AppGroup
 
 from . import consensus
-from .assignment import redistribute
-from .models import Candidate, Volunteer, Word, db, site_stats
-from .tiers import (active_tier, assign_tiers, refresh_word, release_expired,
-                    tier_for, tier_progress, top_up)
+from .models import Candidate, Evaluation, Volunteer, Word, db, site_stats
+from .tiers import (active_tier, assign_tiers, daily_quota, refresh_word,
+                    release_expired, tier_for, tier_progress, top_up)
 
 shola_cli = AppGroup("shola", help="SHOLA operations.")
 
@@ -153,10 +152,11 @@ def import_words(csv_path, jsonl_path, freq_csv, limit):
 @click.option("--dry-run", is_flag=True, help="print instead of sending.")
 @click.option("--force", is_flag=True, help="ignore today's already-sent mark.")
 def send_daily(window, dry_run, force):
-    """Email each volunteer the words due today, plus anything they missed."""
-    from .mailer import build_daily_email, send
+    """Email each volunteer a fresh list of words for today."""
+    from .mailer import build_daily_email, build_weekly_offer_email, send
 
     today = date.today()
+    cfg = current_app.config
     query = Volunteer.query.filter(Volunteer.active.is_(True))
     if window != "all":
         query = query.filter(Volunteer.time_window.in_([window, "anytime"]))
@@ -171,32 +171,55 @@ def send_daily(window, dry_run, force):
             skipped += 1
             continue
         if volunteer.day_numbers and today.weekday() not in volunteer.day_numbers:
-            # Not one of their days; overdue work waits for the next one.
             skipped += 1
             continue
 
-        # Lease today's words first: nothing is reserved in advance any more.
+        # Did the last send go unanswered? Worked out before leasing, since
+        # leasing is what replaces the old list, but only written down once an
+        # email actually goes out: a send we never made is not a send they
+        # missed.
+        #
+        # Compared as a datetime on purpose: created_at is a timestamp, and
+        # leaning on string comparison against a bare date would be an accident
+        # waiting for a database that stores dates differently.
+        since = (datetime.combine(volunteer.last_emailed_on, time.min)
+                 if volunteer.last_emailed_on else None)
+        missed_last_send = bool(
+            since and not volunteer.evaluations.filter(
+                Evaluation.created_at >= since).first())
+        misses = volunteer.missed_in_a_row + 1 if missed_last_send else 0
+
+        # A wrong schedule is worth one suggestion, not a weekly reminder that
+        # they are behind.
+        nudge = (misses >= cfg["MISSES_BEFORE_NUDGE"]
+                 and len(volunteer.day_numbers or []) != 1
+                 and volunteer.nudged_on is None)
+
+        # A fresh list. Anything from an earlier day goes back to the queue, so
+        # missing days never builds a backlog to work through.
         top_up(volunteer, today=today)
-        # One send is one send. A backlog from missed days does not become a
-        # hundred-word email; the rest wait for the next one, or go back to the
-        # queue when the lease expires.
-        due = (volunteer.pending_today(today)
-               .limit(current_app.config["WORDS_PER_DAY"]).all())
-        if not due:
+        due = volunteer.pending_today(today).limit(daily_quota(volunteer)).all()
+        if not due and not nudge:
             skipped += 1
             continue
         words = [a.word for a in due]
-        overdue = sum(1 for a in due if a.due_date < today)
 
-        subject, text, html = build_daily_email(volunteer, words, overdue)
+        if nudge:
+            subject, text, html = build_weekly_offer_email(volunteer, words)
+        else:
+            subject, text, html = build_daily_email(volunteer, words)
         if dry_run:
             click.echo(f"[dry-run] {volunteer.email}: {subject} "
-                       f"({len(words)} words, {overdue} overdue)")
+                       f"({len(words)} words"
+                       + (", offering weekly" if nudge else "") + ")")
             sent += 1
             continue
         try:
             send(volunteer.email, subject, text, html)
             volunteer.last_emailed_on = today
+            volunteer.missed_in_a_row = misses
+            if nudge:
+                volunteer.nudged_on = today
             db.session.commit()
             sent += 1
         except Exception as exc:      # noqa: BLE001 - keep going, report at end
@@ -206,26 +229,6 @@ def send_daily(window, dry_run, force):
     click.echo(f"sent {sent}, skipped {skipped}, failed {failed}")
     if failed:
         sys.exit(1)
-
-
-@shola_cli.command("redistribute-missed")
-@click.option("--dry-run", is_flag=True)
-def redistribute_missed(dry_run):
-    """Spread overdue words across each volunteer's remaining days."""
-    total = 0
-    for volunteer in Volunteer.query.filter(Volunteer.active.is_(True)).all():
-        if dry_run:
-            n = sum(1 for a in volunteer.pending_today()
-                    if a.due_date < date.today())
-            if n:
-                click.echo(f"[dry-run] {volunteer.email}: {n} overdue")
-            total += n
-            continue
-        moved = redistribute(volunteer)
-        if moved:
-            click.echo(f"  {volunteer.email}: moved {moved}")
-        total += moved
-    click.echo(f"{'would move' if dry_run else 'moved'} {total} assignments")
 
 
 @shola_cli.command("export")

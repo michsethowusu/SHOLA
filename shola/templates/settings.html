@@ -9,8 +9,8 @@
       {{ volunteer.name.split()[0] }}, this is yours to change
     </h1>
     <p class="lede">
-      There is no end date. You get {{ WORDS_PER_DAY }} words on the days you
-      choose, for as long as you want to keep going.
+      There is no end date. You get {{ send_size }} words each time you are
+      sent some, for as long as you want to keep going.
     </p>
 
     {% if not volunteer.active %}
@@ -40,7 +40,9 @@
       <div class="field">
         <span class="label">Which days do you want words?</span>
         <p class="hint">Change these whenever your week changes. Leave them all
-           unticked to receive words any day.</p>
+           unticked to receive words any day. Pick one day and each email
+           carries {{ WORDS_PER_WEEKLY_SEND }} words instead of
+           {{ WORDS_PER_DAY }}.</p>
         <div class="day-row">
           {% for i in range(7) %}
             <label class="day">
