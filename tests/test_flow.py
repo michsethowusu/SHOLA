@@ -663,9 +663,9 @@ def main():
                          & set(db.session.get(Assignment, i).word_id
                                for i in held)))
 
-    print("\nhow many words a send carries is the volunteer's choice")
+    print("\nevery send is the same length, whatever days they chose")
     with app.app_context():
-        # Enough open words that the queue, not the setting, is not the limit.
+        # Enough open words that the queue is not what limits the send.
         for k in range(120):
             db.session.add(Word(phrase=f"choice word {k}",
                                 occurrences=800 - k, frequency=800 - k))
@@ -673,57 +673,15 @@ def main():
         assign_tiers()
         every_day = add_volunteer("daily@example.com")
         weekly = add_volunteer("weekly@example.com", days="5")
-        ok &= check("the default applies until they choose",
+        ok &= check("seven days a week gets the configured length",
                     daily_quota(every_day) == app.config["WORDS_PER_DAY"],
                     str(daily_quota(every_day)))
-        ok &= check("including for a once-a-week schedule",
+        ok &= check("once a week gets exactly the same",
                     daily_quota(weekly) == app.config["WORDS_PER_DAY"],
                     str(daily_quota(weekly)))
-        weekly.words_per_send = 25
-        db.session.commit()
-        ok &= check("their own number is used", daily_quota(weekly) == 25,
-                    str(daily_quota(weekly)))
         n = top_up(weekly)
-        ok &= check("and that is what is actually leased", n == 25,
-                    f"leased {n}")
-        # Bounds exist so a stray keystroke cannot lease thousands of words.
-        weekly.words_per_send = 100000
-        db.session.commit()
-        ok &= check("an absurd number is capped",
-                    daily_quota(weekly) == app.config["WORDS_PER_SEND_MAX"],
-                    str(daily_quota(weekly)))
-        weekly.words_per_send = None
-        db.session.commit()
-
-    print("\nthe settings form sets it, and refuses nonsense")
-    with app.app_context():
-        chooser = add_volunteer("chooser@example.com")
-        cid = chooser.id
-        with app.test_request_context():
-            from shola.mailer import make_token as mt5
-            ctok = mt5(chooser)
-    cc = app.test_client()
-    cc.post(f"/w/{ctok}/settings",
-            data={"action": "save", "words_per_send": "30",
-                  "time_window": "anytime"}, follow_redirects=True)
-    with app.app_context():
-        ok &= check("a chosen number is saved",
-                    db.session.get(Volunteer, cid).words_per_send == 30,
-                    str(db.session.get(Volunteer, cid).words_per_send))
-    r = cc.post(f"/w/{ctok}/settings",
-                data={"action": "save", "words_per_send": "9999",
-                      "time_window": "anytime"}, follow_redirects=True)
-    with app.app_context():
-        ok &= check("an out-of-range number is refused, not silently changed",
-                    db.session.get(Volunteer, cid).words_per_send == 30,
-                    str(db.session.get(Volunteer, cid).words_per_send))
-    ok &= check("and they are told why", b"Choose between" in r.data)
-    r = cc.post(f"/w/{ctok}/settings",
-                data={"action": "save", "words_per_send": "lots",
-                      "time_window": "anytime"}, follow_redirects=True)
-    with app.app_context():
-        ok &= check("so is nonsense",
-                    db.session.get(Volunteer, cid).words_per_send == 30)
+        ok &= check("and that is what is leased",
+                    n == app.config["WORDS_PER_DAY"], f"leased {n}")
 
     print("\nthree unanswered sends offers a lighter schedule")
     with app.app_context():

@@ -567,23 +567,6 @@ def settings(token):
         volunteer.time_window = (window if window in
                                  current_app.config["TIME_WINDOWS"]
                                  else "anytime")
-
-        # How many words they want. Out-of-range or nonsense leaves it alone
-        # rather than silently substituting a number they did not ask for.
-        raw = (request.form.get("words_per_send") or "").strip()
-        if raw:
-            try:
-                wanted = int(raw)
-            except ValueError:
-                flash("Words per email needs to be a number.", "error")
-            else:
-                low = current_app.config["WORDS_PER_SEND_MIN"]
-                high = current_app.config["WORDS_PER_SEND_MAX"]
-                if low <= wanted <= high:
-                    volunteer.words_per_send = wanted
-                else:
-                    flash(f"Choose between {low} and {high} words an email.",
-                          "error")
         # Saving settings is also a way back: someone who paused and then
         # changed their days plainly means to carry on.
         volunteer.active = True

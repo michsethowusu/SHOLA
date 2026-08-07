@@ -58,11 +58,9 @@ lighter schedule with a link that switches them to a single day a week. Sent
 once, tracked by `nudged_on`. A miss only counts when an email actually went
 out, and answering anything resets the count.
 
-**The length of a send is the volunteer's choice.** `words_per_send` on the
-volunteer, set from their settings page, bounded by `SHOLA_WORDS_PER_SEND_MIN`
-and `SHOLA_WORDS_PER_SEND_MAX`. Until they choose, `SHOLA_WORDS_PER_DAY`
-applies. How often they are sent words and how many they get are deliberately
-independent: coupling them would mean guessing on someone's behalf.
+**Every send is the same length.** `SHOLA_WORDS_PER_DAY` words, whatever days
+someone chose. What a volunteer controls is when the words arrive, not how many:
+a short list is the point, and the way to do more is to come back.
 
 ### There is no login
 
@@ -325,9 +323,7 @@ SHOLA_SMTP_USER       the sending address the app password belongs to (michseth@
 SHOLA_SMTP_PASSWORD   a Gmail app password, not the account password
 SHOLA_MAIL_FROM_NAME  SHOLA
 SHOLA_OLD_HOSTS       hostnames to 301 to SHOLA_SITE_URL (default shola.inkika.org)
-SHOLA_WORDS_PER_DAY   words in one send until a volunteer chooses (default 5)
-SHOLA_WORDS_PER_SEND_MIN     least a volunteer may choose (1)
-SHOLA_WORDS_PER_SEND_MAX     most a volunteer may choose (100)
+SHOLA_WORDS_PER_DAY   words in one send (default 5)
 SHOLA_MISSES_BEFORE_NUDGE    unanswered sends before offering weekly (3)
 ```
 

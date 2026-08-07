@@ -213,16 +213,12 @@ def lease_words(volunteer, count, today=None):
 def daily_quota(volunteer=None):
     """How many words go out in one send.
 
-    Theirs to decide. The configured default applies until they choose, and
-    how often they are sent words makes no difference to how many they get -
-    the two are separate choices and it is not for us to couple them.
+    The same number for everyone, whatever days they chose. What a volunteer
+    controls is when the words arrive, not how many - a short list is the
+    point of the thing.
     """
     from flask import current_app
-    cfg = current_app.config
-    chosen = getattr(volunteer, "words_per_send", None) if volunteer else None
-    wanted = chosen or cfg["WORDS_PER_DAY"]
-    return max(cfg["WORDS_PER_SEND_MIN"],
-               min(int(wanted), cfg["WORDS_PER_SEND_MAX"]))
+    return max(1, current_app.config["WORDS_PER_DAY"])
 
 
 def release_stale(volunteer, today=None):

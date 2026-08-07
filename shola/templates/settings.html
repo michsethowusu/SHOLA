@@ -53,16 +53,6 @@
       </div>
 
       <div class="field">
-        <label class="label" for="words_per_send">How many words in each
-          email?</label>
-        <p class="hint">Your call. Fewer for a quick look, more if you have
-           the time.</p>
-        <input type="number" id="words_per_send" name="words_per_send"
-               min="1" max="{{ WORDS_PER_SEND_MAX }}" step="1"
-               value="{{ send_size }}" style="max-width:140px">
-      </div>
-
-      <div class="field">
         <span class="label">Roughly what time suits you?</span>
         <div class="choice-grid">
           {% for code, label in TIME_WINDOWS.items() %}
