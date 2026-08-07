@@ -122,7 +122,7 @@ class Config:
     # commitment follows from it rather than the other way round.
     # The default length of one send. Volunteers can set their own; this is
     # only what they get until they do.
-    WORDS_PER_DAY = int(os.environ.get("SHOLA_WORDS_PER_DAY", 10))
+    WORDS_PER_DAY = int(os.environ.get("SHOLA_WORDS_PER_DAY", 5))
 
     # Bounds on what a volunteer may choose for themselves. The ceiling is not
     # a judgement about how much anyone can do - it stops a stray keystroke
