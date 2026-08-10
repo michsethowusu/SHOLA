@@ -77,9 +77,10 @@ def create_app(config_object=Config):
             app.logger.info("reindexed: %s", ", ".join(reindexed))
         # Everything collected before projects existed becomes a project, so no
         # code downstream needs a special case for "the original words".
-        _core, adopted = adopt_orphan_items()
-        if adopted:
-            app.logger.info("adopted %s items into %s", adopted, _core.slug)
+        _core, adopted, joined_up = adopt_orphan_items()
+        if adopted or joined_up:
+            app.logger.info("adopted %s items and %s volunteers into %s",
+                            adopted, joined_up, _core.slug)
 
     @app.context_processor
     def inject_globals():

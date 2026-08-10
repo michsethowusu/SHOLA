@@ -600,5 +600,17 @@ def adopt_orphan_items():
 
     adopted = (Word.query.filter(Word.project_id.is_(None))
                .update({"project_id": core.id}, synchronize_session=False))
+
+    # And the volunteers. Nothing is sent to someone with no project, so
+    # without this every existing volunteer would receive an empty list the
+    # morning this deploys - they signed up for this work and are still doing
+    # it, so they are opted in to it.
+    opted = db.session.query(VolunteerProject.volunteer_id).subquery()
+    orphans = (Volunteer.query
+               .filter(~Volunteer.id.in_(db.session.query(opted.c.volunteer_id)))
+               .all())
+    for volunteer in orphans:
+        db.session.add(VolunteerProject(volunteer_id=volunteer.id,
+                                       project_id=core.id))
     db.session.commit()
-    return core, adopted
+    return core, adopted, len(orphans)
