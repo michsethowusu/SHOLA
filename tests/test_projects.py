@@ -291,6 +291,33 @@ def main():
                     len(joined(waiting)) == 0,
                     str([p.slug for _v, p in joined(waiting)]))
 
+    print("\nlanguages are named by the fields the form sends")
+    r = fresh.post("/submit", data={
+        "title": "Two languages at once please",
+        "item_format": "word", "answer_mode": "choose",
+        "languages": ["twi", "ewe"], "email": "kofi@example.com",
+        "file_twi": (io_bytes(b"one,a,b\n"), "twi.csv"),
+        "file_ewe": (io_bytes(b"one,c,d\n"), "ewe.csv"),
+    }, content_type="multipart/form-data", follow_redirects=True)
+    ok &= check("a file per language is accepted", r.status_code == 200
+                and b"Submitted" in r.data, f"HTTP {r.status_code}")
+    with app.app_context():
+        two = Project.query.filter_by(slug="two-languages-at-once-please").first()
+        ok &= check("both languages are recorded",
+                    two is not None
+                    and sorted(two.language_codes) == ["ewe", "twi"],
+                    str(two.language_codes if two else None))
+        ok &= check("with the items from each file",
+                    two.item_count() == 2, str(two.item_count()))
+    r = fresh.post("/submit", data={
+        "title": "A language with no file at all",
+        "item_format": "word", "answer_mode": "choose",
+        "languages": ["twi", "ewe"], "email": "kofi@example.com",
+        "file_twi": (io_bytes(b"one,a,b\n"), "twi.csv"),
+    }, content_type="multipart/form-data")
+    ok &= check("a language with no file is refused", r.status_code == 400)
+    ok &= check("saying which one", b"Ewe: no file chosen" in r.data)
+
     print("\na bad file is refused with the line numbers, not half imported")
     with app.app_context():
         before = Word.query.count()

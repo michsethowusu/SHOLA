@@ -91,26 +91,38 @@ Where is the market?</code></pre>
 
       <div class="field">
         <span class="label">Which languages, and the file for each?</span>
-        <p class="hint">Tick a language and a file box appears for it. Every
-           language you tick needs its own file.</p>
+        <p class="hint">Search for a language and pick it. Each one you add gets
+           its own file box — add as many as you need.</p>
         {% set chosen = (form.getlist('languages') if form else []) %}
-        <input type="search" id="language-filter" style="margin-bottom:12px"
-               placeholder="Search {{ languages | length }} languages"
-               aria-label="Search languages">
-        <div class="stack" id="language-list">
-          {% for code, info in languages.items() %}
-            <label class="opt-in" data-lang="{{ code }}">
-              <input type="checkbox" name="languages" value="{{ code }}"
-                     {% if code in chosen %}checked{% endif %}>
-              <span class="body">
-                <span class="t">{{ info.name }}</span>
-                <span class="file-slot" hidden>
-                  <input type="file" name="file_{{ code }}" accept=".csv,text/csv">
-                </span>
-              </span>
-            </label>
-          {% endfor %}
+
+        <div class="lang-pick">
+          <input type="search" id="lang-search" autocomplete="off"
+                 placeholder="Search {{ languages | length }} languages"
+                 aria-label="Search for a language"
+                 aria-controls="lang-results" aria-expanded="false"
+                 role="combobox">
+          <ul class="lang-results" id="lang-results" role="listbox" hidden></ul>
         </div>
+
+        <div class="stack" id="lang-chosen" style="margin-top:14px"></div>
+
+        <p class="hint" id="lang-empty">No language added yet.</p>
+
+        <noscript>
+          <p class="hint">Searching needs JavaScript. With it switched off,
+             email the files to
+             <a href="mailto:michsethowusu@gmail.com">michsethowusu@gmail.com</a>
+             and we will load them for you.</p>
+        </noscript>
+
+        {# The full list is the data the search reads. Kept in the page rather
+           than fetched, since it is small and never changes between requests. #}
+        <script type="application/json" id="lang-data">
+          {{ languages.items() | map('list') | list | tojson }}
+        </script>
+        <script type="application/json" id="lang-chosen-data">
+          {{ chosen | tojson }}
+        </script>
       </div>
 
       <div class="field">
@@ -144,33 +156,145 @@ Where is the market?</code></pre>
 
 {% block scripts %}
 <script>
-  /* Show a file box only for the languages actually ticked: a wall of 88 file
-     inputs would be unusable, and an unticked language needs no file. */
-  var rows = Array.prototype.slice.call(
-    document.querySelectorAll('#language-list .opt-in'));
+  /* Search-and-add rather than 88 checkboxes: a wall of every Ghanaian language
+     is unusable, and most projects want one or two. Each language added gets
+     its own file box, because a project is one file per language. */
+  var data = JSON.parse(document.getElementById("lang-data").textContent);
+  var already = JSON.parse(document.getElementById("lang-chosen-data").textContent);
+  var names = {};
+  data.forEach(function (row) { names[row[0]] = row[1].name; });
 
-  rows.forEach(function (row) {
-    var box = row.querySelector('input[type=checkbox]');
-    var slot = row.querySelector('.file-slot');
-    var sync = function () { slot.hidden = !box.checked; };
-    box.addEventListener('change', sync);
-    sync();
+  var search = document.getElementById("lang-search");
+  var results = document.getElementById("lang-results");
+  var chosenBox = document.getElementById("lang-chosen");
+  var emptyNote = document.getElementById("lang-empty");
+  var picked = [];
+
+  function syncEmpty() {
+    emptyNote.hidden = picked.length > 0;
+  }
+
+  function add(code) {
+    if (!code || picked.indexOf(code) !== -1 || !names[code]) return;
+    picked.push(code);
+
+    // The name and the remove control share a line; the file box gets its own,
+    // at full width. Squeezed onto one line the file box had no room to show
+    // which file had been chosen, which is the only thing it is there to say.
+    var row = document.createElement("div");
+    row.className = "lang-row";
+    row.dataset.code = code;
+
+    var head = document.createElement("div");
+    head.className = "lang-row-head";
+    var label = document.createElement("span");
+    label.className = "t";
+    label.textContent = names[code];
+    head.appendChild(label);
+
+    var remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "report-btn";
+    remove.textContent = "Remove";
+    remove.addEventListener("click", function () {
+      picked = picked.filter(function (c) { return c !== code; });
+      row.remove();
+      syncEmpty();
+      search.focus();
+    });
+    head.appendChild(remove);
+    row.appendChild(head);
+
+    var file = document.createElement("input");
+    file.type = "file";
+    file.name = "file_" + code;
+    file.accept = ".csv,text/csv";
+    row.appendChild(file);
+
+    // The value the form actually submits. Hidden rather than a checkbox: it is
+    // not a thing to toggle, it is a consequence of having added the language.
+    var value = document.createElement("input");
+    value.type = "hidden";
+    value.name = "languages";
+    value.value = code;
+    row.appendChild(value);
+
+    chosenBox.appendChild(row);
+    syncEmpty();
+  }
+
+  function matches(q) {
+    q = q.trim().toLowerCase();
+    if (!q) return [];
+    var out = [];
+    for (var i = 0; i < data.length && out.length < 8; i++) {
+      var code = data[i][0];
+      var name = data[i][1].name;
+      if (picked.indexOf(code) !== -1) continue;
+      if (name.toLowerCase().indexOf(q) === 0 ||
+          name.toLowerCase().indexOf(q) > -1 ||
+          code.toLowerCase() === q) {
+        out.push([code, name]);
+      }
+    }
+    // Names starting with the query first: typing "ga" should offer Ga before
+    // Dagbani.
+    out.sort(function (a, b) {
+      var ai = a[1].toLowerCase().indexOf(q) === 0 ? 0 : 1;
+      var bi = b[1].toLowerCase().indexOf(q) === 0 ? 0 : 1;
+      return ai - bi || a[1].localeCompare(b[1]);
+    });
+    return out;
+  }
+
+  function showResults() {
+    var found = matches(search.value);
+    results.innerHTML = "";
+    found.forEach(function (row) {
+      var li = document.createElement("li");
+      li.setAttribute("role", "option");
+      li.textContent = row[1];
+      li.addEventListener("mousedown", function (e) {
+        e.preventDefault();
+        add(row[0]);
+        search.value = "";
+        hideResults();
+      });
+      results.appendChild(li);
+    });
+    var open = found.length > 0;
+    results.hidden = !open;
+    search.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+
+  function hideResults() {
+    results.hidden = true;
+    search.setAttribute("aria-expanded", "false");
+  }
+
+  search.addEventListener("input", showResults);
+  search.addEventListener("focus", showResults);
+  search.addEventListener("blur", function () { setTimeout(hideResults, 120); });
+  search.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      // Enter picks the top match, so the whole thing works from the keyboard
+      // without arrowing through a list.
+      e.preventDefault();
+      var found = matches(search.value);
+      if (found.length) {
+        add(found[0][0]);
+        search.value = "";
+        hideResults();
+      }
+    } else if (e.key === "Escape") {
+      hideResults();
+    }
   });
 
-  /* Filtering, because scrolling 88 checkboxes to find one language is not a
-     reasonable ask. A ticked language always stays visible: hiding a choice
-     someone has already made, along with the file box that goes with it, would
-     lose their file without telling them. */
-  var filter = document.getElementById('language-filter');
-  if (filter) {
-    filter.addEventListener('input', function () {
-      var q = filter.value.trim().toLowerCase();
-      rows.forEach(function (row) {
-        var box = row.querySelector('input[type=checkbox]');
-        var name = row.querySelector('.t').textContent.toLowerCase();
-        row.hidden = !!q && name.indexOf(q) === -1 && !box.checked;
-      });
-    });
-  }
+  // A rejected submission comes back with the languages still chosen; the files
+  // cannot come back with it, so those boxes start empty and say nothing about
+  // having been filled before.
+  already.forEach(add);
+  syncEmpty();
 </script>
 {% endblock %}
