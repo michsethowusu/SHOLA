@@ -4,10 +4,10 @@ import os
 
 from flask import Flask
 
-from .config import (ALL_LANGUAGES, DAY_NAMES, INSTANCE_DIR, LANGUAGES,
-                     OTHER_LANGUAGES, TIME_WINDOWS, Config)
-from .models import (adopt_orphan_items, db, ensure_columns, ensure_indexes,
-                     normalise_language_codes)
+from .config import (ALL_LANGUAGES, DAY_NAMES, INSTANCE_DIR, ISO_CODES,
+                     LANGUAGES, OTHER_LANGUAGES, TIME_WINDOWS, Config)
+from .models import (adopt_orphan_items, db, ensure_columns,
+                     ensure_indexes)
 from .tiers import VOTES_TO_SETTLE
 
 
@@ -75,12 +75,6 @@ def create_app(config_object=Config):
         reindexed = ensure_indexes()
         if reindexed:
             app.logger.info("reindexed: %s", ", ".join(reindexed))
-        # Before adopting anything: the adoption step creates rows keyed by the
-        # codes in the config, so stored codes have to match first or a language
-        # ends up recorded twice under two names.
-        renamed = normalise_language_codes()
-        if renamed:
-            app.logger.info("language codes moved: %s", "; ".join(renamed))
         # Everything collected before projects existed becomes a project, so no
         # code downstream needs a special case for "the original words".
         _core, adopted, joined_up = adopt_orphan_items()
@@ -95,7 +89,8 @@ def create_app(config_object=Config):
                 "ALL_LANGUAGES": ALL_LANGUAGES,
                 "LANGUAGE_COUNT": len(ALL_LANGUAGES),
                 "VOTES_TO_SETTLE": VOTES_TO_SETTLE,
-                "WORDS_PER_DAY": app.config["WORDS_PER_DAY"]}
+                "WORDS_PER_DAY": app.config["WORDS_PER_DAY"],
+                "ISO_CODES": ISO_CODES}
 
     @app.url_defaults
     def version_static(endpoint, values):

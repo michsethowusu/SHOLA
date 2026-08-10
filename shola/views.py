@@ -888,11 +888,17 @@ def template_csv():
 @main.route("/languages.csv")
 def languages_csv():
     """Every language and its code, for looking up what to put in the column."""
-    rows = [[info["name"], code]
-            for code, info in sorted(
-                current_app.config["ALL_LANGUAGES"].items(),
-                key=lambda kv: kv[1]["name"])]
-    return _csv_response(["language", "code"], rows, "shola-language-codes")
+    from .config import ISO_CODES
+
+    rows = []
+    for code, info in sorted(current_app.config["ALL_LANGUAGES"].items(),
+                             key=lambda kv: kv[1]["name"]):
+        iso = ISO_CODES.get(code, code)
+        # Both, where they differ for the two languages seeded before ISO codes
+        # were used. Either works in a file; nobody should have to guess which.
+        rows.append([info["name"], code, iso])
+    return _csv_response(["language", "code", "iso_639_3"], rows,
+                         "shola-language-codes")
 
 
 @main.route("/submit", methods=["GET", "POST"])

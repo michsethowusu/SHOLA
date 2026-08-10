@@ -130,7 +130,7 @@ def main():
 
     print("\nitems only reach speakers of the language they were filed under")
     with app.app_context():
-        ga_speaker = volunteer("ga@example.com", "gaa",
+        ga_speaker = volunteer("ga@example.com", "ga",
                                [core().id, Project.query.filter_by(
                                    slug="read-sentences").first().id])
         # read-sentences collects Twi and Ewe only, so opting in is refused.
@@ -495,28 +495,31 @@ def main():
                     all(w.language is None for w in
                         Word.query.filter_by(project_id=anylang.id)))
 
-    print("\nthe old codes still work, because people wrote them down")
+    print("\nISO codes work, whatever we happen to store internally")
     r = fresh.post("/submit", data={
-        "title": "A file using the codes we used to publish",
+        "title": "A file using the ISO codes anybody would look up",
         "item_format": "word", "email": "kofi@example.com",
         "file": (io_bytes(("text,language,option1,option2\n"
-                           "one,ga,a,b\n"
-                           "two,dagbani,c,d\n").encode()), "old.csv"),
+                           "one,gaa,a,b\n"
+                           "two,dag,c,d\n").encode()), "iso.csv"),
     }, content_type="multipart/form-data", follow_redirects=True)
-    ok &= check("a file with the old codes is accepted",
+    ok &= check("a file using gaa and dag is accepted",
                 r.status_code == 200 and b"Submitted" in r.data,
                 f"HTTP {r.status_code}")
     with app.app_context():
-        old_codes = Project.query.filter_by(
-            slug="a-file-using-the-codes-we-used-to-publish").first()
-        ok &= check("and stored under the corrected ones",
-                    old_codes is not None
-                    and sorted(old_codes.language_codes) == ["dag", "gaa"],
-                    str(old_codes.language_codes if old_codes else None))
-    r = fresh.get("/api/items/everyday-words/ga")
-    ok &= check("an old code in an API call still resolves",
-                r.status_code == 200 and r.get_json()["language"] == "gaa",
-                f"HTTP {r.status_code} {r.get_json() if r.status_code == 200 else ''}")
+        iso = Project.query.filter_by(
+            slug="a-file-using-the-iso-codes-anybody-would-look-up").first()
+        ok &= check("mapped onto the languages we hold",
+                    iso is not None
+                    and sorted(iso.language_codes) == ["dagbani", "ga"],
+                    str(iso.language_codes if iso else None))
+    r = fresh.get("/api/items/everyday-words/gaa")
+    ok &= check("an ISO code in an API call resolves too",
+                r.status_code == 200 and r.get_json()["language"] == "ga",
+                f"HTTP {r.status_code}")
+    r = fresh.get("/languages.csv")
+    ok &= check("and the published list shows both forms",
+                b"gaa" in r.data and b"dag" in r.data, "expected both codes")
 
     print("\na blank language is refused rather than assumed")
     r = fresh.post("/submit", data={
@@ -577,7 +580,7 @@ def main():
             slug="languages-come-from-the-file").first()
         ok &= check("the language was read from the column",
                     from_file is not None
-                    and from_file.language_codes == ["gaa"],
+                    and from_file.language_codes == ["ga"],
                     str(from_file.language_codes if from_file else None))
 
     print("\na bad file is refused with the line numbers, not half imported")
@@ -713,7 +716,7 @@ def main():
                 r.status_code == 200
                 and b"item,answer,chose,share,total_answers,from,leading"
                 in r.data, r.data[:90])
-    r = api.get("/api/items/read-sentences/gaa")
+    r = api.get("/api/items/read-sentences/ga")
     ok &= check("a language the project ignores 404s", r.status_code == 404)
     r = api.get("/api/items/nope/twi")
     ok &= check("an unknown project 404s", r.status_code == 404)

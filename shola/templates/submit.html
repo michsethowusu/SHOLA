@@ -55,9 +55,8 @@ How much is this?,all,2,,,</code></pre>
     <div class="card" style="margin-top:18px; text-align:left">
       <h3>Language codes</h3>
       <p class="muted">
-        These are the codes that go in the language column — mostly ISO 639-3,
-        with the four languages SHOLA started with keeping their plain names.
-        Copy them exactly.
+        ISO 639-3, which is what goes in the language column. Two languages
+        also answer to an older code we used internally; either works.
         <a href="{{ url_for('main.languages_csv') }}">Download the list</a>, or
         search it here.
       </p>
@@ -69,7 +68,16 @@ How much is this?,all,2,,,</code></pre>
           <thead><tr><th>Language</th><th>Code</th></tr></thead>
           <tbody>
             {% for code, info in languages.items() | sort(attribute='1.name') %}
-              <tr><td>{{ info.name }}</td><td><code>{{ code }}</code></td></tr>
+              <tr>
+                <td>{{ info.name }}</td>
+                <td>
+                  <code>{{ ISO_CODES.get(code, code) }}</code>
+                  {% if ISO_CODES.get(code) %}
+                    <span class="muted" style="font-size:.8rem">
+                      or <code>{{ code }}</code></span>
+                  {% endif %}
+                </td>
+              </tr>
             {% endfor %}
           </tbody>
         </table>

@@ -26,13 +26,13 @@ LANGUAGES = {
                       "g": ["ɣ", "Ɣ"], "n": ["ŋ", "Ŋ"], "o": ["ɔ", "Ɔ"],
                       "v": ["ʋ", "Ʋ"]},
     },
-    "gaa": {
+    "ga": {
         "name": "Ga",
         "note": "Gã",
         "special": ["ɛ", "Ɛ", "ŋ", "Ŋ", "ɔ", "Ɔ"],
         "longpress": {"e": ["ɛ", "Ɛ"], "n": ["ŋ", "Ŋ"], "o": ["ɔ", "Ɔ"]},
     },
-    "dag": {
+    "dagbani": {
         "name": "Dagbani",
         "note": "Dagbanli",
         "special": ["ɛ", "Ɛ", "ɣ", "Ɣ", "ŋ", "Ŋ", "ɔ", "Ɔ", "ʒ", "Ʒ"],
@@ -46,21 +46,32 @@ from .languages import OTHER_BY_CODE, OTHER_LANGUAGES   # noqa: E402,F401
 # Characters a phone keyboard hides, across the Ghanaian orthographies. Used for
 # every language that does not have its own set listed above: better to offer a
 # few unneeded letters than to leave a speaker unable to type their own.
-# Codes that were used before these languages were given their ISO 639-3 ones.
-# The other 84 languages always used ISO codes; these four were seeded by hand
-# and two of them were wrong, which meant a file with the correct code in it -
-# the code anybody would look up - was rejected.
+# Two of the four languages SHOLA started with were seeded by hand with codes
+# that are not their ISO 639-3 ones: Ga is stored as "ga" where ISO says "gaa",
+# and Dagbani as "dagbani" where ISO says "dag". The other 84 always used ISO
+# codes, so somebody preparing a file looks up the correct code and needs it to
+# work.
 #
-# Accepted on input for ever: links, files and notes written against the old
-# codes must not break because we corrected our own mistake.
+# Rather than rewrite the code on 1.4 million existing rows - which was tried,
+# ran out of disk, and took the site down - the ISO code is accepted as an alias
+# and mapped to what is stored. The stored form is an internal detail; the
+# published list shows both, so nobody has to guess.
 LANGUAGE_ALIASES = {
-    "ga": "gaa",
-    "dagbani": "dag",
-    # Two-letter ISO 639-1, since that is what somebody may reach for first.
+    # ISO 639-3, which is what anybody will look up.
+    "gaa": "ga",
+    "dag": "dagbani",
+    # ISO 639-1, for anyone reaching for the two-letter form.
     "ee": "ewe",
     "tw": "twi",
     "ak": "twi",
     "aka": "twi",
+}
+
+# The code to publish for each stored one, where they differ. Shown on the
+# submit page and in /languages.csv so a file can be prepared with either.
+ISO_CODES = {
+    "ga": "gaa",
+    "dagbani": "dag",
 }
 
 

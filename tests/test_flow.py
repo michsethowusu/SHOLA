@@ -27,7 +27,7 @@ from shola.tiers import (MAX_VERDICTS_BEFORE_CONTESTED,           # noqa: E402
 from shola.models import (Assignment, Candidate, Evaluation,      # noqa: E402
                           PendingSignup, Volunteer, Word, db)
 
-LANGS = ["twi", "ewe", "gaa", "dag"]
+LANGS = ["twi", "ewe", "ga", "dagbani"]
 
 
 def make_app():
@@ -317,14 +317,14 @@ def main():
             record_verdict(add_volunteer(f"twi{i}@example.com", language="twi"),
                            shared.id, candidate_id=twi_option.id)
         ok &= check("settled in Twi", state_for(shared.id, "twi").done)
-        ok &= check("untouched in Ga", not state_for(shared.id, "gaa").done)
-        gaman = add_volunteer("ga1@example.com", language="gaa")
+        ok &= check("untouched in Ga", not state_for(shared.id, "ga").done)
+        gaman = add_volunteer("ga1@example.com", language="ga")
         lease_words(gaman, 40)
         ok &= check("a Ga speaker is still asked that word",
                     shared.id in {x.word_id for x in gaman.assignments},
                     "Twi agreement must not close the word for other languages")
         ok &= check("Ga has its own tier position",
-                    active_tier("gaa") == 1)
+                    active_tier("ga") == 1)
 
     print("\nthe next tier opens only when this one is closed")
     with app.app_context():
@@ -361,8 +361,8 @@ def main():
 
     print("\nrecruitment target is conservative")
     with app.app_context():
-        need = answers_needed("dag")
-        r = recruitment("dag", 1000, 0.30, signed_up=0)
+        need = answers_needed("dagbani")
+        r = recruitment("dagbani", 1000, 0.30, signed_up=0)
         ok &= check("counts what open words still lack",
                     need == r["answers_needed"] and need > 0, f"need={need}")
         ok &= check("plans on 300 answers per recruit, not 1000",
@@ -370,10 +370,10 @@ def main():
         expected = -(-need // 300)
         ok &= check("volunteers needed rounds up", r["volunteers_needed"] == expected,
                     f"{r['volunteers_needed']} vs {expected}")
-        r2 = recruitment("dag", 1000, 0.30, signed_up=r["volunteers_needed"])
+        r2 = recruitment("dagbani", 1000, 0.30, signed_up=r["volunteers_needed"])
         ok &= check("nothing more to recruit once the target is met",
                     r2["still_to_recruit"] == 0)
-        loose = recruitment("dag", 1000, 1.0, signed_up=0)
+        loose = recruitment("dagbani", 1000, 1.0, signed_up=0)
         ok &= check("a higher completion rate never needs more people",
                     loose["volunteers_needed"] <= r["volunteers_needed"])
         # At tier-1 scale the pessimism is what matters: 11,206 open words need
