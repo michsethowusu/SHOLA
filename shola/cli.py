@@ -597,12 +597,36 @@ def backup(out, keep_db, keep_people, keep_dirs, keep_config):
                    "as large as the rows a transaction touches.", err=True)
 
 
-def prune_local(out_dir, made):
-    """Keep only the newest N of each kind on local disk."""
+ORPHAN_DAYS = 7
+
+
+def prune_local(out_dir, made, orphan_days=ORPHAN_DAYS):
+    """Keep only the newest N of each kind, and clear abandoned kinds.
+
+    Pruning by stem only reaches the kinds this run produced. Retire a backup
+    target - as education-au was - and its archives are left behind for ever,
+    which is 6.3 GB nobody is coming back for. Anything older than
+    `orphan_days` whose kind is no longer produced goes too; by then it has
+    either reached the bucket or been reported as failed for a week.
+    """
+    import time
+
+    stems = {m[1] for m in made}
     for _path, stem, keep in {(None, m[1], m[2]) for m in made}:
         files = sorted(glob.glob(os.path.join(out_dir, f"{stem}*")))
         for old in files[:-keep or None]:
             os.remove(old)
+
+    cutoff = time.time() - orphan_days * 86400
+    for path in glob.glob(os.path.join(out_dir, "*")):
+        name = os.path.basename(path)
+        if any(name.startswith(stem) for stem in stems):
+            continue
+        if os.path.getmtime(path) < cutoff:
+            click.echo(f"removed   {name} "
+                       f"({os.path.getsize(path)//1048576} MB, no longer "
+                       "backed up)")
+            os.remove(path)
 
 
 def export_coolify_config():
