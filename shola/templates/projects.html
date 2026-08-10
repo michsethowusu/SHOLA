@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}What there is to work on{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap narrow">
+    <p class="eyebrow">Projects</p>
+    <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">What there is to work on</h1>
+    <p class="lede">
+      Each one is a body of work someone needs done in a Ghanaian language.
+      Choose any of them when you sign up, and change your mind later.
+    </p>
+
+    <div class="stack" style="margin-top:30px">
+      {% for project in projects %}
+        <a class="opt-in" href="{{ url_for('main.project_page', slug=project.slug) }}"
+           style="text-decoration:none">
+          <span class="body">
+            <span class="t">{{ project.title }}</span>
+            <span class="s">
+              {{ counts.get(project.id, 0) | thousands }} {{ project.item_plural }}
+              · {{ project.languages.count() }}
+              language{{ '' if project.languages.count() == 1 else 's' }}
+              ·
+              {% if project.has_options %}
+                choose between options, {{ project.votes_to_settle }} must agree
+              {% else %}
+                type the answer
+              {% endif %}
+            </span>
+            {% if project.summary %}
+              <span class="s">{{ project.summary }}</span>
+            {% endif %}
+            {% set sample = previews.get(project.id) or [] %}
+            {% if sample %}
+              <span class="sample">
+                {% for row in sample %}{{ row.text }}{% if not loop.last %} · {% endif %}{% endfor %}
+              </span>
+            {% endif %}
+          </span>
+        </a>
+      {% else %}
+        <p class="muted">Nothing is open just yet.</p>
+      {% endfor %}
+    </div>
+
+    <p style="margin-top:32px">
+      <a class="btn" href="{{ url_for('main.join') }}">Start with your language</a>
+    </p>
+
+    <div class="card" style="margin-top:40px; text-align:left">
+      <h3>Have a dataset that needs human answers?</h3>
+      <p class="muted">
+        Upload a CSV of the items, one file per language, with or without
+        options for volunteers to choose between. Once it is approved, speakers
+        can opt in and the results come out through the same public API as
+        everything else.
+      </p>
+      <p style="margin-top:14px">
+        <a class="btn ghost" href="{{ url_for('main.submit_project') }}">Submit a project</a>
+      </p>
+    </div>
+  </div>
+</section>
+{% endblock %}

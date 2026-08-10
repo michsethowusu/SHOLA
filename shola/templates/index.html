@@ -11,15 +11,15 @@
         alive.
       </p>
       <p class="lede">
-        Your contribution here helps us build accurate translations of common
-        Ghanaian words in your language.
+        Your contribution here helps us build accurate data in your language —
+        words, sentences and whatever else people need.
       </p>
       <div class="hero-actions">
         <a class="btn" href="{{ url_for('main.join') }}">Start with your language</a>
         <a class="btn ghost" href="#how-it-works">How it works</a>
       </div>
       <p class="hint" style="margin-top:16px">
-        A handful of words a day, by email. Two minutes. Works on your phone
+        A handful of items a day, by email. Two minutes. Works on your phone
         or laptop.
       </p>
     </div>
@@ -42,7 +42,7 @@
     <div class="stat-strip">
       <div class="stat">
         <span class="n">{{ stats.verdicts | thousands }}</span>
-        <span class="k">words checked so far</span>
+        <span class="k">items checked so far</span>
       </div>
       <div class="stat">
         <span class="n">{{ stats.volunteers | thousands }}</span>
@@ -50,7 +50,7 @@
       </div>
       <div class="stat">
         <span class="n">{{ stats.words | thousands }}</span>
-        <span class="k">words in the list</span>
+        <span class="k">items to check</span>
       </div>
       <div class="stat">
         <span class="n">{{ '%.1f' % stats.coverage_pct }}%</span>
@@ -128,7 +128,7 @@
 <section class="section">
   <div class="wrap narrow center" style="padding-bottom:8px">
     <h2>Two minutes a day</h2>
-    <p class="muted">{{ WORDS_PER_DAY }} words each time, on the days you
+    <p class="muted">{{ WORDS_PER_DAY }} items each time, on the days you
        choose.</p>
     <p style="margin-top:22px"><a class="btn" href="{{ url_for('main.join') }}">Join SHOLA</a></p>
   </div>

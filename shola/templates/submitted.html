@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Project submitted{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap narrow center">
+    <p class="eyebrow">Submitted</p>
+    <h1 style="font-size:clamp(1.8rem,6vw,2.5rem)">{{ project.title }}</h1>
+    <p class="lede" style="margin:0 auto">
+      {{ total | thousands }} {{ project.item_plural }} read from
+      {{ languages | length }} file{{ '' if languages | length == 1 else 's' }}.
+      We will look at it and email {{ project.submitter_email }} either way.
+    </p>
+
+    <div class="card" style="margin:28px 0; text-align:left">
+      <h3>What happens next</h3>
+      <p class="muted" style="margin-bottom:0">
+        Once it is approved, speakers of
+        {% for code in languages %}{{ ALL_LANGUAGES[code].name }}{% if not loop.last %}, {% endif %}{% endfor %}
+        are emailed and can opt in. From then on you can watch it fill up on the
+        <a href="{{ url_for('main.stats') }}">progress page</a> and download the
+        answers from the <a href="{{ url_for('main.api_docs') }}">API</a> at any
+        time — you do not need to ask us for the data.
+      </p>
+    </div>
+
+    <p class="muted">
+      Nothing is sent to volunteers until a person has read it.
+    </p>
+  </div>
+</section>
+{% endblock %}

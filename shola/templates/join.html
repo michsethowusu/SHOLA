@@ -6,9 +6,20 @@
   <div class="wrap narrow">
     <p class="eyebrow">Sign up</p>
     <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">Put your language in the record</h1>
-    <p class="muted">One form, then a few words a day by email. You can stop whenever you like.</p>
+    <p class="muted">One form, then a few items a day by email. You can stop whenever you like.</p>
 
-    <form method="post" enctype="multipart/form-data" style="margin-top:32px" novalidate>
+    {% if pinned %}
+      <div class="notice" style="margin-top:22px">
+        <strong>{{ pinned.title }}</strong>
+        <p class="muted" style="margin:6px 0 0">
+          You followed a link for this one, so it comes first. You can add
+          others below — they start once this is finished.
+        </p>
+      </div>
+    {% endif %}
+
+    <form method="post" enctype="multipart/form-data" style="margin-top:32px" novalidate
+          action="{{ url_for('main.join', project=pinned.slug) if pinned else url_for('main.join') }}">
       <div class="field">
         <label for="name">Your name</label>
         <p class="hint">This is the name other champions will see on the leaderboard.</p>
@@ -18,7 +29,7 @@
 
       <div class="field">
         <label for="email">Email</label>
-        <p class="hint">Your daily list of words comes here. Nothing else.</p>
+        <p class="hint">Your daily list comes here. Nothing else.</p>
         <input type="email" id="email" name="email" required autocomplete="email"
                value="{{ form.email if form }}">
       </div>
@@ -63,9 +74,50 @@
       </div>
 
       <div class="field">
+        <span class="label">What would you like to work on?</span>
+        <p class="hint">Choose at least one. If you choose several, each day's
+           list is shared between them.</p>
+        {% set picked = (form.getlist('projects') if form else []) %}
+        <div class="stack">
+          {% for project in all_projects %}
+            <label class="opt-in{% if pinned and pinned.id == project.id %} locked{% endif %}">
+              <input type="checkbox" name="projects" value="{{ project.id }}"
+                     {% if (project.id|string) in picked
+                           or (pinned and pinned.id == project.id)
+                           or (not picked and not pinned and loop.first) %}checked{% endif %}
+                     data-languages="{{ project.language_codes | join(',') }}">
+              <span class="body">
+                <span class="t">{{ project.title }}</span>
+                <span class="s">
+                  {{ project.item_count() | thousands }} {{ project.item_plural }}
+                  · {{ project.languages.count() }}
+                  language{{ '' if project.languages.count() == 1 else 's' }}
+                  ·
+                  {% if project.has_options %}choose between options
+                  {% else %}type the answer{% endif %}
+                </span>
+                {% set sample = project.preview(limit=2) %}
+                {% if sample %}
+                  <span class="sample">
+                    {% for row in sample %}{{ row.text }}{% if not loop.last %} · {% endif %}{% endfor %}
+                  </span>
+                {% endif %}
+                <a class="s" href="{{ url_for('main.project_page', slug=project.slug) }}"
+                   target="_blank" rel="noopener">See more →</a>
+              </span>
+            </label>
+          {% endfor %}
+        </div>
+        <p class="hint" style="margin-top:10px">
+          Only projects collecting your language are used. If one of these does
+          not cover it, it is skipped.
+        </p>
+      </div>
+
+      <div class="field">
         <span class="label">Which days are you usually free?</span>
         <p class="hint">Choose as many as you like. Leave them all unticked to
-           receive words on any day.</p>
+           receive your list on any day.</p>
         <div class="day-row">
           {% set picked = (form.getlist('days') if form else []) %}
           {% for i in range(7) %}

@@ -6,7 +6,8 @@ from flask import Flask
 
 from .config import (ALL_LANGUAGES, DAY_NAMES, INSTANCE_DIR, LANGUAGES,
                      OTHER_LANGUAGES, TIME_WINDOWS, Config)
-from .models import db, ensure_columns
+from .models import (adopt_orphan_items, db, ensure_columns,
+                     ensure_indexes)
 from .tiers import VOTES_TO_SETTLE
 
 
@@ -26,6 +27,9 @@ def create_app(config_object=Config):
 
     from .views import main
     app.register_blueprint(main)
+
+    from .admin import admin
+    app.register_blueprint(admin)
 
     @app.before_request
     def canonical_host():
@@ -68,6 +72,14 @@ def create_app(config_object=Config):
         added = ensure_columns()
         if added:
             app.logger.info("added columns: %s", ", ".join(added))
+        reindexed = ensure_indexes()
+        if reindexed:
+            app.logger.info("reindexed: %s", ", ".join(reindexed))
+        # Everything collected before projects existed becomes a project, so no
+        # code downstream needs a special case for "the original words".
+        _core, adopted = adopt_orphan_items()
+        if adopted:
+            app.logger.info("adopted %s items into %s", adopted, _core.slug)
 
     @app.context_processor
     def inject_globals():

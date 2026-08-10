@@ -10,11 +10,11 @@
     <div class="stat-strip" style="margin-top:26px">
       <div class="stat">
         <span class="n">{{ stats.words | thousands }}</span>
-        <span class="k">words in the list</span>
+        <span class="k">items to check</span>
       </div>
       <div class="stat">
         <span class="n">{{ stats.covered | thousands }}</span>
-        <span class="k">words checked</span>
+        <span class="k">items checked</span>
       </div>
       <div class="stat">
         <span class="n">{{ stats.verdicts | thousands }}</span>
@@ -27,13 +27,61 @@
     </div>
 
     <div style="margin-top:44px">
+      <h2>By project</h2>
+      <p class="muted">
+        Each project is a separate body of work. Volunteers opt in to the ones
+        they want and each list is shared between them.
+      </p>
+      <div class="scroll-x" style="margin-top:14px">
+        <table class="plain">
+          <thead>
+            <tr>
+              <th>Project</th><th>Items</th><th>Verified</th>
+              <th>Typed answers</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in per_project %}
+              <tr>
+                <td>
+                  <a href="{{ url_for('main.project_page', slug=row.project.slug) }}">
+                    <strong>{{ row.project.title }}</strong></a>
+                  <div class="muted" style="font-size:.82rem">
+                    {{ row.project.item_plural }} ·
+                    {{ row.project.languages.count() }}
+                    language{{ '' if row.project.languages.count() == 1 else 's' }}
+                  </div>
+                </td>
+                <td>{{ row.item_total | thousands }}</td>
+                <td>
+                  {% if row.project.has_options %}
+                    {{ row.verified | thousands }}
+                  {% else %}
+                    <span class="muted">not verifiable</span>
+                  {% endif %}
+                </td>
+                <td>{{ row.typed | thousands }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="hint">
+        A project verifies an item once enough speakers pick the same answer.
+        Where volunteers type the answer instead there is nothing to agree
+        with, so those are counted as contributions and
+        <a href="{{ url_for('main.api_docs') }}">exported separately</a>.
+      </p>
+    </div>
+
+    <div style="margin-top:44px">
       <h2>Volunteers we still need</h2>
       <p class="muted">
         To finish the group each language is on within a year. Nobody signs up
         for a fixed number of words — people keep going for as long as they
         want — so this is a planning figure, not a promise anyone made: we
         assume {{ (completion_rate * 100) | round | int }}% of volunteers stay
-        a year at {{ words_per_day }} words a day and that the rest contribute
+        a year at {{ words_per_day }} items a day and that the rest contribute
         nothing. Deliberately cautious — meeting these numbers should put us
         ahead of schedule, not behind.
       </p>
@@ -87,7 +135,7 @@
         </table>
       </div>
       <p class="hint" style="margin-top:10px">
-        {{ words_per_day }} words a day is
+        {{ words_per_day }} items a day is
         {{ words_per_volunteer | thousands }} answers over a year, so we plan on
         {{ (words_per_volunteer * completion_rate) | round | int }} per person
         recruited. Volunteers who pause or choose fewer days do less; that is
@@ -149,7 +197,7 @@
       <p class="muted">
         {{ VOTES_TO_SETTLE }} speakers must agree before a translation is
         confirmed, so the confirmed count is always lower than the number of
-        words checked.
+        items checked.
       </p>
       <div class="scroll-x" style="margin-top:16px">
         <table class="plain">

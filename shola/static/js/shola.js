@@ -32,11 +32,24 @@
     keystrip: document.getElementById("keystrip"),
     popkeys: document.getElementById("popkeys"),
     skip: document.getElementById("skip-btn"),
-    back: document.getElementById("back-btn")
+    back: document.getElementById("back-btn"),
+    label: document.getElementById("item-label"),
+    ask: document.getElementById("item-ask"),
+    report: document.getElementById("report-btn"),
+    reportSheet: document.getElementById("report-sheet"),
+    reportBack: document.getElementById("report-back"),
+    reportWord: document.getElementById("report-word"),
+    reportNote: document.getElementById("report-note"),
+    reportSend: document.getElementById("report-send"),
+    reportCancel: document.getElementById("report-cancel")
   };
 
   function wordUrl(wordId) {
     return cfg.submitUrl.replace(/\/0$/, "/" + String(wordId));
+  }
+
+  function flagUrl(wordId) {
+    return cfg.flagUrl.replace(/\/0\/flag$/, "/" + String(wordId) + "/flag");
   }
 
   /* ------------------------------------------------------------ rendering */
@@ -48,6 +61,11 @@
       return;
     }
     els.phrase.textContent = item.phrase;
+    // One list can mix projects, so each item brings its own wording rather
+    // than the page assuming everything is an English word to translate.
+    if (els.label && item.label) { els.label.textContent = item.label; }
+    if (els.ask && item.ask) { els.ask.textContent = item.ask; }
+    els.phrase.classList.toggle("long", !!item.long);
     els.options.innerHTML = "";
 
     item.options.forEach(function (opt) {
@@ -93,8 +111,8 @@
     if (empty) { openSheet(); }
 
     var pos = atStart - remaining + 1;
-    els.left.textContent = remaining === 1 ? "1 word left"
-      : remaining + " words left";
+    els.left.textContent = remaining === 1 ? "1 left"
+      : remaining + " left";
     els.bar.style.width = Math.min(100, ((pos - 1) / Math.max(atStart, 1)) * 100) + "%";
     if (els.back) { els.back.hidden = history.length === 0; }
   }
@@ -196,6 +214,58 @@
   });
 
   document.getElementById("sheet-save").addEventListener("click", saveOwn);
+  /* ------------------------------------------------------- reporting */
+
+  function openReport() {
+    if (!els.reportSheet || !queue[0]) return;
+    els.reportWord.textContent = queue[0].phrase;
+    els.reportNote.value = "";
+    els.reportBack.classList.add("open");
+    els.reportSheet.classList.add("open");
+  }
+
+  function closeReport() {
+    if (!els.reportSheet) return;
+    els.reportBack.classList.remove("open");
+    els.reportSheet.classList.remove("open");
+  }
+
+  if (els.report) { els.report.addEventListener("click", openReport); }
+  if (els.reportCancel) { els.reportCancel.addEventListener("click", closeReport); }
+  if (els.reportBack) { els.reportBack.addEventListener("click", closeReport); }
+
+  if (els.reportSend) {
+    els.reportSend.addEventListener("click", function () {
+      var item = queue[0];
+      if (!item || busy) return;
+      var picked = document.querySelector("#report-reasons input:checked");
+      var body = new URLSearchParams();
+      body.set("reason", picked ? picked.value : "other");
+      body.set("note", els.reportNote.value.trim());
+      busy = true;
+      fetch(flagUrl(item.word_id), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "X-Requested-With": "shola"
+        },
+        body: body.toString()
+      }).then(function (r) { return r.json(); }).then(function (data) {
+        busy = false;
+        closeReport();
+        if (data && data.ok) {
+          // The reported item is gone from the list, so the queue is replaced
+          // rather than advanced: the server decided what comes next.
+          queue = data.next || [];
+          remaining = data.remaining;
+          doneTotal = data.done_total;
+          history = [];
+          render();
+        }
+      }).catch(function () { busy = false; closeReport(); });
+    });
+  }
+
   els.input.addEventListener("keydown", function (e) {
     if (e.key === "Enter") { e.preventDefault(); saveOwn(); }
   });

@@ -4,8 +4,9 @@
 up](https://sholaproject.org/join) · [champions](https://sholaproject.org/champions)
 · [progress](https://sholaproject.org/stats) · [API](https://sholaproject.org/api)
 
-A volunteer app for confirming translations of everyday words in **88 Ghanaian
-languages**.
+A volunteer app for collecting human answers about **88 Ghanaian languages** —
+translations, transcriptions, or whatever a project needs — a few items a day,
+by email.
 
 Machine translation produced three candidate translations for each word. Much of
 it is good, some is word-for-word and no speaker would say it, and some is
@@ -32,6 +33,49 @@ deployment.
    is confirmed and the word leaves the queue. A typed answer becomes an option
    the next speaker can agree with, so a language with no loaded translations
    still builds up choices.
+
+### Everything is a project
+
+A project is a body of work: some items, in some languages, needing answers.
+The translation of everyday words is one of these, not a special case — a
+migration on first boot creates it and adopts every item collected before
+projects existed, so no code downstream needs an exception for "the original
+words".
+
+| | |
+|---|---|
+| Submitted at | `/submit` — one CSV per language, no account needed |
+| Approved at | `/admin` — signed link to an address in `SHOLA_ADMINS` |
+| Chosen at | `/join` (at least one) and `/w/<token>/projects` afterwards |
+| Shared as | `/join?project=<slug>` |
+
+An **item** may be a word, a sentence or a paragraph; the project says which and
+the interface follows. `Word` and `word_id` are historical names for the item
+table — renaming them would mean rewriting every foreign key on a live database
+for no behavioural gain, so the code says word and the interface says item.
+
+**One list, shared between projects.** A volunteer opts in to as many as they
+like and still gets one short list. `projects.shares()` splits it as evenly as
+the numbers allow — five items across two projects is three and two, and the
+order rotates by work done so the same project is not always the one that gets
+two. A project whose queue is dry passes its share to the others rather than
+shortening the list.
+
+**Verification belongs to projects that offer options.** Each carries its own
+`votes_to_settle`, because the cost of being wrong is not the same everywhere.
+A project with no options verifies nothing at all: every answer is typed and
+there is nothing for it to agree with. Those answers come out of
+`consensus.typed_rows()` and the `?answers=typed` API, always labelled
+`"verified": false` — mixing them into the verified set would let one
+unreviewed opinion pass as a settled one.
+
+**A share link buys priority, not permanence.** Someone who joins through
+`/join?project=<slug>` works only on that project until its queue is empty for
+their language; then everything they joined opens up.
+
+**Volunteers can report an item.** They are the only people who see these in
+bulk, so a broken item is reportable mid-task from the evaluate screen. A
+flagged item leaves every queue until an admin keeps or withdraws it.
 
 ### It is open-ended
 
@@ -259,24 +303,31 @@ and the page copy.
 
 ```
 shola/
-├── config.py        # settings + the four open languages and their characters
-├── languages.py     # 84 Ghanaian languages people can join the list for
-├── models.py        # Volunteer, Word, Candidate, WordState, Assignment, Evaluation
+├── config.py        # settings + the four seeded languages and their characters
+├── languages.py     # the other 84 Ghanaian languages
+├── models.py        # Project, Word (an item), Candidate, WordState, Volunteer,
+│                    #   VolunteerProject, Assignment, Evaluation, Flag
+│                    #   + ensure_columns / ensure_indexes / adopt_orphan_items
+├── projects.py      # opt-ins, exclusive links, splitting a list between projects
+├── importer.py       # CSV -> items, and the problems to report back
 ├── tiers.py         # groups, per-language vote state, the work queue
-├── assignment.py    # verdicts, day spreading, redistribution, leaderboard
-├── consensus.py     # votes -> confirmed translation
-├── mailer.py        # Gmail SMTP + signed daily links
+├── assignment.py    # verdicts, day spreading, leaderboard
+├── consensus.py     # votes -> verified answer; typed answers kept apart
+├── admin.py         # signed-link admin: approvals and reports
+├── mailer.py        # Gmail SMTP + signed links
 ├── views.py         # routes
-├── cli.py           # import-words, send-daily, release-leases, backup, export
+├── cli.py           # import-words, send-daily, announce-project, backup, export
 ├── templates/
 └── static/
-tests/test_flow.py   # end-to-end checks
+tests/test_flow.py     # one project, worked hard
+tests/test_projects.py # several projects: submission, approval, mixing, reports
 ```
 
 ## Tests
 
 ```bash
 python3 tests/test_flow.py
+python3 tests/test_projects.py
 ```
 
 Covers the parts most likely to break: group ordering and commonest-first
@@ -325,6 +376,7 @@ SHOLA_MAIL_FROM_NAME  SHOLA
 SHOLA_OLD_HOSTS       hostnames to 301 to SHOLA_SITE_URL (default shola.inkika.org)
 SHOLA_WORDS_PER_DAY   words in one send (default 5)
 SHOLA_MISSES_BEFORE_NUDGE    unanswered sends before offering weekly (3)
+SHOLA_ADMINS          comma-separated addresses that may approve projects
 ```
 
 On first boot the container fetches the published dataset and imports it —

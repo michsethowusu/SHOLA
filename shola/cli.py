@@ -57,17 +57,22 @@ def load_frequencies(path):
     return freqs
 
 
-def _upsert_word(phrase, per_language, seen, freq=(0.0, 0)):
-    """Add a word and its candidate translations. Returns True if new."""
+def _upsert_word(phrase, per_language, seen, freq=(0.0, 0), project_id=None):
+    """Add a word and its candidate translations. Returns True if new.
+
+    Scoped to the translation project: item text is unique within a project
+    now, not across the whole table, so a word here must not be confused with
+    the same text uploaded to a different project.
+    """
     if phrase in seen:
         return False
-    word = Word.query.filter_by(phrase=phrase).first()
+    word = Word.query.filter_by(phrase=phrase, project_id=project_id).first()
     if word:
         seen.add(phrase)
         return False
     pct, occurrences = freq
     word = Word(phrase=phrase, frequency=pct, occurrences=occurrences,
-                tier=tier_for(occurrences))
+                tier=tier_for(occurrences), project_id=project_id)
     db.session.add(word)
     db.session.flush()
     for language, variants in per_language.items():
@@ -104,6 +109,13 @@ def import_words(csv_path, jsonl_path, freq_csv, limit):
     def flush():
         db.session.commit()
 
+    # These words belong to the translation project. Set here rather than left
+    # for the boot-time migration to sweep up, so the rows are right the moment
+    # they are written.
+    from .models import CORE_PROJECT, Project
+    core = Project.query.filter_by(slug=CORE_PROJECT["slug"]).first()
+    core_id = core.id if core else None
+
     if jsonl_path:
         with open_maybe_gz(jsonl_path) as fh:
             for line in fh:
@@ -116,7 +128,9 @@ def import_words(csv_path, jsonl_path, freq_csv, limit):
                     continue
                 per_lang = {L: [str(v) for v in (rec.get(L) or [])]
                             for L in languages}
-                if _upsert_word(phrase, per_lang, seen, freqs.get(phrase, (0.0, 0))):
+                if _upsert_word(phrase, per_lang, seen,
+                                freqs.get(phrase, (0.0, 0)),
+                                project_id=core_id):
                     added += 1
                     batch += 1
                 if batch >= 500:
@@ -133,7 +147,9 @@ def import_words(csv_path, jsonl_path, freq_csv, limit):
                     continue
                 per_lang = {L: [rec.get(f"{L}_{i}", "") for i in (1, 2, 3)]
                             for L in languages}
-                if _upsert_word(phrase, per_lang, seen, freqs.get(phrase, (0.0, 0))):
+                if _upsert_word(phrase, per_lang, seen,
+                                freqs.get(phrase, (0.0, 0)),
+                                project_id=core_id):
                     added += 1
                     batch += 1
                 if batch >= 500:
@@ -229,6 +245,90 @@ def send_daily(window, dry_run, force):
     click.echo(f"sent {sent}, skipped {skipped}, failed {failed}")
     if failed:
         sys.exit(1)
+
+
+def announce_project(project):
+    """Email every volunteer who speaks a language this project collects.
+
+    Returns how many were emailed. Failures are logged and skipped rather than
+    aborting: one bad address must not stop the rest being told.
+    """
+    from .mailer import build_project_email, send
+    from .models import ProjectLanguage
+    from .projects import mark_announced
+
+    codes = [pl.language for pl in project.languages]
+    if not codes:
+        return 0
+    volunteers = (Volunteer.query
+                  .filter(Volunteer.active.is_(True),
+                          Volunteer.language.in_(codes))
+                  .all())
+    sent = 0
+    for volunteer in volunteers:
+        try:
+            subject, text, html = build_project_email(volunteer, project)
+            send(volunteer.email, subject, text, html)
+            sent += 1
+        except Exception as exc:      # noqa: BLE001
+            current_app.logger.warning("announce failed for %s: %s",
+                                       volunteer.email, exc)
+    mark_announced(project)
+    return sent
+
+
+@shola_cli.command("announce-project")
+@click.option("--slug", required=True)
+def announce_project_cmd(slug):
+    """Email volunteers about an approved project."""
+    from .models import Project
+
+    project = Project.query.filter_by(slug=slug).first()
+    if not project:
+        raise click.UsageError(f"no project {slug!r}")
+    if project.status != "approved":
+        raise click.UsageError(f"{slug} is {project.status}, not approved")
+    click.echo(f"emailed {announce_project(project)} volunteers")
+
+
+@shola_cli.command("projects")
+def projects_cmd():
+    """Every project, its state and its size."""
+    from .models import Project
+    from .projects import item_counts
+
+    for project in Project.query.order_by(Project.sort_order,
+                                          Project.id).all():
+        counts = item_counts(project)
+        click.echo(f"{project.status:9s} {project.slug:28s} "
+                   f"{project.item_count():>8,} items  "
+                   f"{'options' if project.has_options else 'typed  '}  "
+                   + ", ".join(f"{k}:{v:,}" for k, v in counts.items()))
+
+
+@shola_cli.command("export-typed")
+@click.option("--slug", required=True)
+@click.option("--language", required=True)
+@click.option("--out", type=click.Path(), default="-")
+def export_typed(slug, language, out):
+    """Write the answers volunteers typed, which are never verified."""
+    from .consensus import typed_rows
+    from .models import Project
+
+    project = Project.query.filter_by(slug=slug).first()
+    if not project:
+        raise click.UsageError(f"no project {slug!r}")
+    fh = sys.stdout if out == "-" else open(out, "w", newline="",
+                                           encoding="utf-8")
+    writer = csv.writer(fh, lineterminator="\n")
+    writer.writerow(["item", "typed_answer", "answered_on"])
+    n = 0
+    for row in typed_rows(language, project_id=project.id):
+        writer.writerow(row)
+        n += 1
+    if fh is not sys.stdout:
+        fh.close()
+        click.echo(f"{n} typed answers -> {out}")
 
 
 @shola_cli.command("export")

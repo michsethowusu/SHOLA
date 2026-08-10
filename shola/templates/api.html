@@ -1,26 +1,78 @@
 {% extends "base.html" %}
-{% block title %}SHOLA words API{% endblock %}
+{% block title %}SHOLA data API{% endblock %}
 
 {% block content %}
 <section class="section">
   <div class="wrap">
     <p class="eyebrow">For developers</p>
-    <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">Words API</h1>
+    <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">Data API</h1>
     <p class="lede" style="max-width:56ch">
-      Pull verified Ghanaian-language words straight out of SHOLA. No key,
-      no sign-up, no rate limit. Every entry here was chosen by speakers, not by
-      a machine.
+      Pull Ghanaian-language data straight out of SHOLA. No key, no sign-up, no
+      rate limit. Every answer here came from a speaker, not a machine.
     </p>
 
     <div class="notice" style="margin-top:22px">
-      <strong>What "verified" means.</strong> Each English word is shown to
-      speakers alongside three possible translations. They choose one or write
-      their own. A word appears here only once <strong>{{ VOTES_TO_SETTLE }} or
-      more speakers independently chose the same wording</strong>. Words where speakers
-      disagreed are left out. Raise <code>min_votes</code> for a stricter list.
+      <strong>Verified, or collected.</strong> Where a project offers options,
+      an item is <strong>verified</strong> once that project's number of
+      speakers independently chose the same answer — five for the translation
+      project, and each project sets its own. Items where speakers disagreed are
+      left out.
+      <br><br>
+      Where a project has no options, volunteers type the answer. Nobody agrees
+      with anything, so nothing is verified: those are
+      <strong>collected answers</strong>, one row per volunteer, and they are
+      never mixed into the verified set. Ask for them with
+      <code>?answers=typed</code>.
     </div>
 
-    <h2 style="margin-top:44px">Available now</h2>
+    <h2 style="margin-top:44px">Projects</h2>
+    <p class="muted">Each project is a separate body of work with its own
+       items, languages and bar for agreement.</p>
+    <div class="card" style="margin-top:14px">
+<pre style="margin:0;overflow-x:auto"><code>curl "{{ config.SITE_URL }}/api/projects"</code></pre>
+    </div>
+    <div class="scroll-x" style="margin-top:14px">
+      <table class="plain">
+        <thead>
+          <tr>
+            <th>Project</th><th>slug</th><th>Items are</th><th>Answers</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for project in projects %}
+            <tr>
+              <td>{{ project.title }}</td>
+              <td><code>{{ project.slug }}</code></td>
+              <td>{{ project.item_plural }}</td>
+              <td>
+                {% if project.has_options %}
+                  verified at {{ project.votes_to_settle }} matching
+                {% else %}
+                  collected, not verified
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <h2 style="margin-top:44px">One project, one language</h2>
+    <div class="card" style="margin-top:14px">
+<pre style="margin:0;overflow-x:auto"><code>curl "{{ config.SITE_URL }}/api/items/everyday-words/twi?limit=50"
+curl "{{ config.SITE_URL }}/api/items/everyday-words/twi?format=csv"
+curl "{{ config.SITE_URL }}/api/items/&lt;slug&gt;/&lt;language&gt;?answers=typed"</code></pre>
+    </div>
+    <p class="hint">
+      <code>limit</code> up to 1000, <code>offset</code> to page,
+      <code>min_votes</code> to raise the bar, <code>format=csv</code> for a
+      spreadsheet. A project that cannot verify returns collected answers
+      whether or not you ask for them, and says <code>"verified": false</code>.
+    </p>
+
+    <h2 style="margin-top:44px">The translation project by language</h2>
+    <p class="muted">The original body of work, kept at its own endpoints so
+       nothing built against them breaks.</p>
     <div class="scroll-x" style="margin-top:14px">
       <table class="plain">
         <thead>

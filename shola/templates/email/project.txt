@@ -1,0 +1,22 @@
+Something new to work on, {{ first }}
+
+{{ title }}
+
+{{ summary }}
+
+{{ item_count }} {{ item_plural }} in {{ language_name }}.
+{% if has_options %}You would choose between options, as you do now.{% else %}You would type the answer yourself.{% endif %}
+
+Opting in means your list is shared between this and what you already do -
+still {{ send_size }} items each time, not more.
+
+Have a look and decide:
+{{ opt_in_link }}
+
+Not interested? Ignore this. Nothing changes.
+
+--
+You get this because you check {{ language_name }} items for SHOLA.
+
+Change your days, take a break, or stop:
+{{ settings_link }}

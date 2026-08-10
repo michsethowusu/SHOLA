@@ -56,9 +56,13 @@ def build_opened_email(volunteer, language_name, link):
             render_template("email/opened.html", **ctx))
 
 
-def build_link_email(volunteer, link, note):
-    """Just the personalised link, for when there are no words to list."""
-    first = volunteer.name.split()[0] if volunteer.name else "there"
+def build_link_email(volunteer, link, note, name=None):
+    """Just the link, for when there is no list to send.
+
+    `volunteer` may be None: the admin sign-in link has no volunteer behind it.
+    """
+    first = name or (volunteer.name.split()[0]
+                     if volunteer is not None and volunteer.name else "there")
     return ("Your SHOLA link",
             render_template("email/link.txt", first=first, link=link, note=note),
             render_template("email/link.html", first=first, link=link, note=note))
@@ -81,24 +85,41 @@ def settings_link(volunteer):
     return f"{base}/w/{make_token(volunteer)}/settings"
 
 
+def list_nouns(words):
+    """What to call the things in this list: ("word", "words").
+
+    A list drawn from one project uses that project's own noun, so someone
+    translating words is still told they have words. Mixed lists say "items",
+    because there is no honest single word for a sentence and a paragraph.
+    """
+    formats = {w.project.item_format for w in words
+               if w.project is not None} or {"word"}
+    if len(formats) > 1:
+        return "item", "items"
+    noun = formats.pop()
+    return noun, noun + "s"
+
+
 def build_daily_email(volunteer, words, overdue_count=0):
     """Return (subject, text, html) for today's list."""
     shown = words[:MAX_WORDS_IN_EMAIL]
     more = max(0, len(words) - len(shown))
     link = daily_link(volunteer)
     first = volunteer.name.split()[0] if volunteer.name else "there"
+    noun, plural = list_nouns(words)
 
     n = len(words)
     if overdue_count and overdue_count == n:
-        subject = f"{n} words waiting for you, {first}"
+        subject = f"{n} {plural} waiting for you, {first}"
     elif n == 1:
-        subject = f"One word needs your ear, {first}"
+        subject = f"One {noun} needs your ear, {first}"
     else:
-        subject = f"{n} words for you today, {first}"
+        subject = f"{n} {plural} for you today, {first}"
 
     ctx = {"volunteer": volunteer, "words": shown, "more": more,
            "total": n, "link": link, "first": first,
            "overdue_count": overdue_count,
+           "noun": noun, "plural": plural,
            "settings_link": settings_link(volunteer),
            "language_name": current_app.config["ALL_LANGUAGES"][
                volunteer.language]["name"]}
@@ -132,6 +153,35 @@ def build_weekly_offer_email(volunteer, words):
     return (subject,
             render_template("email/weekly.txt", **ctx),
             render_template("email/weekly.html", **ctx))
+
+
+def build_project_email(volunteer, project):
+    """Tell an existing volunteer a new project exists, and let them decide.
+
+    Framed as an offer with a decision attached, not an announcement: the only
+    thing being asked is whether they want it, and ignoring it must cost them
+    nothing.
+    """
+    base = current_app.config["SITE_URL"].rstrip("/")
+    token = make_token(volunteer)
+    first = volunteer.name.split()[0] if volunteer.name else "there"
+    ctx = {
+        "first": first,
+        "title": project.title,
+        "summary": project.summary,
+        "item_count": f"{project.item_count(volunteer.language):,}",
+        "item_plural": project.item_plural,
+        "has_options": project.has_options,
+        "language_name": current_app.config["ALL_LANGUAGES"][
+            volunteer.language]["name"],
+        "preview": project.preview(volunteer.language, limit=3),
+        "send_size": current_app.config["WORDS_PER_DAY"],
+        "opt_in_link": f"{base}/w/{token}/projects",
+        "settings_link": settings_link(volunteer),
+    }
+    return (f"New on SHOLA: {project.title}",
+            render_template("email/project.txt", **ctx),
+            render_template("email/project.html", **ctx))
 
 
 def send(to_email, subject, text, html):

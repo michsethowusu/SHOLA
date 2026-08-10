@@ -255,8 +255,10 @@ body.focus .topbar { position: static; }
 .stat-strip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 2px;
-  background: var(--line);
+  /* Paper, not the divider colour: an odd number of tiles leaves an empty grid
+     cell, and a container painted in the divider colour showed that gap as a
+     solid grey block. The dividers come from the tiles instead. */
+  background: var(--paper);
   border: 1px solid var(--line);
   border-radius: var(--r-md);
   overflow: hidden;
@@ -265,6 +267,9 @@ body.focus .topbar { position: static; }
 .stat {
   background: var(--paper);
   padding: 20px 18px;
+  /* Hairlines drawn outside the box, so they cost no layout space and the
+     outermost ones are clipped by the container's overflow. */
+  box-shadow: 1px 0 0 var(--line), 0 1px 0 var(--line);
 }
 .stat .n {
   font-family: var(--display);
@@ -358,7 +363,8 @@ body.focus .topbar { position: static; }
 }
 .hint { font-size: .88rem; color: var(--ink-faint); margin: 4px 0 9px; }
 
-input[type=text], input[type=email], input[type=number], textarea, select {
+input[type=text], input[type=email], input[type=number], input[type=search],
+textarea, select {
   width: 100%;
   min-height: 52px;
   padding: 13px 15px;
@@ -445,6 +451,17 @@ input:focus, textarea:focus, select:focus { border-color: var(--ink); outline-of
   font-weight: 700;
   letter-spacing: -0.03em;
   margin: 0 0 4px;
+  overflow-wrap: anywhere;
+}
+/* A paragraph set at display size is unreadable on a phone. Long items step
+   down to body proportions and keep normal line spacing. */
+.the-word.long {
+  font-family: inherit;
+  font-size: clamp(1.02rem, 3.6vw, 1.18rem);
+  font-weight: 500;
+  line-height: 1.55;
+  letter-spacing: 0;
+  margin-bottom: 10px;
 }
 .ask { color: var(--ink-soft); font-size: .97rem; margin: 0 0 20px; }
 
@@ -644,3 +661,47 @@ table.plain th { font-size: .8rem; text-transform: uppercase; letter-spacing: .0
     transition-duration: .001ms !important;
   }
 }
+
+/* --- Choosing what to work on -------------------------------------------- */
+/* A tall card rather than a chip: each project needs a title, a size, and a
+   sample of real items before anyone can judge whether they want it. */
+.stack { display: grid; gap: 12px; }
+
+.opt-in {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  padding: 16px 18px;
+  background: var(--paper);
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-md);
+  cursor: pointer;
+}
+.opt-in input { margin-top: 3px; flex: 0 0 auto; width: 20px; height: 20px; }
+.opt-in .body { display: grid; gap: 4px; }
+.opt-in .t { font-weight: 600; }
+.opt-in .s { font-size: .86rem; color: var(--ink-soft); }
+.opt-in .sample {
+  font-family: var(--mono);
+  font-size: .78rem;
+  color: var(--ink-faint);
+  overflow-wrap: anywhere;
+}
+.opt-in:has(input:checked) { border-color: var(--ink); background: #fff; }
+.opt-in:has(input:focus-visible) { outline: 3px solid var(--forest); outline-offset: 2px; }
+/* Pinned by a share link: still visible, but not something to untick. */
+.opt-in.locked { border-color: var(--red); }
+.opt-in.locked input { pointer-events: none; }
+
+/* --- Reporting a bad item ------------------------------------------------ */
+.report-btn {
+  background: none;
+  border: 0;
+  padding: 6px 2px;
+  font: inherit;
+  font-size: .84rem;
+  color: var(--ink-faint);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.report-btn:hover { color: var(--red); }

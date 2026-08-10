@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ project.title }} · Admin{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap narrow">
+    <p class="eyebrow">Admin · {{ project.status }}</p>
+    <h1 style="font-size:clamp(1.7rem,5vw,2.2rem)">{{ project.title }}</h1>
+    {% if project.summary %}<p class="lede">{{ project.summary }}</p>{% endif %}
+
+    <div class="card" style="margin-top:22px; text-align:left">
+      <h3>What was submitted</h3>
+      <table class="plain" style="margin-top:10px">
+        <tbody>
+          <tr><td>From</td><td>{{ project.submitter_name or '—' }}
+              {% if project.submitter_org %}({{ project.submitter_org }}){% endif %}
+              · {{ project.submitter_email }}</td></tr>
+          <tr><td>Items are</td><td>{{ project.item_plural }}</td></tr>
+          <tr><td>Answers</td><td>
+            {% if project.has_options %}
+              chosen from options · {{ project.votes_to_settle }} matching
+              answers verify an item
+            {% else %}
+              typed by volunteers · nothing is verified, answers export
+              separately
+            {% endif %}
+          </td></tr>
+          <tr><td>Items per language</td><td>
+            {% for code, n in counts.items() %}
+              {{ code }}: {{ n | thousands }}{% if not loop.last %} · {% endif %}
+            {% endfor %}
+          </td></tr>
+          <tr><td>Submitted</td><td>{{ project.created_at.strftime('%-d %B %Y, %H:%M') }}</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h2 style="margin-top:34px">Read some of it</h2>
+    <p class="muted">Enough to tell whether the file is what it claims to be.</p>
+    {% for code, rows in previews.items() %}
+      <h3 style="margin-top:20px">{{ ALL_LANGUAGES[code].name }}</h3>
+      <div class="card" style="text-align:left">
+        {% for row in rows %}
+          <div style="padding:8px 0{% if not loop.last %};border-bottom:1px solid var(--line){% endif %}">
+            <div style="overflow-wrap:anywhere"><strong>{{ row.text }}</strong></div>
+            {% if row.options %}
+              <div class="muted" style="font-size:.9rem">
+                {% for option in row.options %}{{ option }}{% if not loop.last %} · {% endif %}{% endfor %}
+              </div>
+            {% endif %}
+          </div>
+        {% else %}
+          <p class="muted" style="margin:0">No items for this language.</p>
+        {% endfor %}
+      </div>
+    {% endfor %}
+
+    <form method="post" action="{{ url_for('admin.decide', project_id=project.id) }}"
+          style="margin-top:34px">
+      <div class="field">
+        <label for="note">Note (kept with the project)</label>
+        <input type="text" id="note" name="note" maxlength="600"
+               value="{{ project.review_note }}">
+      </div>
+      <div style="display:flex; flex-wrap:wrap; gap:10px">
+        {% if project.status == 'pending' %}
+          <button class="btn" name="action" value="approve" type="submit">Approve</button>
+          <button class="btn ghost" name="action" value="reject" type="submit">Reject</button>
+        {% elif project.status == 'approved' %}
+          <button class="btn" name="action" value="announce" type="submit">
+            {% if project.announced_at %}Email volunteers again{% else %}Email volunteers{% endif %}
+          </button>
+          <button class="btn ghost" name="action" value="pause" type="submit">Pause</button>
+        {% elif project.status == 'paused' %}
+          <button class="btn" name="action" value="resume" type="submit">Resume</button>
+        {% elif project.status == 'rejected' %}
+          <button class="btn" name="action" value="approve" type="submit">Approve after all</button>
+        {% endif %}
+      </div>
+    </form>
+
+    <p class="hint" style="margin-top:30px">
+      <a href="{{ url_for('admin.dashboard') }}">Back to the dashboard</a>
+      {% if project.status in ('approved', 'paused') %}
+        · <a href="{{ url_for('main.project_page', slug=project.slug) }}">Public page</a>
+      {% endif %}
+    </p>
+  </div>
+</section>
+{% endblock %}

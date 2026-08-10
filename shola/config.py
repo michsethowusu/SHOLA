@@ -165,8 +165,15 @@ class Config:
     SMTP_PASSWORD = os.environ.get("SHOLA_SMTP_PASSWORD", "")
     MAIL_FROM_NAME = os.environ.get("SHOLA_MAIL_FROM_NAME", "SHOLA")
 
+    # Who may approve projects and read reports. Deliberately not in the
+    # database: gaining admin rights should mean changing the deployment, not
+    # editing a row.
+    ADMIN_EMAILS = os.environ.get("SHOLA_ADMINS", "michseth@ghananlp.org")
+
     UPLOAD_DIR = INSTANCE_DIR / "uploads"
-    MAX_CONTENT_LENGTH = 6 * 1024 * 1024      # 6 MB photo ceiling
+    # Covers a photo and a project's CSV files. A project with 200,000 items
+    # will not fit; that is what the row ceiling in the importer says out loud.
+    MAX_CONTENT_LENGTH = 24 * 1024 * 1024
     ALLOWED_PHOTO_EXT = {".jpg", ".jpeg", ".png", ".webp"}
     PHOTO_SIZE = 320                          # square thumbnail edge, px
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{% block title %}SHOLA: Share Your Language{% endblock %}</title>
-<meta name="description" content="Keep your language alive. Help build accurate translations of common Ghanaian words in any of 88 Ghanaian languages — a few words a day, by email.">
+<meta name="description" content="Keep your language alive. Help build accurate data for 88 Ghanaian languages — words, sentences and more, a few items a day, by email.">
 <meta name="theme-color" content="#faf7f2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -22,6 +22,7 @@
     </a>
     <nav class="topnav">
       <a href="{{ url_for('main.champions') }}" {% if request.endpoint == 'main.champions' %}class="here"{% endif %}>Champions</a>
+      <a href="{{ url_for('main.projects_page') }}" {% if request.endpoint in ('main.projects_page', 'main.project_page') %}class="here"{% endif %}>Projects</a>
       <a href="{{ url_for('main.stats') }}" {% if request.endpoint == 'main.stats' %}class="here"{% endif %}>Progress</a>
       <a href="{{ url_for('main.api_docs') }}" {% if request.endpoint == 'main.api_docs' %}class="here"{% endif %}>API</a>
       {% if session.token %}
@@ -53,6 +54,10 @@
     <span class="faint">·</span>
     <a href="{{ url_for('main.champions') }}">Champions</a>
     <span class="faint">·</span>
+    <a href="{{ url_for('main.projects_page') }}">Projects</a>
+    <span class="faint">·</span>
+    <a href="{{ url_for('main.submit_project') }}">Submit a project</a>
+    <span class="faint">·</span>
     <a href="{{ url_for('main.stats') }}">Progress</a>
     <span class="faint">·</span>
     <a href="{{ url_for('main.api_docs') }}">API</a>
@@ -61,7 +66,7 @@
     <span class="faint">·</span>
     <a href="{{ url_for('main.brand') }}">Media kit</a>
     <span class="faint">·</span>
-    <span class="faint">Words released under
+    <span class="faint">Data released under
       <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank"
          rel="noopener">CC BY 4.0</a></span>
   </div>

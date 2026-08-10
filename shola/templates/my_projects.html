@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Your projects{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap narrow">
+    <p class="eyebrow">Your projects</p>
+    <h1 style="font-size:clamp(1.8rem,6vw,2.4rem)">What you work on</h1>
+    <p class="lede">
+      Tick as many as you like. Each list you get is shared between them, as
+      evenly as the numbers allow.
+    </p>
+
+    <form method="post" style="margin-top:28px">
+      <div class="stack">
+        {% for project in projects %}
+          {% set opted = mine.get(project.id) %}
+          <label class="opt-in{% if opted and opted.exclusive %} locked{% endif %}">
+            <input type="checkbox" name="projects" value="{{ project.id }}"
+                   {% if opted %}checked{% endif %}>
+            <span class="body">
+              <span class="t">{{ project.title }}</span>
+              <span class="s">
+                {{ counts.get(project.id, 0) | thousands }} {{ project.item_plural }}
+                ·
+                {% if project.has_options %}choose between options
+                {% else %}type the answer{% endif %}
+                {% if opted and opted.exclusive %} · yours comes first{% endif %}
+              </span>
+              {% set sample = previews.get(project.id) or [] %}
+              {% if sample %}
+                <span class="sample">
+                  {% for row in sample %}{{ row.text }}{% if not loop.last %} · {% endif %}{% endfor %}
+                </span>
+              {% endif %}
+              <a class="s" href="{{ url_for('main.project_page', slug=project.slug) }}">
+                See more →</a>
+            </span>
+          </label>
+        {% else %}
+          <p class="muted">
+            Nothing is collecting {{ ALL_LANGUAGES[volunteer.language].name }}
+            yet beyond what you already have.
+          </p>
+        {% endfor %}
+      </div>
+      <button class="btn" type="submit" style="margin-top:20px">Save</button>
+    </form>
+
+    <p class="hint" style="margin-top:26px">
+      <a href="{{ url_for('main.settings', token=token) }}">Days, breaks and
+      stopping</a> ·
+      <a href="{{ url_for('main.evaluate', token=token) }}">Back to your list</a>
+    </p>
+  </div>
+</section>
+{% endblock %}

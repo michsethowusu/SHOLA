@@ -12,6 +12,7 @@ ever go to a mailbox someone actually opened.
 
 import csv
 import io
+import re
 import secrets
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -24,10 +25,14 @@ from werkzeug.utils import secure_filename
 
 from . import consensus
 from .assignment import leaderboard, record_verdict
-from .tiers import active_tier, daily_quota, recruitment, tier_progress, top_up
+from .tiers import (VOTES_TO_SETTLE, active_tier, daily_quota, recruitment,
+                    tier_progress, top_up)
 from .mailer import build_otp_email, make_token, read_token
-from .models import (Assignment, Candidate, PendingSignup, Volunteer, Word,
-                     db, site_stats)
+from .models import (Assignment, Candidate, Flag, PendingSignup, Project,
+                     ProjectLanguage, Volunteer, Word, db, site_stats)
+from . import importer
+from .projects import (active_for, approved_projects, item_counts, joined,
+                       opt_in, opt_out)
 
 main = Blueprint("main", __name__)
 
@@ -52,6 +57,44 @@ def volunteer_from_token(token, require_active=True):
     if require_active and not volunteer.active:
         return None
     return volunteer
+
+
+ITEM_FORMATS = {
+    "word": "Words or short phrases",
+    "sentence": "Sentences",
+    "paragraph": "Paragraphs",
+}
+
+
+def unique_slug(title):
+    """A readable, stable id from the title, with a suffix only if needed."""
+    base = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:60] or "project"
+    slug, n = base, 1
+    while Project.query.filter_by(slug=slug).first() is not None:
+        n += 1
+        slug = f"{base}-{n}"
+    return slug
+
+
+def notify_admins_of_submission(project, total):
+    """Tell the admins there is something waiting, without failing the submit.
+
+    A submission that is safely stored must not be reported as a failure
+    because an email did not go out; the dashboard shows it either way.
+    """
+    from .admin import admin_emails, make_link
+    from .mailer import build_link_email, send
+
+    for email in admin_emails():
+        try:
+            subject, text, html = build_link_email(
+                None, make_link(email),
+                f"“{project.title}” was submitted with {total:,} items in "
+                f"{len(project.language_codes)} language(s), waiting for a "
+                f"decision.", name="there")
+            send(email, f"New SHOLA project: {project.title}", text, html)
+        except Exception as exc:      # noqa: BLE001
+            current_app.logger.warning("admin notice failed: %s", exc)
 
 
 def language_info(code):
@@ -112,6 +155,7 @@ def stats():
     target = current_app.config["WORDS_PER_VOLUNTEER"]
 
     shown = shown_languages()
+    live_projects = approved_projects()
     by_language = {}
     for code in shown:
         by_language[code] = {
@@ -133,6 +177,17 @@ def stats():
                            by_language=by_language, totals=totals,
                            completion_rate=rate, words_per_volunteer=target,
                            words_per_day=current_app.config["WORDS_PER_DAY"],
+                           projects=live_projects,
+                           per_project=[{
+                               "project": p,
+                               "verified": sum(
+                                   consensus.verified_count(c, project_id=p.id)
+                                   for c in p.language_codes),
+                               "typed": sum(
+                                   consensus.typed_count(c, project_id=p.id)
+                                   for c in p.language_codes),
+                               "item_total": p.item_count(),
+                           } for p in live_projects],
                            SHOWN_LANGUAGES=shown)
 
 
@@ -223,10 +278,24 @@ def issue_code(pending):
     send(pending.email, subject, text, html)
 
 
+def exclusive_from_request():
+    """The project a share link arrived with, if any.
+
+    A project's author gets a link with `?project=<slug>`. Someone joining
+    through it works on that project first; that is the whole difference.
+    """
+    slug = (request.values.get("project") or "").strip()
+    if not slug:
+        return None
+    return Project.query.filter_by(slug=slug, status="approved").first()
+
+
 @main.route("/join", methods=["GET", "POST"])
 def join():
     if request.method == "GET":
-        return render_template("join.html")
+        pinned = exclusive_from_request()
+        return render_template("join.html", pinned=pinned,
+                               all_projects=approved_projects())
 
     name = (request.form.get("name") or "").strip()
     email = (request.form.get("email") or "").strip().lower()
@@ -248,6 +317,18 @@ def join():
         errors.append("That email is already signed up. Ask for your link "
                       "instead.")
 
+    # At least one project, and only ones that collect their language: a
+    # volunteer with no project would receive an empty list for ever.
+    pinned = exclusive_from_request()
+    open_ids = {p.id for p in approved_projects(language)} if language else set()
+    chosen = [int(p) for p in request.form.getlist("projects")
+              if p.isdigit() and int(p) in open_ids]
+    if pinned is not None and pinned.id in open_ids and pinned.id not in chosen:
+        chosen.append(pinned.id)
+    if not chosen:
+        errors.append("Choose at least one thing to work on." if open_ids
+                      else "Nothing is collecting in that language yet.")
+
     photo_name = None
     if not errors:
         try:
@@ -258,7 +339,9 @@ def join():
     if errors:
         for e in errors:
             flash(e, "error")
-        return render_template("join.html", form=request.form), 400
+        return render_template("join.html", form=request.form,
+                               pinned=exclusive_from_request(),
+                               all_projects=approved_projects()), 400
 
     # Held, not created. The Volunteer only exists once the code comes back.
     pending = PendingSignup.query.filter_by(email=email).first()
@@ -273,6 +356,8 @@ def join():
                            else "anytime")
     pending.photo = photo_name or pending.photo
     pending.photo_consent = consent
+    pending.project_ids = ",".join(str(c) for c in chosen)
+    pending.exclusive_project_id = pinned.id if pinned is not None else None
     pending.sends = 1
     db.session.commit()
 
@@ -286,7 +371,9 @@ def join():
         # Deliberately not 502: Cloudflare replaces a 502 from the origin with
         # its own error page, so the volunteer saw a gateway error instead of
         # this message. 503 reaches them, and still reads as our fault.
-        return render_template("join.html", form=request.form), 503
+        return render_template("join.html", form=request.form,
+                               pinned=exclusive_from_request(),
+                               all_projects=approved_projects()), 503
 
     session["signup_email"] = email
     return redirect(url_for("main.verify"))
@@ -334,6 +421,12 @@ def verify():
         available_days=pending.available_days,
         time_window=pending.time_window)
     db.session.add(volunteer)
+    db.session.flush()
+
+    # Opt-ins are created here, from the choices held on the pending signup:
+    # there was nothing to attach them to until the address proved real.
+    wanted = [int(p) for p in (pending.project_ids or "").split(",") if p]
+    opt_in(volunteer, wanted, exclusive_id=pending.exclusive_project_id)
     db.session.delete(pending)
     db.session.commit()
 
@@ -343,7 +436,8 @@ def verify():
 
     given = top_up(volunteer)
     return render_template("joined.html", volunteer=volunteer, assigned=given,
-                           token=token)
+                           token=token, projects=[p for _vp, p in
+                                                 joined(volunteer)])
 
 
 @main.route("/verify/resend", methods=["POST"])
@@ -417,13 +511,28 @@ def leave():
 # ------------------------------------------------------------ evaluation flow
 
 def as_cards(assignments, language):
-    """Turn assignments into the card payload the evaluate page renders."""
+    """Turn assignments into the card payload the evaluate page renders.
+
+    Each card carries its own wording, because one list can mix projects: a
+    sentence to read and a word to translate should not both be introduced as
+    "English word".
+    """
+    lang_name = language_label(language)
     items = []
     for assignment in assignments:
         word = assignment.word
+        project = word.project
+        noun = project.item_noun if project else "word"
         items.append({
             "word_id": word.id,
             "phrase": word.phrase,
+            "project": project.title if project else "",
+            "label": ("English " + noun) if word.language is None
+                     else noun.capitalize(),
+            "ask": (f"How would you say this in {lang_name}?"
+                    if word.language is None
+                    else f"What should this be in {lang_name}?"),
+            "long": bool(project and project.item_format == "paragraph"),
             "options": [{"id": c.id, "text": c.text}
                         for c in sorted(word.options(language),
                                         key=lambda c: c.position)],
@@ -462,6 +571,7 @@ def evaluate(token):
     return render_template("evaluate.html", volunteer=volunteer, queue=queue,
                            remaining=remaining, lang=lang, token=token,
                            working_ahead=working_ahead,
+                           flag_reasons=FLAG_REASONS,
                            done_total=volunteer.done_count())
 
 
@@ -615,6 +725,216 @@ def settings(token):
     return redirect(url_for("main.settings", token=token))
 
 
+@main.route("/projects")
+def projects_page():
+    """What there is to work on, for anyone deciding whether to join."""
+    open_projects = approved_projects()
+    return render_template(
+        "projects.html", projects=open_projects,
+        counts={p.id: p.item_count() for p in open_projects},
+        previews={p.id: p.preview(limit=3) for p in open_projects})
+
+
+@main.route("/projects/<slug>")
+def project_page(slug):
+    proj = Project.query.filter_by(slug=slug).first()
+    if not proj or proj.status not in ("approved", "paused"):
+        abort(404)
+    language = (request.args.get("language") or "").strip() or None
+    if language not in proj.language_codes:
+        language = proj.language_codes[0] if proj.language_codes else None
+    return render_template(
+        "project.html", project=proj, language=language,
+        preview=proj.preview(language, limit=6), counts=item_counts(proj),
+        verified={code: consensus.verified_count(code, project_id=proj.id)
+                  for code in proj.language_codes},
+        typed={code: consensus.typed_count(code, project_id=proj.id)
+               for code in proj.language_codes},
+        share_link=(current_app.config["SITE_URL"].rstrip("/")
+                    + url_for("main.join", project=proj.slug)))
+
+
+@main.route("/w/<token>/projects", methods=["GET", "POST"])
+def my_projects(token):
+    """Opt in or out, from the volunteer's own link."""
+    volunteer = volunteer_from_token(token, require_active=False)
+    if not volunteer:
+        flash("That link is not valid any more. We can email you a new one.",
+              "error")
+        return redirect(url_for("main.resend"))
+
+    available = approved_projects(volunteer.language)
+    mine = {vp.project_id: vp for vp, _p in joined(volunteer)}
+
+    if request.method == "POST":
+        wanted = {int(p) for p in request.form.getlist("projects")
+                  if p.isdigit()}
+        if not wanted:
+            flash("Keep at least one — otherwise there is nothing to send you.",
+                  "error")
+            return redirect(url_for("main.my_projects", token=token))
+        opt_in(volunteer, wanted - set(mine))
+        for pid in set(mine) - wanted:
+            opt_out(volunteer, pid)
+        # Their current list may hold items from a project they just left; hand
+        # those back rather than asking for work they opted out of.
+        stale = (Assignment.query
+                 .join(Word, Word.id == Assignment.word_id)
+                 .filter(Assignment.volunteer_id == volunteer.id,
+                         Assignment.status == "pending",
+                         ~Word.project_id.in_(wanted))
+                 .all())
+        for item in stale:
+            item.status = "expired"
+        db.session.commit()
+        top_up(volunteer)
+        flash("Saved. Your next list comes from the projects you chose.", "ok")
+        return redirect(url_for("main.my_projects", token=token))
+
+    return render_template("my_projects.html", volunteer=volunteer, token=token,
+                           projects=available, mine=mine,
+                           counts={p.id: p.item_count(volunteer.language)
+                                   for p in available},
+                           previews={p.id: p.preview(volunteer.language,
+                                                     limit=3)
+                                     for p in available})
+
+
+FLAG_REASONS = {
+    "not-english": "The item is not in the language it should be",
+    "nonsense": "The item makes no sense",
+    "offensive": "The item is offensive",
+    "options-wrong": "None of the options are close",
+    "duplicate": "I have seen this one already",
+    "other": "Something else",
+}
+
+
+@main.route("/w/<token>/<int:word_id>/flag", methods=["POST"])
+def flag_item(token, word_id):
+    """Report a problem with an item, mid-task.
+
+    The people reading the data are the only ones who will notice a broken
+    item, so they need to be able to say so without leaving the page. A flagged
+    item stops being handed out until someone has looked at it.
+    """
+    volunteer = volunteer_from_token(token)
+    if not volunteer:
+        return jsonify({"error": "link no longer valid"}), 401
+
+    item = db.session.get(Word, word_id)
+    if not item:
+        return jsonify({"error": "unknown item"}), 404
+
+    reason = request.form.get("reason") or "other"
+    if reason not in FLAG_REASONS:
+        reason = "other"
+    note = (request.form.get("note") or "").strip()[:600]
+
+    already = Flag.query.filter_by(word_id=word_id,
+                                   volunteer_id=volunteer.id).first()
+    if not already:
+        db.session.add(Flag(word_id=word_id, volunteer_id=volunteer.id,
+                            language=volunteer.language, reason=reason,
+                            note=note))
+    # The item leaves their list either way: they should not be asked again for
+    # a verdict they have just told us they cannot give.
+    (Assignment.query
+     .filter_by(volunteer_id=volunteer.id, word_id=word_id, status="pending")
+     .update({"status": "expired"}, synchronize_session=False))
+    db.session.commit()
+    top_up(volunteer)
+
+    if request.headers.get("X-Requested-With") == "shola":
+        nxt, ahead = queue_payload(volunteer, limit=4)
+        remaining = (volunteer.upcoming().count() if ahead
+                     else volunteer.pending_today().count())
+        return jsonify({"ok": True, "remaining": remaining,
+                        "done_total": volunteer.done_count(), "next": nxt})
+    return redirect(url_for("main.evaluate", token=token))
+
+
+@main.route("/submit", methods=["GET", "POST"])
+def submit_project():
+    """Anyone can propose a body of work. An admin decides whether it runs."""
+    if request.method == "GET":
+        return render_template("submit.html", formats=ITEM_FORMATS,
+                               languages=current_app.config["ALL_LANGUAGES"])
+
+    title = (request.form.get("title") or "").strip()[:160]
+    summary = (request.form.get("summary") or "").strip()[:600]
+    item_format = request.form.get("item_format") or "word"
+    languages = [c for c in request.form.getlist("languages")
+                 if c in current_app.config["ALL_LANGUAGES"]]
+    answer_mode = request.form.get("answer_mode") or "choose"
+    name = (request.form.get("name") or "").strip()[:120]
+    email = (request.form.get("email") or "").strip().lower()[:255]
+    org = (request.form.get("org") or "").strip()[:160]
+    try:
+        threshold = int(request.form.get("votes_to_settle") or VOTES_TO_SETTLE)
+    except ValueError:
+        threshold = VOTES_TO_SETTLE
+
+    errors = []
+    if len(title) < 8:
+        errors.append("Give it a title that says what a volunteer will do, "
+                      "like “Translate everyday Ghanaian words”.")
+    if item_format not in ITEM_FORMATS:
+        errors.append("Choose whether the items are words, sentences or "
+                      "paragraphs.")
+    if not languages:
+        errors.append("Choose at least one language.")
+    if "@" not in email or "." not in email.split("@")[-1]:
+        errors.append("We need an email address to tell you the outcome.")
+    if not 2 <= threshold <= 20:
+        errors.append("Agreement needs between 2 and 20 matching answers.")
+
+    # One file per language, parsed before anything is written: a project that
+    # is half imported is worse than one that was refused.
+    want_options = (answer_mode == "choose")
+    parsed, problems = {}, []
+    for code in languages:
+        upload = request.files.get(f"file_{code}")
+        if upload is None or not upload.filename:
+            label = current_app.config["ALL_LANGUAGES"][code]["name"]
+            problems.append(f"{label}: no file chosen.")
+            continue
+        rows, issues = importer.parse(upload.stream, want_options=want_options)
+        label = current_app.config["ALL_LANGUAGES"][code]["name"]
+        problems.extend(f"{label}: {i}" for i in issues)
+        if rows:
+            parsed[code] = rows
+
+    if errors or problems or not parsed:
+        for e in errors + problems[:20]:
+            flash(e, "error")
+        return render_template("submit.html", formats=ITEM_FORMATS,
+                               languages=current_app.config["ALL_LANGUAGES"],
+                               form=request.form), 400
+
+    project = Project(
+        slug=unique_slug(title), title=title, summary=summary,
+        item_format=item_format, votes_to_settle=threshold,
+        has_options=want_options, status="pending",
+        submitter_name=name, submitter_email=email, submitter_org=org,
+        sort_order=100)
+    db.session.add(project)
+    db.session.flush()
+    for code in parsed:
+        db.session.add(ProjectLanguage(project_id=project.id, language=code))
+    db.session.flush()
+
+    total = 0
+    for code, rows in parsed.items():
+        total += importer.import_rows(project, code, rows)
+
+    current_app.logger.info("project %s submitted: %s items across %s",
+                            project.slug, total, ",".join(parsed))
+    notify_admins_of_submission(project, total)
+    return render_template("submitted.html", project=project, total=total,
+                           languages=list(parsed))
+
+
 @main.route("/w/<token>/done")
 def done(token):
     volunteer = volunteer_from_token(token)
@@ -638,7 +958,8 @@ def api_docs():
     counts = {code: consensus.verified_count(code) for code in shown}
     sample = consensus.sample_entries("twi", limit=3)
     return render_template("api.html", counts=counts, sample=sample,
-                           SHOWN_LANGUAGES=shown)
+                           SHOWN_LANGUAGES=shown,
+                           projects=approved_projects())
 
 
 def _words(language, min_votes, limit, offset):
@@ -652,6 +973,110 @@ def _words(language, min_votes, limit, offset):
         if len(rows) >= limit:
             break
     return rows
+
+
+@main.route("/api/projects")
+def api_projects():
+    """Every project, what it collects, and how far along it is."""
+    out = []
+    for proj in Project.query.filter(
+            Project.status.in_(("approved", "paused"))).order_by(
+            Project.sort_order, Project.id).all():
+        out.append({
+            "slug": proj.slug,
+            "title": proj.title,
+            "summary": proj.summary,
+            "item_format": proj.item_format,
+            "status": proj.status,
+            "languages": proj.language_codes,
+            "items": proj.item_count(),
+            "answers_are": "chosen from options" if proj.has_options
+                           else "typed by volunteers",
+            "verifiable": proj.has_options,
+            "votes_to_verify": proj.votes_to_settle if proj.has_options else None,
+            "verified": {code: consensus.verified_count(code,
+                                                        project_id=proj.id)
+                         for code in proj.language_codes},
+            "typed_answers": {code: consensus.typed_count(code,
+                                                          project_id=proj.id)
+                              for code in proj.language_codes},
+        })
+    return jsonify({"projects": out, "count": len(out)})
+
+
+@main.route("/api/items/<slug>/<language>")
+def api_items(slug, language):
+    """Verified answers for one project in one language.
+
+    Only projects that offer options can verify anything. For a project where
+    every answer is typed, ask for `?answers=typed` - those are contributions
+    rather than consensus and are never mixed into the verified set.
+    """
+    proj = Project.query.filter_by(slug=slug).first()
+    if not proj:
+        return jsonify({"error": "unknown project",
+                        "projects": [p.slug for p in
+                                     Project.query.filter_by(
+                                         status="approved").all()]}), 404
+    if language not in proj.language_codes:
+        return jsonify({"error": "this project does not collect that language",
+                        "languages": proj.language_codes}), 404
+
+    want = (request.args.get("answers") or "verified").lower()
+    limit = min(max(1, request.args.get("limit", 100, type=int)), 1000)
+    offset = max(0, request.args.get("offset", 0, type=int))
+    fmt = (request.args.get("format") or "json").lower()
+
+    if want == "typed" or not proj.has_options:
+        rows = list(consensus.typed_rows(language, project_id=proj.id))
+        page = rows[offset:offset + limit]
+        entries = [{"item": r[0], "answer": r[1], "answered_on": r[2]}
+                   for r in page]
+        payload = {
+            "project": proj.slug, "language": language,
+            "answers": "typed",
+            "verified": False,
+            "note": ("Typed by one volunteer each. Nobody agreed with these - "
+                     "they are contributions, not consensus."),
+            "total": len(rows), "returned": len(entries),
+            "offset": offset, "limit": limit, "entries": entries,
+        }
+        if fmt == "csv":
+            return _csv_response(
+                ["item", "answer", "answered_on"],
+                [[e["item"], e["answer"], e["answered_on"]] for e in entries],
+                f"shola-{proj.slug}-{language}-typed")
+        return jsonify(payload)
+
+    min_votes = max(1, request.args.get("min_votes", proj.votes_to_settle,
+                                        type=int))
+    rows = list(consensus.export_rows(language, min_votes=min_votes,
+                                      project_id=proj.id))
+    page = rows[offset:offset + limit]
+    entries = [{"item": r[0], "answer": r[1], "votes": r[2],
+                "agreement": r[3], "total_votes": r[4]} for r in page]
+    if fmt == "csv":
+        return _csv_response(
+            ["item", "answer", "votes", "agreement", "total_votes"],
+            [[e["item"], e["answer"], e["votes"], e["agreement"],
+              e["total_votes"]] for e in entries],
+            f"shola-{proj.slug}-{language}")
+    return jsonify({
+        "project": proj.slug, "language": language, "answers": "verified",
+        "verified": True, "min_votes": min_votes,
+        "total": len(rows), "returned": len(entries),
+        "offset": offset, "limit": limit, "entries": entries,
+    })
+
+
+def _csv_response(header, rows, stem):
+    out = io.StringIO()
+    writer = csv.writer(out, lineterminator="\n")
+    writer.writerow(header)
+    writer.writerows(rows)
+    return Response(out.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition":
+                             f'attachment; filename="{stem}.csv"'})
 
 
 @main.route("/api/words/<language>")

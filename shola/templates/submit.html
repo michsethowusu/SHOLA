@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Submit a project{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap narrow">
+    <p class="eyebrow">Submit a project</p>
+    <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">Get human answers for your
+      data</h1>
+    <p class="lede">
+      Upload the items, choose the languages, and speakers here will work
+      through them a few at a time. The results are public, as everything on
+      SHOLA is.
+    </p>
+
+    <div class="card" style="margin-top:26px; text-align:left">
+      <h3>The file</h3>
+      <p class="muted">One CSV per language, saved as <strong>CSV UTF-8</strong>
+         so ɛ, ɔ and ŋ survive. Two shapes are accepted:</p>
+<pre style="margin:12px 0 0;overflow-x:auto"><code>text,option1,option2,option3
+Where is the market?,Ɛhe na dwaso wɔ?,Dwaso wɔ he?,Dwaso no wɔ he?</code></pre>
+      <p class="muted" style="margin-top:10px">…for volunteers to choose
+         between, or a single column…</p>
+<pre style="margin:0;overflow-x:auto"><code>text
+Where is the market?</code></pre>
+      <p class="muted" style="margin-top:10px">…for volunteers to type the
+         answer. A header row is optional. Two to five options per line; every
+         line must have options or none of them may.</p>
+    </div>
+
+    <form method="post" enctype="multipart/form-data" style="margin-top:32px"
+          novalidate>
+      <div class="field">
+        <label for="title">What are you asking volunteers to do?</label>
+        <p class="hint">This is the title they choose from, so write it as the
+           task: “Translate everyday Ghanaian words”, “Read these sentences
+           aloud in Ewe”.</p>
+        <input type="text" id="title" name="title" required maxlength="160"
+               value="{{ form.title if form }}">
+      </div>
+
+      <div class="field">
+        <label for="summary">A sentence or two more</label>
+        <input type="text" id="summary" name="summary" maxlength="600"
+               value="{{ form.summary if form }}">
+      </div>
+
+      <div class="field">
+        <span class="label">What is one item?</span>
+        <div class="choice-grid">
+          {% for code, label in formats.items() %}
+            <label class="choice">
+              <input type="radio" name="item_format" value="{{ code }}"
+                     {% if (form.item_format if form else 'word') == code %}checked{% endif %}>
+              <span class="t">{{ label }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="label">How do volunteers answer?</span>
+        <div class="choice-grid">
+          <label class="choice">
+            <input type="radio" name="answer_mode" value="choose"
+                   {% if (form.answer_mode if form else 'choose') == 'choose' %}checked{% endif %}>
+            <span class="t">They choose</span>
+            <span class="s">Your file carries the options. Answers can be
+              verified by agreement.</span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="answer_mode" value="type"
+                   {% if form and form.answer_mode == 'type' %}checked{% endif %}>
+            <span class="t">They type</span>
+            <span class="s">Your file is one column. Answers are collected as
+              contributions, not verified.</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="votes_to_settle">How many matching answers verify an
+          item?</label>
+        <p class="hint">Only used when volunteers choose between options. Five
+           is the default across SHOLA. Higher is stronger evidence and takes
+           proportionally longer.</p>
+        <input type="number" id="votes_to_settle" name="votes_to_settle"
+               min="2" max="20" step="1" style="max-width:140px"
+               value="{{ form.votes_to_settle if form else 5 }}">
+      </div>
+
+      <div class="field">
+        <span class="label">Which languages, and the file for each?</span>
+        <p class="hint">Tick a language and a file box appears for it. Every
+           language you tick needs its own file.</p>
+        {% set chosen = (form.getlist('languages') if form else []) %}
+        <input type="search" id="language-filter" style="margin-bottom:12px"
+               placeholder="Search {{ languages | length }} languages"
+               aria-label="Search languages">
+        <div class="stack" id="language-list">
+          {% for code, info in languages.items() %}
+            <label class="opt-in" data-lang="{{ code }}">
+              <input type="checkbox" name="languages" value="{{ code }}"
+                     {% if code in chosen %}checked{% endif %}>
+              <span class="body">
+                <span class="t">{{ info.name }}</span>
+                <span class="file-slot" hidden>
+                  <input type="file" name="file_{{ code }}" accept=".csv,text/csv">
+                </span>
+              </span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="name">Your name</label>
+        <input type="text" id="name" name="name" maxlength="120"
+               value="{{ form.name if form }}">
+      </div>
+
+      <div class="field">
+        <label for="org">Organisation, if any</label>
+        <p class="hint">Shown on the project page as who it came from.</p>
+        <input type="text" id="org" name="org" maxlength="160"
+               value="{{ form.org if form }}">
+      </div>
+
+      <div class="field">
+        <label for="email">Your email</label>
+        <p class="hint">Used to tell you the outcome. Nothing else.</p>
+        <input type="email" id="email" name="email" required
+               value="{{ form.email if form }}">
+      </div>
+
+      <button class="btn" type="submit">Submit for review</button>
+      <p class="hint" style="margin-top:12px">
+        A person reads every submission before any volunteer sees it.
+      </p>
+    </form>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  /* Show a file box only for the languages actually ticked: a wall of 88 file
+     inputs would be unusable, and an unticked language needs no file. */
+  var rows = Array.prototype.slice.call(
+    document.querySelectorAll('#language-list .opt-in'));
+
+  rows.forEach(function (row) {
+    var box = row.querySelector('input[type=checkbox]');
+    var slot = row.querySelector('.file-slot');
+    var sync = function () { slot.hidden = !box.checked; };
+    box.addEventListener('change', sync);
+    sync();
+  });
+
+  /* Filtering, because scrolling 88 checkboxes to find one language is not a
+     reasonable ask. A ticked language always stays visible: hiding a choice
+     someone has already made, along with the file box that goes with it, would
+     lose their file without telling them. */
+  var filter = document.getElementById('language-filter');
+  if (filter) {
+    filter.addEventListener('input', function () {
+      var q = filter.value.trim().toLowerCase();
+      rows.forEach(function (row) {
+        var box = row.querySelector('input[type=checkbox]');
+        var name = row.querySelector('.t').textContent.toLowerCase();
+        row.hidden = !!q && name.indexOf(q) === -1 && !box.checked;
+      });
+    });
+  }
+</script>
+{% endblock %}

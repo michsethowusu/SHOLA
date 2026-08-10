@@ -9,7 +9,7 @@ Switch to one email a week:
 
 {% if words %}Or carry on as you are - here is what is waiting:
 
-TODAY'S WORDS
+TODAY'S LIST
 {% for word in words %}  - {{ word.phrase }}
 {% endfor %}{% if more %}  ...and {{ more }} more
 {% endif %}

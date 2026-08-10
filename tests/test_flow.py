@@ -44,11 +44,19 @@ def make_app():
     return create_app(T)
 
 
-def seed(n_words=30):
+def core_project():
+    """The translation project, created by the migration on boot."""
+    from shola.models import CORE_PROJECT, Project
+    return Project.query.filter_by(slug=CORE_PROJECT["slug"]).first()
+
+
+def seed(n_words=30, project=None):
+    project = project or core_project()
     for i in range(n_words):
         # Descending frequency, so word 0 is the commonest.
         w = Word(phrase=f"word {i}", frequency=float(n_words - i),
-                 occurrences=n_words - i, tier=tier_for(n_words - i))
+                 occurrences=n_words - i, tier=tier_for(n_words - i),
+                 project_id=project.id)
         db.session.add(w)
         db.session.flush()
         for lang in LANGS:
@@ -59,11 +67,20 @@ def seed(n_words=30):
     db.session.commit()
 
 
-def add_volunteer(email, language="twi", days=""):
+def add_volunteer(email, language="twi", days="", projects=None):
+    """A volunteer, opted in to the core project unless told otherwise.
+
+    Nothing is sent to a volunteer with no project, so a fixture that forgot to
+    opt them in would test an empty queue rather than the queue.
+    """
+    from shola.projects import opt_in
     v = Volunteer(name=f"Test {email[0].upper()}", email=email,
                   language=language, available_days=days)
     db.session.add(v)
     db.session.commit()
+    ids = projects if projects is not None else [core_project().id]
+    if ids:
+        opt_in(v, ids)
     return v
 
 
@@ -344,9 +361,12 @@ def main():
     views_mod.build_otp_email = mailer_mod.build_otp_email
 
     client = app.test_client()
+    with app.app_context():
+        core_id = core_project().id
     r = client.post("/join", data={
         "name": "Ama Serwaa", "email": "ama@example.com", "language": "twi",
-        "days": ["0", "1"], "time_window": "morning"}, follow_redirects=True)
+        "days": ["0", "1"], "time_window": "morning",
+        "projects": [str(core_id)]}, follow_redirects=True)
     ok &= check("join asks for the code", r.status_code == 200
                 and b"Enter the code" in r.data)
     with app.app_context():
@@ -391,7 +411,8 @@ def main():
     r = wl.post("/join", data={
         "name": "Kwesi Mensah", "email": "kwesi@example.com",
         "language": "other", "other_language": "nzi",
-        "time_window": "anytime"}, follow_redirects=True)
+        "time_window": "anytime", "projects": [str(core_id)]},
+        follow_redirects=True)
     ok &= check("signup asks for the code too", r.status_code == 200
                 and b"Enter the code" in r.data)
     r = wl.post("/verify", data={"email": "kwesi@example.com",
@@ -433,7 +454,8 @@ def main():
                         word_id=nzi_wid, candidate_id=cands[0].id).count() == 1)
 
     r = wl.post("/join", data={"name": "No Such", "email": "no@example.com",
-                               "language": "other", "other_language": "zzz"})
+                               "language": "other", "other_language": "zzz",
+                               "projects": [str(core_id)]})
     ok &= check("an unknown language code is refused", r.status_code == 400)
 
     print("\nthe link alone is enough - no session, no cookies")
@@ -523,14 +545,14 @@ def main():
         ok &= check("fresh words were leased", vol.pending_today().count() > 0,
                     f"{vol.pending_today().count()} pending")
     ok &= check("the email lists words rather than an empty list",
-                "TODAY'S WORDS" in captured.get("text", ""))
+                "TODAY'S LIST" in captured.get("text", ""))
 
     print("\na speaker of an unseeded language is emailed words too")
     captured.clear()
     fresh.post("/resend", data={"email": "kwesi@example.com"})
     ok &= check("they are emailed too", captured.get("to") == "kwesi@example.com")
     ok &= check("with words, not a holding message",
-                "TODAY'S WORDS" in captured.get("text", ""),
+                "TODAY'S LIST" in captured.get("text", ""),
                 captured.get("text", "")[:80])
 
     print("\nthe header cannot cover the options while checking words")
@@ -569,10 +591,11 @@ def main():
     ok &= check("unknown language 404s", r.status_code == 404)
     r = fresh.get("/api")
     ok &= check("API docs page renders", r.status_code == 200
-                and b"Words API" in r.data)
+                and b"Data API" in r.data)
     ok &= check("docs explain what verified means",
-                f"{VOTES_TO_SETTLE} or\n      more speakers".encode()
-                in r.data or b"more speakers independently chose" in r.data)
+                b"independently chose the same answer" in r.data)
+    ok &= check("and that typed answers are not verified",
+                b"collected answers" in r.data and b"answers=typed" in r.data)
 
     print("\nsettings: days, a break, stopping, and coming back")
     with app.app_context():
@@ -747,7 +770,7 @@ def main():
                 "Nothing is owed" in msg.get("text", ""),
                 msg.get("text", "")[:120])
     ok &= check("the words are still offered alongside",
-                "TODAY'S WORDS" in msg.get("text", ""))
+                "TODAY'S LIST" in msg.get("text", ""))
 
     msg = send_round()
     ok &= check("the offer is made once, not every time",

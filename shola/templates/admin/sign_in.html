@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Admin{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap narrow">
+    <p class="eyebrow">Admin</p>
+    <h1 style="font-size:clamp(1.8rem,6vw,2.4rem)">Sign in</h1>
+    <p class="muted">
+      Same as everywhere else here: a link by email, no password. It works for
+      30 minutes.
+    </p>
+    <form method="post" action="{{ url_for('admin.send_link') }}"
+          style="margin-top:26px">
+      <div class="field">
+        <label for="email">Your email</label>
+        <input type="email" id="email" name="email" required
+               autocomplete="email">
+      </div>
+      <button class="btn" type="submit">Email me a link</button>
+    </form>
+  </div>
+</section>
+{% endblock %}

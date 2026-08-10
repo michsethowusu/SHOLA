@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% block title %}Admin{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap">
+    <p class="eyebrow">Admin · {{ admin_email }}</p>
+    <h1 style="font-size:clamp(1.8rem,6vw,2.4rem)">Waiting for you</h1>
+
+    <h2 style="margin-top:34px">Projects to decide ({{ pending | length }})</h2>
+    {% if pending %}
+      <div class="stack" style="margin-top:14px">
+        {% for project in pending %}
+          <a class="opt-in" href="{{ url_for('admin.project', project_id=project.id) }}"
+             style="text-decoration:none">
+            <span class="body">
+              <span class="t">{{ project.title }}</span>
+              <span class="s">
+                {{ project.item_count() | thousands }} {{ project.item_plural }}
+                ·
+                {% for code, n in counts.get(project.id, {}).items() %}
+                  {{ code }} {{ n | thousands }}{% if not loop.last %}, {% endif %}
+                {% endfor %}
+                · {% if project.has_options %}options{% else %}typed{% endif %}
+                {% if project.submitter_email %}
+                  · from {{ project.submitter_email }}
+                {% endif %}
+              </span>
+              <span class="s">{{ project.created_at.strftime('%-d %B %Y') }}</span>
+            </span>
+          </a>
+        {% endfor %}
+      </div>
+    {% else %}
+      <p class="muted">Nothing waiting.</p>
+    {% endif %}
+
+    <h2 style="margin-top:40px">Reports to look at ({{ flags | length }})</h2>
+    {% if flags %}
+      <div class="scroll-x" style="margin-top:12px">
+        <table class="plain">
+          <thead>
+            <tr><th>Item</th><th>Reason</th><th>Note</th><th>Language</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for flag in flags %}
+              <tr>
+                <td style="max-width:280px;overflow-wrap:anywhere">
+                  {{ flag.word.phrase }}
+                  <span class="muted" style="font-size:.8rem">
+                    ({{ flag.word.project.title if flag.word.project else '—' }})
+                  </span>
+                </td>
+                <td>{{ flag.reason }}</td>
+                <td style="max-width:260px;overflow-wrap:anywhere">{{ flag.note }}</td>
+                <td>{{ flag.language }}</td>
+                <td>
+                  <form method="post" action="{{ url_for('admin.resolve_flag', flag_id=flag.id) }}"
+                        style="display:flex;gap:6px">
+                    <button class="btn ghost small" name="action" value="keep"
+                            type="submit">Keep</button>
+                    <button class="btn ghost small" name="action" value="remove"
+                            type="submit">Withdraw</button>
+                  </form>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <p class="hint">A reported item is out of the queue until you decide.</p>
+    {% else %}
+      <p class="muted">No open reports.</p>
+    {% endif %}
+
+    <h2 style="margin-top:40px">Live projects</h2>
+    <div class="scroll-x" style="margin-top:12px">
+      <table class="plain">
+        <thead>
+          <tr><th>Project</th><th>Items</th><th>Languages</th><th>Announced</th><th></th></tr>
+        </thead>
+        <tbody>
+          {% for project in live %}
+            <tr>
+              <td><strong>{{ project.title }}</strong></td>
+              <td>{{ project.item_count() | thousands }}</td>
+              <td>{{ project.languages.count() }}</td>
+              <td>
+                {% if project.announced_at %}
+                  {{ project.announced_at.strftime('%-d %b') }}
+                {% else %}
+                  <span class="muted">not yet</span>
+                {% endif %}
+              </td>
+              <td><a href="{{ url_for('admin.project', project_id=project.id) }}">Open</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if rejected %}
+      <h2 style="margin-top:40px">Recently rejected</h2>
+      <ul class="muted" style="padding-left:20px">
+        {% for project in rejected %}
+          <li>{{ project.title }} — {{ project.review_note or 'no note' }}</li>
+        {% endfor %}
+      </ul>
+    {% endif %}
+
+    <p class="hint" style="margin-top:40px">
+      <a href="{{ url_for('admin.sign_out') }}">Sign out</a>
+    </p>
+  </div>
+</section>
+{% endblock %}
