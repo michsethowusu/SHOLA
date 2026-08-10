@@ -1249,4 +1249,22 @@ def healthz():
         }
     except Exception as exc:      # noqa: BLE001 - health must not fail
         out["disk"] = {"error": exc.__class__.__name__}
+
+    # How long since a backup reached the bucket. Twice now the off-site copy
+    # has stopped for days while everything looked fine, so it is reported
+    # rather than waiting for somebody to think of checking.
+    try:
+        from pathlib import Path
+
+        marker = Path(current_app.config["UPLOAD_DIR"]).parent / "last-backup.txt"
+        if marker.exists():
+            when = datetime.fromisoformat(marker.read_text().strip())
+            days = (datetime.utcnow() - when).days
+            out["backup"] = {"last": when.date().isoformat(), "days_ago": days,
+                             "stale": days > 2}
+        else:
+            out["backup"] = {"last": None, "stale": True,
+                             "note": "no successful backup recorded"}
+    except Exception as exc:      # noqa: BLE001
+        out["backup"] = {"error": exc.__class__.__name__}
     return out

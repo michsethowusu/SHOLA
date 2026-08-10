@@ -565,6 +565,16 @@ def backup(out, keep_db, keep_people, keep_dirs, keep_config):
             raise SystemExit(1)
         # Anything left from an earlier failure, now that this run succeeded.
         prune_local(out_dir, made)
+        # A dated marker, so staleness is visible without asking the bucket.
+        # Off-site backups have now silently stopped twice - once because
+        # Coolify's helper image was missing, once because this command died on
+        # a full disk - and both times the dashboards stayed green for days.
+        stamp_path = os.path.join(os.path.dirname(out_dir), "last-backup.txt")
+        try:
+            with open(stamp_path, "w", encoding="utf-8") as fh:
+                fh.write(_dt.utcnow().isoformat())
+        except OSError as exc:
+            click.echo(f"could not record the backup time: {exc}", err=True)
     else:
         click.echo("no SHOLA_S3_BUCKET set, so this backup stays on this host")
         prune_local(out_dir, made)
