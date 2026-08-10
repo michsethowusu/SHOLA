@@ -466,8 +466,15 @@ the site down: SQLite could not write a journal, Docker could not build, and
 neither error mentioned backups. Retention lives in the bucket. The exception is
 a failed upload, where the local copy is the only copy and is kept.
 
-`SHOLA_BACKUP_DIRS` archives other applications' upload directories, which are
-the large objects here - a nightly `tar.gz` of a 7 GB directory is not the same
+`SHOLA_BACKUP_DIRS` archives other applications' directories, as
+`label=/path` entries separated by `:`. Appending `|name` excludes anything whose
+path contains that name, which is how a site's code is kept without its uploads:
+
+```
+education-au-site=/sources/education-au-html|images|media|cache
+```
+
+These are the large objects here - a nightly `tar.gz` of a 7 GB directory is not the same
 kind of thing as a 200 KB volunteer export, and keeping seven of each was set
 without ever measuring one. Keep that list to directories that are both
 irreplaceable and small; for anything large, mirror it rather than snapshotting

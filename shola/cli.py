@@ -520,16 +520,35 @@ def backup(out, keep_db, keep_people, keep_dirs, keep_config):
     # Set SHOLA_BACKUP_DIRS to "name=/path:name=/path". These are other apps'
     # upload directories, bind-mounted in read-only, because user-uploaded
     # files live in no database and nothing else was backing them up.
+    # "label=/path" archives a whole directory. Appending "|name" excludes any
+    # entry whose path contains it, which is how a site's code is kept without
+    # its uploads: those are large, they change constantly, and a nightly full
+    # snapshot of them is what filled the disk.
+    #
+    #   education-au-site=/sources/education-au-html|images|media|cache
     for spec in filter(None, os.environ.get("SHOLA_BACKUP_DIRS", "").split(":")):
-        label, _, path = spec.partition("=")
+        head, *excludes = spec.split("|")
+        label, _, path = head.partition("=")
         if not path or not os.path.isdir(path):
             click.echo(f"skip      {label or spec}: not a directory", err=True)
             continue
+
+        def _filter(info, _excludes=excludes):
+            # Compared against the path inside the archive, so "images" matches
+            # both "images" and "html/images/photo.jpg". Excluding a directory
+            # prunes the whole subtree, so no count of what was left out is
+            # reported - tar never walks it, and a number that undercounts by a
+            # subtree would be worse than none.
+            if any(x and x in info.name for x in _excludes):
+                return None
+            return info
+
         arc = os.path.join(out_dir, f"{label}-{stamp}.tar.gz")
         with tarfile.open(arc, "w:gz", compresslevel=6) as tar:
-            tar.add(path, arcname=label)
+            tar.add(path, arcname=label, filter=_filter)
         made.append((arc, f"{label}-", keep_dirs))
-        click.echo(f"files     {os.path.getsize(arc)//1048576} MB  {label}")
+        note = f"  (without {', '.join(excludes)})" if excludes else ""
+        click.echo(f"files     {os.path.getsize(arc)//1048576} MB  {label}{note}")
 
     # --- deployment configuration ----------------------------------------
     # The environment variables, domains and schedules of every application.
