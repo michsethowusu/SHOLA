@@ -164,15 +164,20 @@ class Project(db.Model):
     # how much room an answer needs.
     item_format = db.Column(db.String(20), default="word", nullable=False)
 
-    # How many matching answers settle an item here. Per project because the
-    # cost of being wrong differs: a place name may need more agreement than a
-    # common noun.
+    # How many answers an item wants before it closes and stops being handed
+    # out. Where there are options, that means matching answers, and reaching it
+    # is what "verified" means. Where every answer is typed, nothing matches
+    # anything, so it is simply how many answers to collect per item - it still
+    # decides when an item is done and therefore when the project is finished.
+    # Per project because the cost of being wrong differs: a place name may
+    # need more agreement than a common noun.
     votes_to_settle = db.Column(db.Integer, default=5, nullable=False)
 
     # False when items arrive with no options, so every answer is typed. Those
     # answers are collected and exported, never treated as verified - there is
     # nothing for them to agree with.
     has_options = db.Column(db.Boolean, default=True, nullable=False)
+
 
     status = db.Column(db.String(20), default="pending", nullable=False,
                        index=True)
@@ -208,6 +213,33 @@ class Project(db.Model):
     @property
     def approved(self):
         return self.status == "approved"
+
+    def progress(self, language=None):
+        """How much of this project is finished, and what finished means.
+
+        An item closes once it has `votes_to_settle` answers - matching ones
+        where there are options to match. The project is done when every item
+        has closed, which is the only definition available for a project that
+        cannot verify anything.
+        """
+        from .tiers import open_query
+
+        total = self.item_count(language)
+        if not total:
+            return {"total": 0, "closed": 0, "open": 0, "pct": 0.0,
+                    "answers_each": self.votes_to_settle}
+        codes = [language] if language else self.language_codes
+        open_items = 0
+        for code in codes:
+            open_items += open_query(code, project_id=self.id).count()
+        # One item can be open in several languages; the count above is per
+        # language, so cap it at the number of items rather than reporting more
+        # open items than exist.
+        open_items = min(open_items, total)
+        closed = total - open_items
+        return {"total": total, "closed": closed, "open": open_items,
+                "pct": closed / total * 100, "finished": closed >= total,
+                "answers_each": self.votes_to_settle}
 
     def item_count(self, language=None):
         q = Word.query.filter(Word.project_id == self.id)

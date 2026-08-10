@@ -12,17 +12,22 @@
     </p>
 
     <div class="notice" style="margin-top:22px">
-      <strong>Verified, or collected.</strong> Where a project offers options,
-      an item is <strong>verified</strong> once that project's number of
-      speakers independently chose the same answer — five for the translation
+      <strong>Verified, or collected.</strong> An item is
+      <strong>verified</strong> once that project's number of speakers
+      <em>tapped the same offered option</em> — five for the translation
       project, and each project sets its own. Items where speakers disagreed are
       left out.
       <br><br>
-      Where a project has no options, volunteers type the answer. Nobody agrees
-      with anything, so nothing is verified: those are
-      <strong>collected answers</strong>, one row per volunteer, and they are
-      never mixed into the verified set. Ask for them with
-      <code>?answers=typed</code>.
+      A wording a volunteer <em>typed</em> is never counted as agreement, however
+      many people type the same thing: spelling, spacing and dialect differ, so
+      there is no way to establish that two people meant the same. It is kept as
+      a <strong>collected answer</strong> and it becomes an option for the next
+      speaker — once <em>they</em> tap it, those taps count like any other, and a
+      volunteer's own wording can end up the verified answer.
+      <br><br>
+      A project whose file carried no options verifies nothing at all. Its
+      answers are all collected; ask for them with <code>?answers=typed</code>,
+      and they are never mixed into the verified set.
     </div>
 
     <h2 style="margin-top:44px">Projects</h2>

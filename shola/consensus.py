@@ -24,13 +24,22 @@ def normalise(text):
 
 
 def tally(word_id, language):
-    """Vote counts for one word in one language, best first."""
+    """Vote counts for one item in one language, best first.
+
+    Counts taps on offered options only. Typed text is a contribution and is
+    reported separately as `typed`: agreeing with somebody's spelling is not
+    something we can establish, so it must not add up to verification.
+    """
     evals = (Evaluation.query
              .filter_by(word_id=word_id, language=language, skipped=False)
              .all())
     counts = Counter()
     display = {}
+    typed = 0
     for ev in evals:
+        if ev.custom_text:
+            typed += 1
+            continue
         text = ev.chosen_text
         if not text:
             continue
@@ -44,6 +53,7 @@ def tally(word_id, language):
         ranked.append({"text": display[key], "votes": n,
                        "share": n / total if total else 0.0})
     return {"votes": total, "voters": len(evals), "ranked": ranked,
+            "typed": typed,
             "skips": sum(1 for e in evals if e.skipped)}
 
 

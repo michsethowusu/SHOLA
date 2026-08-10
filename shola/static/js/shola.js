@@ -84,15 +84,17 @@
       els.options.appendChild(b);
     });
 
-    var own = document.createElement("button");
-    own.type = "button";
-    own.className = "option own";
     // With nothing loaded for a language, typing is the only thing to do, so
     // the button says so rather than offering an alternative that is not there.
     var empty = item.options.length === 0;
+    // Always offered, whatever the project: the options came from a machine,
+    // and someone who knows the right answer must be able to give it.
+    var own = document.createElement("button");
+    own.type = "button";
+    own.className = "option own";
     own.innerHTML = '<span class="mark" aria-hidden="true">✎</span>' +
-      "<span>" + (empty ? "Type the translation"
-                        : "Type your own translation") + "</span>";
+      "<span>" + (empty ? "Type the answer"
+                        : "Type your own answer") + "</span>";
     if (empty) { own.classList.remove("own"); own.classList.add("option"); }
     own.addEventListener("click", openSheet);
     els.options.appendChild(own);
@@ -104,7 +106,7 @@
     var title = document.getElementById("sheet-title");
     if (title) {
       title.textContent = empty ? "How would you say this?"
-                                : "Type your own translation";
+                                : "Type your own answer";
     }
     // Nothing to choose from, so go straight to the keyboard rather than
     // making them tap a button that is the only thing on the screen.

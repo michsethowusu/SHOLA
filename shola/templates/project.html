@@ -21,13 +21,16 @@
         <span class="k">language{{ '' if project.languages.count() == 1 else 's' }}</span>
       </div>
       <div class="stat">
+        <span class="n">{{ project.votes_to_settle }}</span>
         {% if project.has_options %}
-          <span class="n">{{ project.votes_to_settle }}</span>
-          <span class="k">must agree to verify</span>
+          <span class="k">must tap the same answer to verify it</span>
         {% else %}
-          <span class="n">—</span>
-          <span class="k">answers are typed, not verified</span>
+          <span class="k">answers wanted for each {{ project.item_noun }}</span>
         {% endif %}
+      </div>
+      <div class="stat">
+        <span class="n">{{ progress.pct | round(1) }}%</span>
+        <span class="k">{{ project.item_plural }} finished</span>
       </div>
     </div>
 
@@ -63,6 +66,13 @@
     {% endif %}
 
     <h2 style="margin-top:40px">Progress</h2>
+    <p class="muted">
+      {{ progress.closed | thousands }} of {{ progress.total | thousands }}
+      {{ project.item_plural }} are finished — an item is done once it has
+      {{ project.votes_to_settle }}
+      {% if project.has_options %}matching answers{% else %}answers{% endif %},
+      and the project is done when every item has.
+    </p>
     <div class="scroll-x" style="margin-top:12px">
       <table class="plain">
         <thead>

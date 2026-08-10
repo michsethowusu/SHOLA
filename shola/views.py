@@ -590,7 +590,7 @@ def submit(token, word_id):
         skipped = True
     elif choice == "custom":
         if not custom:
-            return jsonify({"error": "empty translation"}), 400
+            return jsonify({"error": "empty answer"}), 400
     elif choice.isdigit():
         candidate = db.session.get(Candidate, int(choice))
         if not candidate or candidate.word_id != word_id:
@@ -746,6 +746,7 @@ def project_page(slug):
     return render_template(
         "project.html", project=proj, language=language,
         preview=proj.preview(language, limit=6), counts=item_counts(proj),
+        progress=proj.progress(language),
         verified={code: consensus.verified_count(code, project_id=proj.id)
                   for code in proj.language_codes},
         typed={code: consensus.typed_count(code, project_id=proj.id)
@@ -866,7 +867,7 @@ def submit_project():
     item_format = request.form.get("item_format") or "word"
     languages = [c for c in request.form.getlist("languages")
                  if c in current_app.config["ALL_LANGUAGES"]]
-    answer_mode = request.form.get("answer_mode") or "choose"
+
     name = (request.form.get("name") or "").strip()[:120]
     email = (request.form.get("email") or "").strip().lower()[:255]
     org = (request.form.get("org") or "").strip()[:160]
@@ -887,23 +888,41 @@ def submit_project():
     if "@" not in email or "." not in email.split("@")[-1]:
         errors.append("We need an email address to tell you the outcome.")
     if not 2 <= threshold <= 20:
-        errors.append("Agreement needs between 2 and 20 matching answers.")
+        errors.append("Each item needs between 2 and 20 answers.")
 
     # One file per language, parsed before anything is written: a project that
     # is half imported is worse than one that was refused.
-    want_options = (answer_mode == "choose")
-    parsed, problems = {}, []
+    #
+    # The shape is read from the files rather than declared: whether volunteers
+    # choose between options or type the answer is a property the data already
+    # has, and asking the submitter to say it again only creates a way for the
+    # two to disagree.
+    parsed, problems, shapes = {}, [], {}
     for code in languages:
         upload = request.files.get(f"file_{code}")
+        label = current_app.config["ALL_LANGUAGES"][code]["name"]
         if upload is None or not upload.filename:
-            label = current_app.config["ALL_LANGUAGES"][code]["name"]
             problems.append(f"{label}: no file chosen.")
             continue
-        rows, issues = importer.parse(upload.stream, want_options=want_options)
-        label = current_app.config["ALL_LANGUAGES"][code]["name"]
+        rows, issues = importer.parse(upload.stream)
         problems.extend(f"{label}: {i}" for i in issues)
         if rows:
             parsed[code] = rows
+            shapes[code] = any(options for _text, options in rows)
+
+    # Every language must be the same shape. One with options and one without
+    # would mean the same job is verifiable in Twi and not in Ewe.
+    if len(set(shapes.values())) > 1:
+        with_options = sorted(current_app.config["ALL_LANGUAGES"][c]["name"]
+                              for c, has in shapes.items() if has)
+        without = sorted(current_app.config["ALL_LANGUAGES"][c]["name"]
+                         for c, has in shapes.items() if not has)
+        problems.append(
+            f"{', '.join(with_options)} carry options but "
+            f"{', '.join(without)} do not. Every language in a project needs "
+            "the same shape, or the same job would be verifiable in one "
+            "language and not another.")
+    want_options = any(shapes.values())
 
     if errors or problems or not parsed:
         for e in errors + problems[:20]:
@@ -993,7 +1012,9 @@ def api_projects():
             "answers_are": "chosen from options" if proj.has_options
                            else "typed by volunteers",
             "verifiable": proj.has_options,
+            "answers_per_item": proj.votes_to_settle,
             "votes_to_verify": proj.votes_to_settle if proj.has_options else None,
+            "progress": proj.progress(),
             "verified": {code: consensus.verified_count(code,
                                                         project_id=proj.id)
                          for code in proj.language_codes},

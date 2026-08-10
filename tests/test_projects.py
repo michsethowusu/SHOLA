@@ -177,9 +177,11 @@ def main():
         ok &= check("so the whole list comes from it",
                     all(a.word.project_id == small.id
                         for a in guest.assignments) and n == 3, f"{n} leased")
-        # Answer all three: the promise was priority, not permanence.
+        # Answer all three by tapping an option: typing would add options
+        # without closing anything, so the project would never run out.
         for a in list(guest.assignments):
-            record_verdict(guest, a.word_id, custom_text="an answer")
+            opt = [c for c in a.word.candidates if c.language == "twi"][0]
+            record_verdict(guest, a.word_id, candidate_id=opt.id)
         ok &= check("once it runs out the rest open up",
                     len(active_for(guest)) == 2,
                     str([p.slug for p in active_for(guest)]))
@@ -211,6 +213,56 @@ def main():
                                                       project_id=typed.id)))))
         ok &= check("the item does close, so it stops being handed out",
                     state_for(item.id, "twi").done)
+
+    print("\ntyped answers finish a typed project but verify nothing")
+    with app.app_context():
+        collect = make_project("collect-only", "Write these out in your language",
+                               ["twi"], options=False, n=2, threshold=3)
+        item = Word.query.filter_by(project_id=collect.id).first()
+        for i in range(3):
+            v = volunteer(f"collector{i}@example.com", "twi", [collect.id])
+            record_verdict(v, item.id, custom_text=f"my own wording {i}")
+        st = state_for(item.id, "twi")
+        ok &= check("three answers close the item", st.done,
+                    f"total={st.total_votes} done={st.done}")
+        ok &= check("counted as answers given, not agreement",
+                    st.total_votes == 3 and st.top_votes == 0,
+                    f"total={st.total_votes} top={st.top_votes}")
+        ok &= check("nothing is verified", consensus.best(item.id, "twi") is None)
+        ok &= check("and every answer is exported",
+                    len(list(consensus.typed_rows("twi",
+                                                  project_id=collect.id))) == 3)
+        prog = collect.progress("twi")
+        ok &= check("progress counts it as finished",
+                    prog["closed"] == 1 and prog["total"] == 2, str(prog))
+
+    print("\nin a project with options, typing contributes but does not verify")
+    with app.app_context():
+        opts = make_project("with-options", "Pick the natural wording", ["twi"],
+                            options=True, n=2, threshold=3)
+        item = Word.query.filter_by(project_id=opts.id).first()
+        for i in range(3):
+            v = volunteer(f"writer{i}@example.com", "twi", [opts.id])
+            record_verdict(v, item.id, custom_text="the wording we all typed")
+        st = state_for(item.id, "twi")
+        ok &= check("three people typing the same thing is not agreement",
+                    st.top_votes == 0 and not st.done,
+                    f"top={st.top_votes} done={st.done}")
+        ok &= check("it is still counted as answered three times",
+                    st.total_votes == 3, str(st.total_votes))
+        added = [c for c in item.candidates if c.source == "volunteer"]
+        ok &= check("and became one option for the next speaker",
+                    len(added) == 1, str([c.text for c in added]))
+        for i in range(3):
+            v = volunteer(f"tapper-opt{i}@example.com", "twi", [opts.id])
+            record_verdict(v, item.id, candidate_id=added[0].id)
+        st = state_for(item.id, "twi")
+        ok &= check("three taps on it do verify it", st.done and st.top_votes == 3,
+                    f"top={st.top_votes} done={st.done}")
+        agreed = consensus.best(item.id, "twi")
+        ok &= check("and that wording is the verified answer",
+                    agreed and agreed["text"] == "the wording we all typed",
+                    str(agreed))
 
     print("\neach project sets its own bar for agreement")
     with app.app_context():

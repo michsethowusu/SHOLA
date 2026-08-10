@@ -96,15 +96,33 @@ def state_for(word_id, language, create=True):
 
 
 def refresh_word(word_id, language, commit=True):
-    """Recompute one language's vote state for one word.
+    """Recompute one language's vote state for one item.
 
     Votes are counted within the language only. Pooling them would let Twi
-    answers settle a word for Ga speakers, who never saw it.
+    answers settle an item for Ga speakers, who never saw it.
+
+    Two counts, deliberately different. `top_votes` is agreement and only a tap
+    on an offered option adds to it: two people writing the same thing have not
+    agreed with each other in any way we can check, since spelling, spacing and
+    dialect all differ, and verification has to mean something. `total_votes` is
+    how many times the item has been answered at all, typing included - that is
+    what finishes an item in a project where nothing can be verified.
+
+    A typed wording becomes an option, so the next speaker can tap it, and those
+    taps count like any other.
     """
     evals = Evaluation.query.filter_by(word_id=word_id, language=language,
                                        skipped=False).all()
     counts = Counter()
+    answers = 0
     for ev in evals:
+        answers += 1
+        # A typed answer is an answer - it counts towards how many times this
+        # item has been done, which is what finishes a project where nothing can
+        # be verified. It never counts towards agreement, because agreeing with
+        # somebody's spelling is not something we can establish.
+        if ev.custom_text:
+            continue
         text = ev.chosen_text
         if text:
             counts[normalise(text)] += 1
@@ -112,7 +130,7 @@ def refresh_word(word_id, language, commit=True):
     project = project_of(word_id)
     needed = votes_needed(project)
     row = state_for(word_id, language)
-    row.total_votes = sum(counts.values())
+    row.total_votes = answers
     row.top_votes = max(counts.values()) if counts else 0
     # A project without options cannot settle anything - every answer is typed
     # and there is nothing to agree with. Those items close once they have the

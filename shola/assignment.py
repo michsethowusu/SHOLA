@@ -137,8 +137,10 @@ def record_verdict(volunteer, word_id, candidate_id=None, custom_text=None,
     if custom_text and not skipped:
         adopted = adopt_wording(word_id, volunteer.language, custom_text)
         if adopted is not None:
-            # Recorded against the option so it counts as a vote for it, with
-            # the typed text kept for provenance.
+            # Pointed at the option so the next speaker can tap it, with the
+            # typed text kept alongside. Keeping both is what lets this count as
+            # a contribution rather than a vote: verification counts taps, and
+            # custom_text being set is how a typed answer is known.
             candidate_id = adopted.id
 
     existing = Evaluation.query.filter_by(volunteer_id=volunteer.id,

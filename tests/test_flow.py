@@ -150,7 +150,7 @@ def main():
         ok &= check("assignment closed",
                     db.session.get(Assignment, first.id).status == "done")
 
-        print("\nconsensus counts a typed answer equal to a machine option")
+        print("\ntyped answers become options; only taps verify")
         target = Word.query.filter(Word.phrase == "word 7").first()
         v1 = add_volunteer("d@example.com")
         typers = [add_volunteer(f"typer{i}@example.com")
@@ -159,19 +159,36 @@ def main():
             # Alternating case: the same wording however it was capitalised.
             record_verdict(v, target.id,
                            custom_text="mepɛ nsuo" if i % 2 else "Mepɛ Nsuo")
-        opt = [x for x in target.candidates if x.language == "twi"][0]
-        record_verdict(add_volunteer("f@example.com"), target.id,
-                       candidate_id=opt.id)
         t = tally(target.id, "twi")
-        ok &= check("case-folded votes merge",
-                    t["ranked"][0]["votes"] == VOTES_TO_SETTLE,
+        ok &= check(f"{VOTES_TO_SETTLE} people typing the same thing is not "
+                    "agreement", t["votes"] == 0, str(t["ranked"]))
+        ok &= check("though it is counted as work done",
+                    state_for(target.id, "twi").total_votes == VOTES_TO_SETTLE,
+                    str(state_for(target.id, "twi").total_votes))
+        ok &= check("their answers are counted as contributions",
+                    t["typed"] == VOTES_TO_SETTLE, str(t["typed"]))
+        ok &= check("nothing is verified from typing alone",
+                    best(target.id, "twi") is None)
+        ok &= check("but the wording became one option, not five",
+                    len([c for c in target.candidates
+                         if c.language == "twi" and c.source == "volunteer"]) == 1,
+                    str([c.text for c in target.candidates
+                         if c.source == "volunteer"]))
+
+        print("\nand taps on that option do verify it")
+        typed_option = next(c for c in target.candidates
+                            if c.language == "twi" and c.source == "volunteer")
+        for i in range(VOTES_TO_SETTLE):
+            record_verdict(add_volunteer(f"tapper{i}@example.com"), target.id,
+                           candidate_id=typed_option.id)
+        t = tally(target.id, "twi")
+        ok &= check("the taps are counted",
+                    t["ranked"] and t["ranked"][0]["votes"] == VOTES_TO_SETTLE,
                     str(t["ranked"]))
         agreed = best(target.id, "twi")
-        ok &= check("typed wording can beat the machine option",
-                    agreed and agreed["text"].lower() == "mepɛ nsuo", str(agreed))
-        ok &= check("a typed answer became a selectable option",
-                    any(c.source == "volunteer" and c.language == "twi"
-                        for c in target.candidates))
+        ok &= check("a volunteer's wording can win on taps",
+                    agreed and agreed["text"].lower() == "mepɛ nsuo",
+                    str(agreed))
         ok &= check("NFC folding", normalise("nsuo") == "nsuo")
 
         print(f"\nfewer than {VOTES_TO_SETTLE} matching answers is not consensus")
@@ -236,14 +253,15 @@ def main():
     print("\na word stops being handed out once enough speakers agree")
     with app.app_context():
         w = Word.query.filter_by(tier=1).order_by(Word.id).first()
+        pick = [c for c in w.candidates if c.language == "twi"][0]
         agreeing = [add_volunteer(f"agree{i}@example.com")
                     for i in range(VOTES_TO_SETTLE)]
         for v in agreeing[:-1]:
-            record_verdict(v, w.id, custom_text="same answer")
-        ok &= check(f"{VOTES_TO_SETTLE - 1} votes do not settle it",
+            record_verdict(v, w.id, candidate_id=pick.id)
+        ok &= check(f"{VOTES_TO_SETTLE - 1} taps do not settle it",
                     not state_for(w.id, "twi").done)
-        record_verdict(agreeing[-1], w.id, custom_text="same answer")
-        ok &= check(f"{VOTES_TO_SETTLE} matching votes settle it",
+        record_verdict(agreeing[-1], w.id, candidate_id=pick.id)
+        ok &= check(f"{VOTES_TO_SETTLE} taps on the same option settle it",
                     state_for(w.id, "twi").done)
         later = add_volunteer("k@example.com")
         lease_words(later, 10)
@@ -254,22 +272,39 @@ def main():
     with app.app_context():
         w2 = next(x for x in Word.query.filter(Word.tier == 1).all()
                   if not state_for(x.id, "twi").done)
+        # Typed wordings first, which adds options without adding votes. That
+        # is what makes deadlock possible at all: with only three options,
+        # twenty taps must put five on one of them.
+        for i in range(5):
+            record_verdict(add_volunteer(f"typer-dis{i}@example.com"), w2.id,
+                           custom_text=f"a wording {i}")
+        st = state_for(w2.id, "twi")
+        ok &= check("typed wordings add options but no agreement",
+                    st.top_votes == 0 and st.total_votes == 5,
+                    f"total={st.total_votes} top={st.top_votes}")
+        options = [c for c in w2.candidates if c.language == "twi"]
+        ok &= check("so there are more options to spread across",
+                    len(options) == 8, str(len(options)))
+
         voters = [add_volunteer(f"dis{i}@example.com")
                   for i in range(MAX_VERDICTS_BEFORE_CONTESTED)]
         for i, v in enumerate(voters[:3]):
-            record_verdict(v, w2.id, custom_text=f"different {i}")
+            record_verdict(v, w2.id, candidate_id=options[i].id)
         st = state_for(w2.id, "twi")
-        ok &= check("three different answers leave it unsettled",
-                    not st.done and st.top_votes == 1)
+        ok &= check("three different taps leave it unsettled",
+                    not st.done and st.top_votes == 1,
+                    f"top={st.top_votes}")
         ok &= check("and it is still offered",
                     lease_words(add_volunteer("l@example.com"), 30) > 0
                     and not state_for(w2.id, "twi").contested)
+        # Spread the rest so no option reaches the threshold.
         for i, v in enumerate(voters[3:]):
-            record_verdict(v, w2.id, custom_text=f"another {i}")
+            record_verdict(v, w2.id, candidate_id=options[(i + 3) % 8].id)
         st = state_for(w2.id, "twi")
-        ok &= check(f"after {MAX_VERDICTS_BEFORE_CONTESTED} verdicts it is "
-                    "closed as contested", st.contested,
-                    f"votes={st.total_votes} contested={st.contested}")
+        ok &= check(f"after {MAX_VERDICTS_BEFORE_CONTESTED} taps with no "
+                    "winner it is closed as contested", st.contested,
+                    f"votes={st.total_votes} top={st.top_votes} "
+                    f"contested={st.contested}")
         fresh_v = add_volunteer("m@example.com")
         lease_words(fresh_v, 30)
         ok &= check("a contested word is no longer handed out",
@@ -278,9 +313,10 @@ def main():
     print("\neach language is settled on its own")
     with app.app_context():
         shared = Word.query.filter(Word.tier == 1).order_by(Word.id.desc()).first()
+        twi_option = [c for c in shared.candidates if c.language == "twi"][0]
         for i in range(VOTES_TO_SETTLE):
             record_verdict(add_volunteer(f"twi{i}@example.com", language="twi"),
-                           shared.id, custom_text="agreed twi wording")
+                           shared.id, candidate_id=twi_option.id)
         ok &= check("settled in Twi", state_for(shared.id, "twi").done)
         ok &= check("untouched in Ga", not state_for(shared.id, "ga").done)
         gaman = add_volunteer("ga1@example.com", language="ga")
@@ -593,7 +629,9 @@ def main():
     ok &= check("API docs page renders", r.status_code == 200
                 and b"Data API" in r.data)
     ok &= check("docs explain what verified means",
-                b"independently chose the same answer" in r.data)
+                b"tapped the same offered option" in r.data)
+    ok &= check("and that typing alone never verifies",
+                b"never counted as agreement" in r.data)
     ok &= check("and that typed answers are not verified",
                 b"collected answers" in r.data and b"answers=typed" in r.data)
 

@@ -61,13 +61,24 @@ order rotates by work done so the same project is not always the one that gets
 two. A project whose queue is dry passes its share to the others rather than
 shortening the list.
 
-**Verification belongs to projects that offer options.** Each carries its own
-`votes_to_settle`, because the cost of being wrong is not the same everywhere.
-A project with no options verifies nothing at all: every answer is typed and
-there is nothing for it to agree with. Those answers come out of
-`consensus.typed_rows()` and the `?answers=typed` API, always labelled
-`"verified": false` — mixing them into the verified set would let one
-unreviewed opinion pass as a settled one.
+**Only taps verify.** `top_votes` counts speakers who tapped the same offered
+option; that is what `votes_to_settle` measures and what "verified" means. A
+typed wording never adds to it, however many people type the same thing —
+spelling, spacing and dialect differ, so there is no way to establish that two
+people meant the same. It becomes an option instead, and taps on it count like
+any other, so a volunteer's own wording can end up the verified answer.
+
+`total_votes` is separate: it counts every answer, typing included. That is what
+closes an item in a project where nothing can be verified, and what trips the
+contested ceiling where something can.
+
+**A project's shape comes from its file, not a form field.** Options in the CSV
+means answers can be verified; a single column means they are collected. Every
+language in a project must be the same shape, or the same job would be
+verifiable in one language and not another. `votes_to_settle` reads as "matching
+answers to verify" for the first and "answers wanted per item" for the second —
+one number, and in both cases what decides when the project is finished.
+`Project.progress()` reports that.
 
 **A share link buys priority, not permanence.** Someone who joins through
 `/join?project=<slug>` works only on that project until its queue is empty for

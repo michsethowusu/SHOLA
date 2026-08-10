@@ -24,8 +24,14 @@ Where is the market?,Ɛhe na dwaso wɔ?,Dwaso wɔ he?,Dwaso no wɔ he?</code></p
 <pre style="margin:0;overflow-x:auto"><code>text
 Where is the market?</code></pre>
       <p class="muted" style="margin-top:10px">…for volunteers to type the
-         answer. A header row is optional. Two to five options per line; every
-         line must have options or none of them may.</p>
+         answer themselves. A header row is optional. Two to five options per
+         line; every line must have options or none of them may.</p>
+      <p class="muted" style="margin-top:10px">
+        You do not choose between these — the file decides. With options,
+        answers can be verified by agreement; without, they are collected as
+        contributions. Either way volunteers can write their own answer, and
+        that wording becomes an option for the next speaker.
+      </p>
     </div>
 
     <form method="post" enctype="multipart/form-data" style="margin-top:32px"
@@ -59,31 +65,24 @@ Where is the market?</code></pre>
       </div>
 
       <div class="field">
-        <span class="label">How do volunteers answer?</span>
-        <div class="choice-grid">
-          <label class="choice">
-            <input type="radio" name="answer_mode" value="choose"
-                   {% if (form.answer_mode if form else 'choose') == 'choose' %}checked{% endif %}>
-            <span class="t">They choose</span>
-            <span class="s">Your file carries the options. Answers can be
-              verified by agreement.</span>
-          </label>
-          <label class="choice">
-            <input type="radio" name="answer_mode" value="type"
-                   {% if form and form.answer_mode == 'type' %}checked{% endif %}>
-            <span class="t">They type</span>
-            <span class="s">Your file is one column. Answers are collected as
-              contributions, not verified.</span>
-          </label>
-        </div>
-      </div>
-
-      <div class="field">
-        <label for="votes_to_settle">How many matching answers verify an
-          item?</label>
-        <p class="hint">Only used when volunteers choose between options. Five
-           is the default across SHOLA. Higher is stronger evidence and takes
-           proportionally longer.</p>
+        <label for="votes_to_settle">How many times should each item be
+          answered?</label>
+        <p class="hint">
+          An item stops going out once it reaches this, and your project is
+          finished when every item has. Five is the default across SHOLA.
+          <br><br>
+          <strong>If your file has no options</strong>, this is simply how many
+          separate answers to collect for each item — we spread the work so
+          every item gets that many. Nothing is verified: typed answers cannot
+          be checked against each other.
+          <br><br>
+          <strong>If your file carries options</strong>, it counts
+          <em>matching</em> answers — this many speakers tapping the same option
+          is what <strong>verified</strong> means, and higher is stronger
+          evidence. Volunteers can still write their own answer, which becomes
+          an option for the next speaker; it only counts towards verification
+          once others tap it.
+        </p>
         <input type="number" id="votes_to_settle" name="votes_to_settle"
                min="2" max="20" step="1" style="max-width:140px"
                value="{{ form.votes_to_settle if form else 5 }}">
