@@ -66,6 +66,14 @@ elif [ "$words" -eq 0 ] 2>/dev/null; then
   fi
 else
   echo "[seed] $words words already present, skipping"
+  # The downloads are 140 MB and are never needed again once imported. They have
+  # been sitting in the volume since the first boot, which is most of what filled
+  # the disk.
+  if [ -d "$SEED_DIR" ]; then
+    echo "[clean] removing seed downloads: $(du -sh "$SEED_DIR" 2>/dev/null | cut -f1)"
+    rm -rf "$SEED_DIR"
+    echo "[clean] $(df -h /app/instance 2>/dev/null | tail -1)"
+  fi
 fi
 
 exec "$@"
