@@ -535,7 +535,16 @@ def backup(out, keep_db, keep_people, keep_dirs, keep_config):
     # The environment variables, domains and schedules of every application.
     # They are inside Coolify's own database dump too, but restoring from a
     # readable file does not require standing Coolify up first.
-    cfg = export_coolify_config()
+    # Never fatal. This is the least important thing the backup collects - the
+    # deployment configuration can be read off the dashboard - and for ten days
+    # a DNS failure here aborted the whole command before it pruned or uploaded
+    # anything, which is how 63 GB of archives accumulated and filled the disk.
+    try:
+        cfg = export_coolify_config()
+    except Exception as exc:      # noqa: BLE001
+        click.echo(f"config    skipped: {exc.__class__.__name__}: {exc}",
+                   err=True)
+        cfg = None
     if cfg is not None:
         cfg_path = os.path.join(out_dir, f"coolify-config-{stamp}.json.gz")
         with _gzip.open(cfg_path, "wt", encoding="utf-8") as fh:
@@ -606,6 +615,16 @@ def export_coolify_config():
     token = os.environ.get("SHOLA_COOLIFY_TOKEN")
     if not (url and token):
         return None
+    # host.docker.internal is not resolvable from every container. Say so
+    # usefully rather than through a DNS traceback.
+    if "host.docker.internal" in url:
+        import socket
+        try:
+            socket.gethostbyname("host.docker.internal")
+        except OSError:
+            raise RuntimeError(
+                "SHOLA_COOLIFY_URL points at host.docker.internal, which this "
+                "container cannot resolve. Use the host's address instead.")
 
     import httpx
     from datetime import datetime as _dt
