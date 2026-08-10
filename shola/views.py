@@ -1225,6 +1225,28 @@ def healthz():
     # Whether we can email at all. Nothing else on the site reveals this, and
     # a missing password only surfaced when a volunteer tried to sign up.
     cfg = current_app.config
-    return {"ok": True, "today": date.today().isoformat(),
-            "build": cfg.get("BUILD", "unknown"),
-            "email": bool(cfg.get("SMTP_USER") and cfg.get("SMTP_PASSWORD"))}
+    out = {"ok": True, "today": date.today().isoformat(),
+           "build": cfg.get("BUILD", "unknown"),
+           "email": bool(cfg.get("SMTP_USER") and cfg.get("SMTP_PASSWORD"))}
+
+    # Free space where the database lives, and how big it has got. A migration
+    # failed with "database or disk is full" and there was no way to see that
+    # from outside the machine; SQLite needs room for a journal as large as the
+    # rows a transaction touches, so headroom is not a detail.
+    try:
+        import shutil
+        from pathlib import Path
+
+        db_path = Path(cfg["SQLALCHEMY_DATABASE_URI"].replace("sqlite:///", ""))
+        usage = shutil.disk_usage(db_path.parent if db_path.parent.exists()
+                                  else "/")
+        out["disk"] = {
+            "free_mb": usage.free // (1024 * 1024),
+            "total_mb": usage.total // (1024 * 1024),
+            "used_pct": round((usage.total - usage.free) / usage.total * 100, 1),
+            "db_mb": (db_path.stat().st_size // (1024 * 1024)
+                      if db_path.exists() else None),
+        }
+    except Exception as exc:      # noqa: BLE001 - health must not fail
+        out["disk"] = {"error": exc.__class__.__name__}
+    return out
