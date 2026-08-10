@@ -20,10 +20,11 @@
         languages you are asking about. Save it as <strong>CSV UTF-8</strong> so
         ɛ, ɔ and ŋ survive.
       </p>
+{% set demo = LANGUAGES.keys() | list %}
 <pre style="margin:12px 0 0;overflow-x:auto"><code>text,language,priority,option1,option2,option3
-Where is the market?,twi,1,Ɛhe na dwaso wɔ?,Dwaso wɔ he?,
-Where is the market?,ewe,1,Afi ka asi le?,,
-Where is the market?,gaa,1,,,
+Where is the market?,{{ demo[0] }},1,Ɛhe na dwaso wɔ?,Dwaso wɔ he?,
+Where is the market?,{{ demo[1] }},1,Afi ka asi le?,,
+Where is the market?,{{ demo[2] }},1,,,
 How much is this?,all,2,,,</code></pre>
       <p style="margin-top:14px">
         <a class="btn ghost small" href="{{ url_for('main.template_csv') }}">
@@ -54,7 +55,9 @@ How much is this?,all,2,,,</code></pre>
     <div class="card" style="margin-top:18px; text-align:left">
       <h3>Language codes</h3>
       <p class="muted">
-        ISO 639-3, which is what goes in the language column.
+        These are the codes that go in the language column — mostly ISO 639-3,
+        with the four languages SHOLA started with keeping their plain names.
+        Copy them exactly.
         <a href="{{ url_for('main.languages_csv') }}">Download the list</a>, or
         search it here.
       </p>

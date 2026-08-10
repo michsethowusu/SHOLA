@@ -37,16 +37,30 @@ echo
 # the way through a rolling update, so it reports success before the new code is
 # serving. Wait for the commit itself to appear instead.
 WANT="$(git rev-parse --short HEAD)"
+
+# Three agreeing answers in a row, not one. During a rolling update both
+# containers are behind the same address, so a single matching reply only proves
+# the new one exists - the next request can still land on the old one, and this
+# script has twice reported "live" while the previous build was still serving.
+NEED_STREAK=3
+STREAK=0
 echo -n "waiting for $WANT to serve"
-for _ in $(seq 1 90); do
+for _ in $(seq 1 120); do
   GOT="$(curl -s -m 10 "$SITE/healthz" | sed -n 's/.*"build":"\([^"]*\)".*/\1/p')"
   if [ "$GOT" = "$WANT" ]; then
-    echo " — live"
-    curl -s -m 10 "$SITE/healthz"; echo
-    exit 0
+    STREAK=$((STREAK + 1))
+    if [ "$STREAK" -ge "$NEED_STREAK" ]; then
+      echo " — live"
+      curl -s -m 10 "$SITE/healthz"; echo
+      exit 0
+    fi
+    echo -n "+"
+  else
+    [ "$STREAK" -gt 0 ] && echo -n "!"   # went back to the old build
+    STREAK=0
+    echo -n "."
   fi
-  echo -n "."
-  sleep 10
+  sleep 5
 done
 echo " — $WANT is not serving yet; check Coolify" >&2
 exit 1

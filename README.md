@@ -88,7 +88,21 @@ machine translations in four languages and nothing in the other eighty-four, and
 a submitted project is allowed to be just as uneven.
 
 The submit page lists every code with its name, and serves `/template.csv` and
-`/languages.csv` so nobody has to retype a header from a screenshot.
+`/languages.csv` so nobody has to retype a header from a screenshot. The
+template's example rows are generated from the config, because the hand-written
+version shipped with `gaa` in it while the stored code was `ga` — a template our
+own validator would have rejected.
+
+**Language codes are ISO 639-3.** Two of the four languages SHOLA started with
+were seeded by hand with codes that were not: `ga` for Ga, which is `gaa`, and
+`dagbani` for Dagbani, which is `dag`. The other 84 always used ISO codes, so
+anyone who looked up the correct code had their file refused.
+`normalise_language_codes()` moves the stored codes on boot — all eight columns
+that hold one, listed in `LANGUAGE_COLUMNS` because a migration that misses one
+leaves a volunteer whose language nothing recognises. The old codes are accepted
+on input for ever, along with the two-letter forms, via
+`config.canonical_language()`: correcting our own mistake must not break a link
+or a file somebody already wrote.
 
 **A share link buys priority, not permanence.** Someone who joins through
 `/join?project=<slug>` works only on that project until its queue is empty for

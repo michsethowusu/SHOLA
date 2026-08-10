@@ -26,13 +26,13 @@ LANGUAGES = {
                       "g": ["ɣ", "Ɣ"], "n": ["ŋ", "Ŋ"], "o": ["ɔ", "Ɔ"],
                       "v": ["ʋ", "Ʋ"]},
     },
-    "ga": {
+    "gaa": {
         "name": "Ga",
         "note": "Gã",
         "special": ["ɛ", "Ɛ", "ŋ", "Ŋ", "ɔ", "Ɔ"],
         "longpress": {"e": ["ɛ", "Ɛ"], "n": ["ŋ", "Ŋ"], "o": ["ɔ", "Ɔ"]},
     },
-    "dagbani": {
+    "dag": {
         "name": "Dagbani",
         "note": "Dagbanli",
         "special": ["ɛ", "Ɛ", "ɣ", "Ɣ", "ŋ", "Ŋ", "ɔ", "Ɔ", "ʒ", "Ʒ"],
@@ -46,6 +46,30 @@ from .languages import OTHER_BY_CODE, OTHER_LANGUAGES   # noqa: E402,F401
 # Characters a phone keyboard hides, across the Ghanaian orthographies. Used for
 # every language that does not have its own set listed above: better to offer a
 # few unneeded letters than to leave a speaker unable to type their own.
+# Codes that were used before these languages were given their ISO 639-3 ones.
+# The other 84 languages always used ISO codes; these four were seeded by hand
+# and two of them were wrong, which meant a file with the correct code in it -
+# the code anybody would look up - was rejected.
+#
+# Accepted on input for ever: links, files and notes written against the old
+# codes must not break because we corrected our own mistake.
+LANGUAGE_ALIASES = {
+    "ga": "gaa",
+    "dagbani": "dag",
+    # Two-letter ISO 639-1, since that is what somebody may reach for first.
+    "ee": "ewe",
+    "tw": "twi",
+    "ak": "twi",
+    "aka": "twi",
+}
+
+
+def canonical_language(code):
+    """The code we store, given whatever somebody wrote."""
+    code = (code or "").strip().lower()
+    return LANGUAGE_ALIASES.get(code, code)
+
+
 DEFAULT_SPECIAL = ["ɛ", "Ɛ", "ɔ", "Ɔ", "ŋ", "Ŋ", "ɖ", "Ɖ", "ƒ", "Ƒ",
                    "ɣ", "Ɣ", "ʋ", "Ʋ", "ʒ", "Ʒ"]
 DEFAULT_LONGPRESS = {"d": ["ɖ", "Ɖ"], "e": ["ɛ", "Ɛ"], "f": ["ƒ", "Ƒ"],

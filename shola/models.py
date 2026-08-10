@@ -602,6 +602,60 @@ def ensure_indexes():
     return changed
 
 
+# Every column that holds a language code. Listed once, because a migration that
+# misses one leaves a volunteer whose language nothing else recognises.
+LANGUAGE_COLUMNS = [
+    ("volunteers", "language"),
+    ("candidates", "language"),
+    ("word_state", "language"),
+    ("evaluations", "language"),
+    ("project_languages", "language"),
+    ("words", "language"),
+    ("flags", "language"),
+    ("pending_signups", "language"),
+]
+
+
+def normalise_language_codes():
+    """Move stored codes onto the ones we publish.
+
+    Two of the four languages SHOLA started with were seeded with codes that
+    were not their ISO 639-3 ones - `ga` for Ga, which is `gaa`, and `dagbani`
+    for Dagbani, which is `dag`. The other 84 always used ISO codes, so anybody
+    preparing a file looked up the correct code and had it refused.
+
+    Renaming the config is not enough: the codes are stored in every table that
+    records who answered what. This moves them, and is safe to run repeatedly -
+    after the first pass there is nothing left to match.
+    """
+    from sqlalchemy import inspect, text
+
+    from .config import LANGUAGE_ALIASES
+
+    inspector = inspect(db.engine)
+    tables = set(inspector.get_table_names())
+    moved = []
+    for table, column in LANGUAGE_COLUMNS:
+        if table not in tables:
+            continue
+        have = {c["name"] for c in inspector.get_columns(table)}
+        if column not in have:
+            continue
+        for old, new in LANGUAGE_ALIASES.items():
+            if old == new:
+                continue
+            result = db.session.execute(
+                text(f"UPDATE {table} SET {column} = :new"
+                     f" WHERE {column} = :old"),
+                {"new": new, "old": old})
+            if result.rowcount:
+                moved.append(f"{table}.{column} {old}->{new}"
+                             f" ({result.rowcount})")
+    if moved:
+        db.session.commit()
+    return moved
+
+
 CORE_PROJECT = {
     "slug": "everyday-words",
     "title": "Translate everyday Ghanaian words",

@@ -23,6 +23,7 @@ from flask import (Blueprint, Response, abort, current_app, flash, jsonify,
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
+from .config import canonical_language
 from . import consensus
 from .assignment import leaderboard, record_verdict
 from .tiers import (VOTES_TO_SETTLE, active_tier, answers_needed, daily_quota,
@@ -308,7 +309,9 @@ def join():
     email = (request.form.get("email") or "").strip().lower()
     language = request.form.get("language") or ""
     if language == "other":
-        language = (request.form.get("other_language") or "").strip()
+        language = request.form.get("other_language") or ""
+    # An old code in a bookmarked link or a shared form still resolves.
+    language = canonical_language(language)
     days = request.form.getlist("days")
     window = request.form.get("time_window") or "anytime"
     consent = bool(request.form.get("photo_consent"))
@@ -747,7 +750,7 @@ def project_page(slug):
     proj = Project.query.filter_by(slug=slug).first()
     if not proj or proj.status not in ("approved", "paused"):
         abort(404)
-    language = (request.args.get("language") or "").strip() or None
+    language = canonical_language(request.args.get("language") or "") or None
     if language not in proj.language_codes:
         language = proj.language_codes[0] if proj.language_codes else None
     return render_template(
@@ -863,15 +866,23 @@ def flag_item(token, word_id):
 @main.route("/template.csv")
 def template_csv():
     """The example file, so nobody has to retype the header from a screenshot."""
+    # Codes come from the config, not written out here: a template carrying a
+    # code our own validator rejects is worse than no template, and that is
+    # exactly what shipped when this file said "gaa" while the stored code was
+    # still "ga".
+    seeded = [c for c in current_app.config["LANGUAGES"]][:3]
+    while len(seeded) < 3:
+        seeded.append(next(iter(current_app.config["ALL_LANGUAGES"])))
     rows = [
-        ["text", "language", "priority", "option1", "option2", "option3"],
-        ["Where is the market?", "twi", "1", "Ɛhe na dwaso wɔ?",
-         "Dwaso wɔ he?", ""],
-        ["Where is the market?", "ewe", "1", "Afi ka asi le?", "", ""],
-        ["Where is the market?", "gaa", "1", "", "", ""],
+        ["Where is the market?", seeded[0], "1", "first way to say it",
+         "second way", ""],
+        ["Where is the market?", seeded[1], "1", "how it goes here", "", ""],
+        ["Where is the market?", seeded[2], "1", "", "", ""],
         ["How much is this?", "all", "2", "", "", ""],
     ]
-    return _csv_response(rows[0], rows[1:], "shola-template")
+    return _csv_response(
+        ["text", "language", "priority", "option1", "option2", "option3"],
+        rows, "shola-template")
 
 
 @main.route("/languages.csv")
@@ -1048,6 +1059,7 @@ def api_items(slug, language):
                         "projects": [p.slug for p in
                                      Project.query.filter_by(
                                          status="approved").all()]}), 404
+    language = canonical_language(language)
     if language not in proj.language_codes:
         return jsonify({"error": "this project does not collect that language",
                         "languages": proj.language_codes}), 404
@@ -1136,6 +1148,7 @@ def api_words(language):
 
     Only entries where at least `min_votes` speakers chose the same wording.
     """
+    language = canonical_language(language)
     if language not in current_app.config["ALL_LANGUAGES"]:
         return jsonify({"error": "unknown language",
                         "languages": list(current_app.config["ALL_LANGUAGES"])}), 404
@@ -1182,7 +1195,8 @@ def api_consensus(language):
 @main.route("/api/entry/<int:word_id>/<language>")
 @main.route("/api/word/<int:word_id>/<language>")
 def api_word(word_id, language):
-    """Every vote on one entry, including wordings that did not win."""
+    """Every answer on one entry, with its vote count."""
+    language = canonical_language(language)
     if language not in current_app.config["ALL_LANGUAGES"]:
         abort(404)
     word = db.session.get(Word, word_id)

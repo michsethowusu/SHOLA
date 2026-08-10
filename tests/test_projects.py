@@ -130,7 +130,7 @@ def main():
 
     print("\nitems only reach speakers of the language they were filed under")
     with app.app_context():
-        ga_speaker = volunteer("ga@example.com", "ga",
+        ga_speaker = volunteer("ga@example.com", "gaa",
                                [core().id, Project.query.filter_by(
                                    slug="read-sentences").first().id])
         # read-sentences collects Twi and Ewe only, so opting in is refused.
@@ -495,6 +495,29 @@ def main():
                     all(w.language is None for w in
                         Word.query.filter_by(project_id=anylang.id)))
 
+    print("\nthe old codes still work, because people wrote them down")
+    r = fresh.post("/submit", data={
+        "title": "A file using the codes we used to publish",
+        "item_format": "word", "email": "kofi@example.com",
+        "file": (io_bytes(("text,language,option1,option2\n"
+                           "one,ga,a,b\n"
+                           "two,dagbani,c,d\n").encode()), "old.csv"),
+    }, content_type="multipart/form-data", follow_redirects=True)
+    ok &= check("a file with the old codes is accepted",
+                r.status_code == 200 and b"Submitted" in r.data,
+                f"HTTP {r.status_code}")
+    with app.app_context():
+        old_codes = Project.query.filter_by(
+            slug="a-file-using-the-codes-we-used-to-publish").first()
+        ok &= check("and stored under the corrected ones",
+                    old_codes is not None
+                    and sorted(old_codes.language_codes) == ["dag", "gaa"],
+                    str(old_codes.language_codes if old_codes else None))
+    r = fresh.get("/api/items/everyday-words/ga")
+    ok &= check("an old code in an API call still resolves",
+                r.status_code == 200 and r.get_json()["language"] == "gaa",
+                f"HTTP {r.status_code} {r.get_json() if r.status_code == 200 else ''}")
+
     print("\na blank language is refused rather than assumed")
     r = fresh.post("/submit", data={
         "title": "A file with a blank language cell",
@@ -527,12 +550,24 @@ def main():
                 r.status_code == 200 and b"language,code" in r.data)
     ok &= check("with a real code in it", b",twi" in r.data)
 
+    # The template must survive our own validator: shipping an example with a
+    # code we reject is worse than shipping none. "gaa" was in there once.
+    tmpl = fresh.get("/template.csv").data
+    with app.app_context():
+        parsed, tmpl_problems, tmpl_meta = importer.parse(
+            tmpl, known_languages=set(app.config["ALL_LANGUAGES"]))
+    ok &= check("the template we hand out passes our own parser",
+                not tmpl_problems, str(tmpl_problems))
+    ok &= check("and names languages we know",
+                tmpl_meta.get("any_language") and tmpl_meta["languages"],
+                str(tmpl_meta))
+
     print("\nlanguages come from the file, and only from the file")
     r = fresh.post("/submit", data={
         "title": "Languages come from the file",
         "item_format": "sentence", "email": "kofi@example.com",
         "file": (io_bytes(("text,language,option1,option2\n"
-                           "hello there,ga,a,b\n").encode()), "ga.csv"),
+                           "hello there,gaa,a,b\n").encode()), "ga.csv"),
     }, content_type="multipart/form-data", follow_redirects=True)
     ok &= check("accepted with nothing ticked anywhere",
                 r.status_code == 200 and b"Submitted" in r.data,
@@ -542,7 +577,7 @@ def main():
             slug="languages-come-from-the-file").first()
         ok &= check("the language was read from the column",
                     from_file is not None
-                    and from_file.language_codes == ["ga"],
+                    and from_file.language_codes == ["gaa"],
                     str(from_file.language_codes if from_file else None))
 
     print("\na bad file is refused with the line numbers, not half imported")
@@ -678,7 +713,7 @@ def main():
                 r.status_code == 200
                 and b"item,answer,chose,share,total_answers,from,leading"
                 in r.data, r.data[:90])
-    r = api.get("/api/items/read-sentences/ga")
+    r = api.get("/api/items/read-sentences/gaa")
     ok &= check("a language the project ignores 404s", r.status_code == 404)
     r = api.get("/api/items/nope/twi")
     ok &= check("an unknown project 404s", r.status_code == 404)

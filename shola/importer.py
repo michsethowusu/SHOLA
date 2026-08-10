@@ -132,8 +132,12 @@ def parse(stream_or_bytes, known_languages=None):
             problems.append(f"More than {MAX_ROWS:,} rows. Split the file.")
             break
 
+        from .config import canonical_language
+
         item_text = cells[0]
-        language = (cells[1] if len(cells) > 1 else "").lower()
+        # Whatever they wrote, stored as the code we publish - so a file using
+        # the codes anybody would look up works, including the two we had wrong.
+        language = canonical_language(cells[1] if len(cells) > 1 else "")
         rest = cells[2:]
 
         priority = None
