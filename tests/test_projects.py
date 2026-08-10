@@ -286,6 +286,38 @@ def main():
                     consensus.verified_count("twi",
                                              project_id=strict.id) == 1)
 
+    print("\nthe fast progress query agrees with the slow one")
+    with app.app_context():
+        from shola.tiers import tier_progress, tier_progress_all
+        # Some real vote state to disagree over: settled, contested, and
+        # untouched items across two languages.
+        proj = Project.query.filter_by(slug="with-options").first() or \
+            make_project("agree-check", "Check agreement", ["twi", "ewe"],
+                         options=True, n=6, threshold=2)
+        codes = proj.language_codes
+        items = Word.query.filter_by(project_id=proj.id).all()
+        for n, item in enumerate(items[:4]):
+            code = codes[n % len(codes)]
+            opts = [c for c in item.candidates if c.language == code]
+            if not opts:
+                continue
+            for i in range(2):
+                v = volunteer(f"cmp{n}-{i}@example.com", code, [proj.id])
+                record_verdict(v, item.id, candidate_id=opts[0].id)
+        slow = {code: tier_progress(code, project_id=proj.id) for code in codes}
+        fast = tier_progress_all(codes, project_id=proj.id)
+        ok &= check("both report the same tiers",
+                    sorted(slow) == sorted(fast))
+        same = all(slow[code] == fast[code] for code in codes)
+        ok &= check("and the same numbers for every tier", same,
+                    f"slow={slow} fast={fast}")
+        # And across the whole database, not only one project.
+        slow_all = {code: tier_progress(code) for code in codes}
+        fast_all = tier_progress_all(codes)
+        ok &= check("also with no project filter",
+                    all(slow_all[c] == fast_all[c] for c in codes),
+                    f"slow={slow_all} fast={fast_all}")
+
     print("\nreporting an item takes it out of everyone's queue")
     with app.app_context():
         reporter = volunteer("reporter@example.com", "twi", [core().id])

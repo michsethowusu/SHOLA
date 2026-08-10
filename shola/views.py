@@ -25,8 +25,8 @@ from werkzeug.utils import secure_filename
 
 from . import consensus
 from .assignment import leaderboard, record_verdict
-from .tiers import (VOTES_TO_SETTLE, active_tier, daily_quota, recruitment,
-                    tier_progress, top_up)
+from .tiers import (VOTES_TO_SETTLE, active_tier, answers_needed, daily_quota,
+                    recruitment, tier_progress, tier_progress_all, top_up)
 from .mailer import build_otp_email, make_token, read_token
 from .models import (Assignment, Candidate, Flag, PendingSignup, Project,
                      ProjectLanguage, Volunteer, Word, db, site_stats)
@@ -156,13 +156,22 @@ def stats():
 
     shown = shown_languages()
     live_projects = approved_projects()
+
+    # One pass for every language rather than a scan of the corpus each. The
+    # active tier and the answers still outstanding come out of the same rows,
+    # so nothing here re-reads what has already been counted.
+    tiers = tier_progress_all(shown)
     by_language = {}
     for code in shown:
+        rows = tiers.get(code, [])
+        open_rows = [r for r in rows if r["left"] > 0]
+        tier = open_rows[0]["tier"] if open_rows else None
+        needed = answers_needed(code, tier) if tier is not None else 0
         by_language[code] = {
-            "tiers": tier_progress(code),
-            "active": active_tier(code),
-            "recruit": recruitment(code, target, rate,
-                                   signed_up.get(code, 0)),
+            "tiers": rows,
+            "active": tier,
+            "recruit": recruitment(code, target, rate, signed_up.get(code, 0),
+                                   tier=tier, needed_answers=needed),
         }
     totals = {
         "volunteers_needed": sum(v["recruit"]["volunteers_needed"]
@@ -180,12 +189,10 @@ def stats():
                            projects=live_projects,
                            per_project=[{
                                "project": p,
-                               "verified": sum(
-                                   consensus.verified_count(c, project_id=p.id)
-                                   for c in p.language_codes),
-                               "typed": sum(
-                                   consensus.typed_count(c, project_id=p.id)
-                                   for c in p.language_codes),
+                               "verified": sum(consensus.verified_counts(
+                                   project_id=p.id).values()),
+                               "typed": sum(consensus.typed_counts(
+                                   project_id=p.id).values()),
                                "item_total": p.item_count(),
                            } for p in live_projects],
                            SHOWN_LANGUAGES=shown)
@@ -747,10 +754,8 @@ def project_page(slug):
         "project.html", project=proj, language=language,
         preview=proj.preview(language, limit=6), counts=item_counts(proj),
         progress=proj.progress(language),
-        verified={code: consensus.verified_count(code, project_id=proj.id)
-                  for code in proj.language_codes},
-        typed={code: consensus.typed_count(code, project_id=proj.id)
-               for code in proj.language_codes},
+        verified=consensus.verified_counts(project_id=proj.id),
+        typed=consensus.typed_counts(project_id=proj.id),
         share_link=(current_app.config["SITE_URL"].rstrip("/")
                     + url_for("main.join", project=proj.slug)))
 
@@ -1001,6 +1006,10 @@ def api_projects():
     for proj in Project.query.filter(
             Project.status.in_(("approved", "paused"))).order_by(
             Project.sort_order, Project.id).all():
+        # Two grouped queries per project rather than two per language: with 88
+        # languages the per-language helpers turned this page into 176 queries.
+        verified = consensus.verified_counts(project_id=proj.id)
+        typed = consensus.typed_counts(project_id=proj.id)
         out.append({
             "slug": proj.slug,
             "title": proj.title,
@@ -1015,11 +1024,9 @@ def api_projects():
             "answers_per_item": proj.votes_to_settle,
             "votes_to_verify": proj.votes_to_settle if proj.has_options else None,
             "progress": proj.progress(),
-            "verified": {code: consensus.verified_count(code,
-                                                        project_id=proj.id)
+            "verified": {code: verified.get(code, 0)
                          for code in proj.language_codes},
-            "typed_answers": {code: consensus.typed_count(code,
-                                                          project_id=proj.id)
+            "typed_answers": {code: typed.get(code, 0)
                               for code in proj.language_codes},
         })
     return jsonify({"projects": out, "count": len(out)})

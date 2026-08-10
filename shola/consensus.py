@@ -11,7 +11,8 @@ votes, so it improves as volunteers arrive and can never go stale.
 import unicodedata
 from collections import Counter, defaultdict
 
-from .models import Candidate, Evaluation, Project, Word, db
+from .models import (Candidate, Evaluation, Project, Word, WordState,
+                     db)
 
 
 def normalise(text):
@@ -157,6 +158,32 @@ def verified_count(language, min_votes=None, project_id=None):
     if project_id is not None:
         q = q.filter(Word.project_id == project_id)
     return q.scalar() or 0
+
+
+def verified_counts(project_id=None):
+    """language -> verified items, in one query rather than one per language.
+
+    The per-language helpers are fine for a page about one language; a page
+    listing every language needs this, or it issues 88 queries to say one thing.
+    """
+    q = (db.session.query(WordState.language, db.func.count(WordState.id))
+         .join(Word, Word.id == WordState.word_id)
+         .join(Project, Project.id == Word.project_id)
+         .filter(WordState.done.is_(True), Project.has_options.is_(True)))
+    if project_id is not None:
+        q = q.filter(Word.project_id == project_id)
+    return dict(q.group_by(WordState.language).all())
+
+
+def typed_counts(project_id=None):
+    """language -> typed answers collected, in one query."""
+    q = (db.session.query(Evaluation.language, db.func.count(Evaluation.id))
+         .join(Word, Word.id == Evaluation.word_id)
+         .filter(Evaluation.custom_text.isnot(None),
+                 Evaluation.custom_text != ""))
+    if project_id is not None:
+        q = q.filter(Word.project_id == project_id)
+    return dict(q.group_by(Evaluation.language).all())
 
 
 def typed_count(language, project_id=None):

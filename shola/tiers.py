@@ -204,6 +204,64 @@ def tier_progress(language, project_id=None):
     return out
 
 
+def tier_progress_all(languages, project_id=None):
+    """Per-tier totals for many languages, in two queries rather than 2N.
+
+    The slow version joins every item to its vote state, once per language, and
+    the join is over the whole corpus - four languages cost four scans of
+    478,822 rows, and every language that opens adds another. Here the item
+    totals are counted once and the closed counts come from WordState, which
+    only has rows for items somebody has answered.
+
+    Agrees with tier_progress() exactly; the tests hold the two against each
+    other rather than trusting that claim.
+    """
+    codes = list(languages)
+    if not codes:
+        return {}
+
+    # Items per (tier, language-of-the-item). NULL means the item reads the same
+    # for every language, so it counts towards all of them.
+    q = (db.session.query(Word.tier, Word.language, func.count(Word.id))
+         .group_by(Word.tier, Word.language))
+    if project_id is not None:
+        q = q.filter(Word.project_id == project_id)
+    totals = {}
+    for tier, item_language, n in q.all():
+        totals.setdefault(tier, {})[item_language] = n
+
+    # Closed items per (tier, language), from the small table.
+    cq = (db.session.query(Word.tier, WordState.language,
+                           func.sum(db.case((WordState.done.is_(True), 1),
+                                            else_=0)),
+                           func.sum(db.case((WordState.contested.is_(True), 1),
+                                            else_=0)))
+          .join(Word, Word.id == WordState.word_id)
+          .filter(WordState.language.in_(codes))
+          .group_by(Word.tier, WordState.language))
+    if project_id is not None:
+        cq = cq.filter(Word.project_id == project_id)
+    closed = {}
+    for tier, code, done, contested in cq.all():
+        closed[(tier, code)] = (int(done or 0), int(contested or 0))
+
+    out = {}
+    for code in codes:
+        rows = []
+        for tier in sorted(totals):
+            by_language = totals[tier]
+            total = by_language.get(None, 0) + by_language.get(code, 0)
+            if not total:
+                continue
+            done, contested = closed.get((tier, code), (0, 0))
+            shut = done + contested
+            rows.append({"tier": tier, "total": total, "done": done,
+                         "contested": contested, "left": total - shut,
+                         "pct": (shut / total * 100) if total else 0.0})
+        out[code] = rows
+    return out
+
+
 def outstanding_leases(word_ids, language):
     """word_id -> live leases promising a verdict in this language.
 
@@ -414,7 +472,7 @@ def answers_needed(language, tier=None, project_id=None):
 
 
 def recruitment(language, words_per_volunteer, completion_rate, signed_up,
-                project_id=None):
+                project_id=None, tier=None, needed_answers=None):
     """Volunteers needed to close this language's current tier in a year.
 
     Assumes only `completion_rate` of volunteers finish their commitment and
@@ -422,8 +480,13 @@ def recruitment(language, words_per_volunteer, completion_rate, signed_up,
     drop out still answer something - and the point is to over-recruit rather
     than run out of speakers in month eleven.
     """
-    tier = active_tier(language, project_id=project_id)
-    needed_answers = answers_needed(language, tier, project_id=project_id)
+    # Both may be passed in: the caller usually has them already, and each
+    # costs a scan of the whole corpus. Recomputing them here doubled the work
+    # behind the progress page.
+    if tier is None:
+        tier = active_tier(language, project_id=project_id)
+    if needed_answers is None:
+        needed_answers = answers_needed(language, tier, project_id=project_id)
     per_volunteer = max(1.0, words_per_volunteer * max(completion_rate, 0.01))
     needed = -(-needed_answers // int(per_volunteer)) if needed_answers else 0
     return {
