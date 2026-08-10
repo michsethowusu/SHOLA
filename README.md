@@ -61,24 +61,34 @@ order rotates by work done so the same project is not always the one that gets
 two. A project whose queue is dry passes its share to the others rather than
 shortening the list.
 
-**Only taps verify.** `top_votes` counts speakers who tapped the same offered
-option; that is what `votes_to_settle` measures and what "verified" means. A
-typed wording never adds to it, however many people type the same thing —
-spelling, spacing and dialect differ, so there is no way to establish that two
-people meant the same. It becomes an option instead, and taps on it count like
-any other, so a volunteer's own wording can end up the verified answer.
+**We report, we do not rule.** `votes_to_settle` is a target: how many answers
+an item wants in each language before it stops being handed out, and a project is
+finished when every item has them. Nothing decides which answer is *correct* —
+every answer is published with the number of volunteers who chose it, ties are
+reported as ties, and the judgement belongs to whoever builds on the data. An
+earlier version of this settled items by agreement and threw the rest away, which
+discarded the only evidence a consumer could have used.
 
-`total_votes` is separate: it counts every answer, typing included. That is what
-closes an item in a project where nothing can be verified, and what trips the
-contested ceiling where something can.
+**Answers spread evenly.** The item with the fewest answers goes out next, so a
+tier approaches completion together instead of piling attention on whatever is
+nearest its target and leaving a tail nobody ever saw.
 
-**A project's shape comes from its file, not a form field.** Options in the CSV
-means answers can be verified; a single column means they are collected. Every
-language in a project must be the same shape, or the same job would be
-verifiable in one language and not another. `votes_to_settle` reads as "matching
-answers to verify" for the first and "answers wanted per item" for the second —
-one number, and in both cases what decides when the project is finished.
-`Project.progress()` reports that.
+**A skip is not an answer.** It returns the item to the pool for other speakers
+and never shows it to that volunteer again — they have already told us they
+cannot answer it.
+
+**One CSV describes any project.** `text,language,priority,option1…` — rows
+sharing the same text are the *same item*, so an item exists once however many
+languages answer it. The language column is required and holds a code, with `all`
+for a row that applies to every language; blank is refused rather than assumed,
+because a project addressed to all 88 languages should not come from an empty
+cell. `priority` is optional and becomes the tier: band 1 is finished before band
+2 starts. Options are optional *per language* — the translation project has
+machine translations in four languages and nothing in the other eighty-four, and
+a submitted project is allowed to be just as uneven.
+
+The submit page lists every code with its name, and serves `/template.csv` and
+`/languages.csv` so nobody has to retype a header from a screenshot.
 
 **A share link buys priority, not permanence.** Someone who joins through
 `/join?project=<slug>` works only on that project until its queue is empty for

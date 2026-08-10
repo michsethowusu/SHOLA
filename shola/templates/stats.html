@@ -36,8 +36,8 @@
         <table class="plain">
           <thead>
             <tr>
-              <th>Project</th><th>Items</th><th>Verified</th>
-              <th>Typed answers</th>
+              <th>Project</th><th>Items</th><th>Items done</th>
+              <th>Answers written</th>
             </tr>
           </thead>
           <tbody>
@@ -53,13 +53,7 @@
                   </div>
                 </td>
                 <td>{{ row.item_total | thousands }}</td>
-                <td>
-                  {% if row.project.has_options %}
-                    {{ row.verified | thousands }}
-                  {% else %}
-                    <span class="muted">not verifiable</span>
-                  {% endif %}
-                </td>
+                <td>{{ row.verified | thousands }}</td>
                 <td>{{ row.typed | thousands }}</td>
               </tr>
             {% endfor %}
@@ -67,10 +61,10 @@
         </table>
       </div>
       <p class="hint">
-        A project verifies an item once enough speakers pick the same answer.
-        Where volunteers type the answer instead there is nothing to agree
-        with, so those are counted as contributions and
-        <a href="{{ url_for('main.api_docs') }}">exported separately</a>.
+        An item is done once it has been answered as many times as its project
+        asks for. Every answer is published with the number of volunteers who
+        chose it — <a href="{{ url_for('main.api_docs') }}">see the API</a> —
+        and what counts as agreement is for whoever uses the data to decide.
       </p>
     </div>
 
@@ -185,19 +179,18 @@
       {% endfor %}
 
       <p class="hint" style="margin-top:14px">
-        A word is <strong>confirmed</strong> once {{ VOTES_TO_SETTLE }}
-        speakers of that language choose the same wording. Some words have several equally good
-        translations and never reach agreement — those are marked
-        <strong>no agreement</strong> and every answer given is kept.
+        An item is <strong>done</strong> once {{ VOTES_TO_SETTLE }} speakers of
+        that language have answered it. Where they disagree, every wording is
+        kept with its vote count rather than one being picked — several equally
+        good translations is a fact about the language, not a failure.
       </p>
     </div>
 
     <div style="margin-top:40px">
       <h2>By language</h2>
       <p class="muted">
-        {{ VOTES_TO_SETTLE }} speakers must agree before a translation is
-        confirmed, so the confirmed count is always lower than the number of
-        items checked.
+        Each item is answered {{ VOTES_TO_SETTLE }} times before it is done, so
+        the done count is always well below the number of answers given.
       </p>
       <div class="scroll-x" style="margin-top:16px">
         <table class="plain">

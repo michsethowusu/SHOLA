@@ -1,18 +1,22 @@
-"""Deriving the most likely translation from volunteer picks.
+"""Reporting what volunteers answered, and how many chose each answer.
 
-Every verdict is a vote. A vote for one of the machine's options and a vote for
-a volunteer's own wording count the same, which is the point: if three people
-independently type the same thing the machine never proposed, that wording wins.
+Every answer is published with its vote count. Nothing here rules on whether an
+answer is correct or "verified": that judgement belongs to whoever builds on the
+data, and it needs the counts to make it. Declaring a single winner and dropping
+the rest would throw away exactly the evidence they need.
 
-Nothing here is stored as truth. Consensus is always computed from the current
-votes, so it improves as volunteers arrive and can never go stale.
+The leading answer is offered as a convenience. Where two wordings tie, both are
+returned as leaders - a tie is a real result about the language, not a defect to
+be broken by picking whichever the database happened to return first.
+
+Nothing here is stored as truth. It is computed from the current votes, so it
+improves as volunteers arrive and can never go stale.
 """
 
 import unicodedata
 from collections import Counter, defaultdict
 
-from .models import (Candidate, Evaluation, Project, Word, WordState,
-                     db)
+from .models import Candidate, Evaluation, Project, Word, WordState, db
 
 
 def normalise(text):
@@ -25,82 +29,133 @@ def normalise(text):
 
 
 def tally(word_id, language):
-    """Vote counts for one item in one language, best first.
-
-    Counts taps on offered options only. Typed text is a contribution and is
-    reported separately as `typed`: agreeing with somebody's spelling is not
-    something we can establish, so it must not add up to verification.
-    """
+    """Answer counts for one item in one language, most chosen first."""
     evals = (Evaluation.query
              .filter_by(word_id=word_id, language=language, skipped=False)
              .all())
     counts = Counter()
     display = {}
-    typed = 0
+    typed_first = set()
     for ev in evals:
-        if ev.custom_text:
-            typed += 1
-            continue
         text = ev.chosen_text
         if not text:
             continue
         key = normalise(text)
         counts[key] += 1
         display.setdefault(key, text.strip())
+        if ev.custom_text:
+            typed_first.add(key)
+
+    # Where an answer came from, for anyone who wants to weigh them differently:
+    # an option the project supplied, or a wording a volunteer wrote.
+    supplied = {normalise(c.text) for c in
+                Candidate.query.filter_by(word_id=word_id, language=language)
+                .filter(Candidate.source != "volunteer").all()}
 
     total = sum(counts.values())
     ranked = []
     for key, n in counts.most_common():
         ranked.append({"text": display[key], "votes": n,
-                       "share": n / total if total else 0.0})
+                       "share": n / total if total else 0.0,
+                       "source": "option" if key in supplied else "volunteer"})
     return {"votes": total, "voters": len(evals), "ranked": ranked,
-            "typed": typed,
+            "typed": len(typed_first),
             "skips": sum(1 for e in evals if e.skipped)}
 
 
-def best(word_id, language, min_votes=None):
-    """The winning answer, or None while the evidence is too thin.
+def answers(word_id, language):
+    """Every answer for one item in one language, most chosen first.
 
-    A single vote is not consensus, so `min_votes` guards against publishing one
-    person's opinion as the answer. The default is the threshold of the project
-    the item belongs to.
-
-    Returns None for a project with no options at all: every answer there is
-    typed and there is nothing for it to agree with, so calling any of it
-    verified would be a lie. Those answers come out through
-    typed_rows() instead.
+    Each entry says how the answer arrived - `option` for one that came with the
+    project, `volunteer` for a wording somebody typed, which becomes an option
+    for the next speaker. `chose` counts everyone who landed on that wording,
+    however they got there.
     """
-    from .tiers import votes_needed
-    word = db.session.get(Word, word_id)
-    project = word.project if word is not None else None
-    if project is not None and not project.has_options:
-        return None
-    if min_votes is None:
-        min_votes = votes_needed(project)
     t = tally(word_id, language)
-    if not t["ranked"] or t["votes"] < min_votes:
+    return t["ranked"]
+
+
+def leaders(word_id, language, min_votes=None):
+    """The answer or answers with the most votes.
+
+    A list, because ties happen and are informative. `min_votes` filters out
+    thin evidence for callers who want it; by default everything is reported and
+    the caller decides.
+    """
+    ranked = answers(word_id, language)
+    if not ranked:
+        return []
+    top = ranked[0]["votes"]
+    if min_votes and top < min_votes:
+        return []
+    return [r for r in ranked if r["votes"] == top]
+
+
+def best(word_id, language, min_votes=None):
+    """The leading answer, or None.
+
+    Kept for callers that want one row. A tie is reported through `tied`, so
+    nothing silently picks a side.
+    """
+    top = leaders(word_id, language, min_votes=min_votes)
+    if not top:
         return None
-    top = t["ranked"][0]
-    runner_up = t["ranked"][1]["votes"] if len(t["ranked"]) > 1 else 0
-    return {"text": top["text"], "votes": top["votes"], "share": top["share"],
-             "total_votes": t["votes"], "unanimous": len(t["ranked"]) == 1,
-             "margin": top["votes"] - runner_up}
+    t = tally(word_id, language)
+    return {"text": top[0]["text"], "votes": top[0]["votes"],
+            "share": top[0]["share"], "total_votes": t["votes"],
+            "tied": [r["text"] for r in top] if len(top) > 1 else [],
+            "unanimous": len(t["ranked"]) == 1,
+            "margin": (top[0]["votes"] - t["ranked"][len(top)]["votes"]
+                       if len(t["ranked"]) > len(top) else top[0]["votes"])}
 
 
-def export_rows(language, min_votes=None, project_id=None):
-    """Yield (item, agreed answer, votes, share, total) for export."""
+def item_ids_with_answers(language, project_id=None):
     q = (db.session.query(Evaluation.word_id)
-         .filter_by(language=language, skipped=False))
+         .filter(Evaluation.language == language,
+                 Evaluation.skipped.is_(False)))
     if project_id is not None:
         q = q.join(Word, Word.id == Evaluation.word_id).filter(
             Word.project_id == project_id)
-    for wid in [r[0] for r in q.distinct()]:
-        agreed = best(wid, language, min_votes=min_votes)
-        if not agreed:
+    return [r[0] for r in q.distinct()]
+
+
+def export_rows(language, min_votes=None, project_id=None):
+    """Yield (item, leading answer, votes, share, total) per item.
+
+    Where answers tie, the leaders are joined with " | " rather than one being
+    picked: a tie is a fact about the language and hiding it would be a
+    fabrication. Callers wanting every answer separately use answer_rows().
+    """
+    for wid in item_ids_with_answers(language, project_id=project_id):
+        top = leaders(wid, language, min_votes=min_votes)
+        if not top:
+            continue
+        t = tally(wid, language)
+        word = db.session.get(Word, wid)
+        yield (word.phrase, " | ".join(r["text"] for r in top),
+               top[0]["votes"], round(top[0]["share"], 3), t["votes"])
+
+
+def answer_rows(language, min_votes=None, project_id=None):
+    """Yield every answer for every item: the full record, nothing dropped.
+
+    (item, answer, votes, share, total answers, where it came from, leading?)
+
+    This is the honest export. export_rows() is a convenience over it for people
+    who want one row per item.
+    """
+    for wid in item_ids_with_answers(language, project_id=project_id):
+        t = tally(wid, language)
+        if not t["ranked"]:
+            continue
+        if min_votes and t["ranked"][0]["votes"] < min_votes:
             continue
         word = db.session.get(Word, wid)
-        yield (word.phrase, agreed["text"], agreed["votes"],
-               round(agreed["share"], 3), agreed["total_votes"])
+        best_votes = t["ranked"][0]["votes"]
+        for row in t["ranked"]:
+            yield (word.phrase, row["text"], row["votes"],
+                   round(row["share"], 3), t["votes"], row["source"],
+                   row["votes"] == best_votes)
 
 
 def typed_rows(language, project_id=None):
@@ -143,47 +198,32 @@ def candidate_by_id(candidate_id):
     return db.session.get(Candidate, candidate_id)
 
 
-def verified_count(language, min_votes=None, project_id=None):
-    """How many items in this language have reached agreement.
-
-    Only projects that offer options can verify anything, so items from
-    typed-only projects are excluded however many answers they have.
-    """
+def settled_count(language, min_votes=None, project_id=None):
+    """Items in this language that have collected the answers they wanted."""
     from .models import WordState
     q = (db.session.query(db.func.count(WordState.id))
          .join(Word, Word.id == WordState.word_id)
-         .join(Project, Project.id == Word.project_id)
-         .filter(WordState.language == language, WordState.done.is_(True),
-                 Project.has_options.is_(True)))
+         .filter(WordState.language == language, WordState.done.is_(True)))
     if project_id is not None:
         q = q.filter(Word.project_id == project_id)
     return q.scalar() or 0
 
 
-def verified_counts(project_id=None):
-    """language -> verified items, in one query rather than one per language.
-
-    The per-language helpers are fine for a page about one language; a page
-    listing every language needs this, or it issues 88 queries to say one thing.
-    """
+def settled_counts(project_id=None):
+    """language -> items done, in one query rather than one per language."""
+    from .models import WordState
     q = (db.session.query(WordState.language, db.func.count(WordState.id))
          .join(Word, Word.id == WordState.word_id)
-         .join(Project, Project.id == Word.project_id)
-         .filter(WordState.done.is_(True), Project.has_options.is_(True)))
+         .filter(WordState.done.is_(True)))
     if project_id is not None:
         q = q.filter(Word.project_id == project_id)
     return dict(q.group_by(WordState.language).all())
 
 
-def typed_counts(project_id=None):
-    """language -> typed answers collected, in one query."""
-    q = (db.session.query(Evaluation.language, db.func.count(Evaluation.id))
-         .join(Word, Word.id == Evaluation.word_id)
-         .filter(Evaluation.custom_text.isnot(None),
-                 Evaluation.custom_text != ""))
-    if project_id is not None:
-        q = q.filter(Word.project_id == project_id)
-    return dict(q.group_by(Evaluation.language).all())
+# Old names. Kept because "verified" is a word the API and templates used, and
+# the counts they wanted are these.
+verified_count = settled_count
+verified_counts = settled_counts
 
 
 def typed_count(language, project_id=None):
@@ -196,6 +236,17 @@ def typed_count(language, project_id=None):
     if project_id is not None:
         q = q.filter(Word.project_id == project_id)
     return q.scalar() or 0
+
+
+def typed_counts(project_id=None):
+    """language -> typed answers collected, in one query rather than one each."""
+    q = (db.session.query(Evaluation.language, db.func.count(Evaluation.id))
+         .join(Word, Word.id == Evaluation.word_id)
+         .filter(Evaluation.custom_text.isnot(None),
+                 Evaluation.custom_text != ""))
+    if project_id is not None:
+        q = q.filter(Word.project_id == project_id)
+    return dict(q.group_by(Evaluation.language).all())
 
 
 def sample_entries(language, limit=3, project_id=None):

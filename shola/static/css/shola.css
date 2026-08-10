@@ -755,3 +755,21 @@ table.plain th { font-size: .8rem; text-transform: uppercase; letter-spacing: .0
   font: inherit;
   font-size: .88rem;
 }
+
+/* --- An option, with a way to correct it --------------------------------- */
+/* The option keeps the full tap target; edit is a small affordance beside it,
+   not competing for the same gesture. */
+.option-row { display: flex; align-items: stretch; gap: 8px; }
+.option-row .option { flex: 1 1 auto; }
+.option-edit {
+  flex: 0 0 auto;
+  width: 52px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-size: 1.05rem;
+  cursor: pointer;
+}
+.option-edit:hover { border-color: var(--ink); color: var(--ink); }
+.option-edit:focus-visible { outline: 3px solid var(--forest); outline-offset: 2px; }

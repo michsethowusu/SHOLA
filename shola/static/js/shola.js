@@ -69,6 +69,9 @@
     els.options.innerHTML = "";
 
     item.options.forEach(function (opt) {
+      var wrap = document.createElement("div");
+      wrap.className = "option-row";
+
       var b = document.createElement("button");
       b.type = "button";
       b.className = "option";
@@ -76,12 +79,29 @@
       b.innerHTML = '<span class="mark" aria-hidden="true">✓</span>' +
         '<span class="txt"></span>';
       b.querySelector(".txt").textContent = opt.text;
-      // Show what was picked last time when revisiting a word.
+      // Show what was picked last time when revisiting an item.
       if (previousChoice && previousChoice === String(opt.id)) {
         b.classList.add("chosen");
       }
       b.addEventListener("click", function () { choose(b, String(opt.id)); });
-      els.options.appendChild(b);
+      wrap.appendChild(b);
+
+      // Nearly right is the common case, and retyping a long sentence to fix
+      // one letter is the reason people give up. Edit opens the text field with
+      // this option already in it.
+      var edit = document.createElement("button");
+      edit.type = "button";
+      edit.className = "option-edit";
+      edit.title = "Edit this answer";
+      edit.setAttribute("aria-label", "Edit this answer: " + opt.text);
+      edit.textContent = "✎";
+      edit.addEventListener("click", function (e) {
+        e.stopPropagation();
+        openSheet(opt.text);
+      });
+      wrap.appendChild(edit);
+
+      els.options.appendChild(wrap);
     });
 
     // With nothing loaded for a language, typing is the only thing to do, so
@@ -96,7 +116,7 @@
       "<span>" + (empty ? "Type the answer"
                         : "Type your own answer") + "</span>";
     if (empty) { own.classList.remove("own"); own.classList.add("option"); }
-    own.addEventListener("click", openSheet);
+    own.addEventListener("click", function () { openSheet(); });
     els.options.appendChild(own);
 
     var hint = document.getElementById("eval-hint");
@@ -195,12 +215,20 @@
 
   /* ---------------------------------------------------------- own-text sheet */
 
-  function openSheet() {
+  function openSheet(startFrom) {
     els.sheetWord.textContent = queue[0].phrase;
-    els.input.value = "";
+    // Prefilled when an option is being edited, so a near-miss costs a
+    // correction rather than a retype.
+    els.input.value = startFrom || "";
     els.sheetBack.classList.add("open");
     els.sheet.classList.add("open");
-    setTimeout(function () { els.input.focus(); }, 80);
+    setTimeout(function () {
+      els.input.focus();
+      // Cursor at the end of the prefilled text, not selecting it: the point is
+      // to change part of it, and a selection would be wiped by the next key.
+      var end = els.input.value.length;
+      try { els.input.setSelectionRange(end, end); } catch (err) { /* ignore */ }
+    }, 80);
   }
 
   function closeSheet() {

@@ -16,13 +16,14 @@ from shola import create_app                                    # noqa: E402
 from shola.config import Config                                 # noqa: E402
 from shola import consensus, importer                           # noqa: E402
 from shola.assignment import record_verdict                     # noqa: E402
-from shola.models import (CORE_PROJECT, Candidate, Evaluation, Flag,  # noqa: E402
-                          Project, ProjectLanguage, Volunteer, Word,
-                          WordState, db)
+from shola.models import (CORE_PROJECT, Assignment, Candidate,     # noqa: E402
+                          Evaluation, Flag, Project, ProjectLanguage,
+                          Volunteer, Word, WordState, db)
 from shola.projects import (active_for, joined, opt_in, opt_out,  # noqa: E402
                             shares)
-from shola.tiers import (daily_quota, refresh_word, state_for,   # noqa: E402
-                         top_up, votes_needed)
+from shola.consensus import tally                               # noqa: E402
+from shola.tiers import (answers_target, daily_quota, open_query,  # noqa: E402
+                         refresh_word, release_stale, state_for, top_up)
 
 PASSED = []
 
@@ -64,12 +65,18 @@ def make_project(slug, title, langs, options=True, n=40, fmt="sentence",
     for code in langs:
         db.session.add(ProjectLanguage(project_id=project.id, language=code))
     db.session.flush()
-    for code in langs:
-        rows = [(f"{slug} item {i} for {code}",
-                 [f"{code} option {i}a", f"{code} option {i}b"] if options
-                 else [])
-                for i in range(n)]
-        importer.import_rows(project, code, rows)
+    # One item per row, with options per language hanging off it - the shape the
+    # importer produces from a single file.
+    items = []
+    for i in range(n):
+        entry = {"text": f"{slug} item {i}", "item_language": None,
+                 "options": {}}
+        if options:
+            for code in langs:
+                entry["options"][code] = [f"{code} option {i}a",
+                                          f"{code} option {i}b"]
+        items.append(entry)
+    importer.import_items(project, items)
     db.session.commit()
     return project
 
@@ -98,18 +105,25 @@ def main():
 
     print("\na project is a CSV per language")
     with app.app_context():
-        rows, problems = importer.parse(
-            "text,option1,option2\nmarket,dwaso,dwabo\nwater,nsuo,nsu\n".encode())
+        rows, problems, meta = importer.parse(
+            ("text,language,option1,option2\n"
+             "market,twi,dwaso,dwabo\nwater,twi,nsuo,nsu\n").encode(),
+            known_languages={"twi"})
         ok &= check("a well-formed file parses", not problems and len(rows) == 2,
                     str(problems))
+        ok &= check("options attach to the language named",
+                    rows[0]["options"].get("twi") == ["dwaso", "dwabo"],
+                    str(rows[0]))
+        ok &= check("and the file names the project's languages",
+                    meta["languages"] == {"twi"}, str(meta))
         sentences = make_project("read-sentences", "Read these sentences aloud",
                                  ["twi", "ewe"], options=False, n=30)
-        ok &= check("items are created per language",
-                    Word.query.filter_by(project_id=sentences.id).count() == 60,
+        ok &= check("an item exists once, not once per language",
+                    Word.query.filter_by(project_id=sentences.id).count() == 30,
                     str(Word.query.filter_by(project_id=sentences.id).count()))
-        ok &= check("each item is tied to its language",
+        ok &= check("and is open to every language the project collects",
                     Word.query.filter_by(project_id=sentences.id,
-                                         language="ewe").count() == 30)
+                                         language=None).count() == 30)
         ok &= check("and carries its file order",
                     Word.query.filter_by(project_id=sentences.id)
                     .order_by(Word.position).first().position == 1)
@@ -188,36 +202,33 @@ def main():
         n = top_up(guest)
         ok &= check("and the next list is drawn from them", n > 0, f"{n}")
 
-    print("\nverification belongs to projects that offer options")
+    print("\na project with no options collects answers all the same")
     with app.app_context():
         typed = Project.query.filter_by(slug="read-sentences").first()
-        ok &= check("a typed-answer project verifies nothing",
-                    not typed.has_options)
-        item = Word.query.filter_by(project_id=typed.id,
-                                    language="twi").first()
+        ok &= check("it arrived with no options", not typed.has_options)
+        item = Word.query.filter_by(project_id=typed.id).first()
         for i in range(6):
             v = volunteer(f"typer{i}@example.com", "twi", [typed.id])
-            db.session.add(Evaluation(volunteer_id=v.id, word_id=item.id,
-                                      language="twi",
-                                      custom_text="the same wording"))
-        db.session.commit()
-        refresh_word(item.id, "twi")
-        ok &= check("even six matching answers are not consensus",
-                    consensus.best(item.id, "twi") is None)
-        ok &= check("and none of it counts as verified",
-                    consensus.verified_count("twi", project_id=typed.id) == 0)
-        ok &= check("but every answer is exported",
-                    len(list(consensus.typed_rows("twi",
-                                                  project_id=typed.id))) == 6,
-                    str(len(list(consensus.typed_rows("twi",
-                                                      project_id=typed.id)))))
-        ok &= check("the item does close, so it stops being handed out",
+            record_verdict(v, item.id, custom_text="the same wording")
+        ok &= check("the answers are counted",
+                    tally(item.id, "twi")["ranked"][0]["votes"] == 6,
+                    str(tally(item.id, "twi")["ranked"]))
+        ok &= check("the leading answer is reported",
+                    consensus.best(item.id, "twi") is not None)
+        ok &= check("the item closed once it hit its target",
                     state_for(item.id, "twi").done)
+        ok &= check("and every answer is exported",
+                    len(list(consensus.typed_rows("twi",
+                                                  project_id=typed.id))) == 6)
+        ok &= check("with the wording now an option for the next speaker",
+                    any(c.source == "volunteer" for c in item.candidates))
 
-    print("\ntyped answers finish a typed project but verify nothing")
+    print("\nthe target is what finishes an item, and progress follows it")
     with app.app_context():
         collect = make_project("collect-only", "Write these out in your language",
                                ["twi"], options=False, n=2, threshold=3)
+        ok &= check("the project's own target is used",
+                    answers_target(collect) == 3, str(answers_target(collect)))
         item = Word.query.filter_by(project_id=collect.id).first()
         for i in range(3):
             v = volunteer(f"collector{i}@example.com", "twi", [collect.id])
@@ -225,66 +236,64 @@ def main():
         st = state_for(item.id, "twi")
         ok &= check("three answers close the item", st.done,
                     f"total={st.total_votes} done={st.done}")
-        ok &= check("counted as answers given, not agreement",
-                    st.total_votes == 3 and st.top_votes == 0,
-                    f"total={st.total_votes} top={st.top_votes}")
-        ok &= check("nothing is verified", consensus.best(item.id, "twi") is None)
-        ok &= check("and every answer is exported",
-                    len(list(consensus.typed_rows("twi",
-                                                  project_id=collect.id))) == 3)
+        ok &= check("all three are counted", st.total_votes == 3,
+                    str(st.total_votes))
+        ok &= check("three different wordings are all reported",
+                    len(tally(item.id, "twi")["ranked"]) == 3,
+                    str(tally(item.id, "twi")["ranked"]))
         prog = collect.progress("twi")
-        ok &= check("progress counts it as finished",
-                    prog["closed"] == 1 and prog["total"] == 2, str(prog))
+        ok &= check("one of two items done",
+                    prog["done"] == 1 and prog["item_total"] == 2, str(prog))
+        ok &= check("counted per item, not per language",
+                    prog["item_total"] == 2, str(prog))
 
-    print("\nin a project with options, typing contributes but does not verify")
+    print("\na typed wording becomes an option others can choose")
     with app.app_context():
         opts = make_project("with-options", "Pick the natural wording", ["twi"],
                             options=True, n=2, threshold=3)
         item = Word.query.filter_by(project_id=opts.id).first()
-        for i in range(3):
+        before = len(item.candidates)
+        for i in range(2):
             v = volunteer(f"writer{i}@example.com", "twi", [opts.id])
             record_verdict(v, item.id, custom_text="the wording we all typed")
-        st = state_for(item.id, "twi")
-        ok &= check("three people typing the same thing is not agreement",
-                    st.top_votes == 0 and not st.done,
-                    f"top={st.top_votes} done={st.done}")
-        ok &= check("it is still counted as answered three times",
-                    st.total_votes == 3, str(st.total_votes))
         added = [c for c in item.candidates if c.source == "volunteer"]
-        ok &= check("and became one option for the next speaker",
+        ok &= check("added once, however many people typed it",
                     len(added) == 1, str([c.text for c in added]))
-        for i in range(3):
-            v = volunteer(f"tapper-opt{i}@example.com", "twi", [opts.id])
-            record_verdict(v, item.id, candidate_id=added[0].id)
-        st = state_for(item.id, "twi")
-        ok &= check("three taps on it do verify it", st.done and st.top_votes == 3,
-                    f"top={st.top_votes} done={st.done}")
-        agreed = consensus.best(item.id, "twi")
-        ok &= check("and that wording is the verified answer",
-                    agreed and agreed["text"] == "the wording we all typed",
-                    str(agreed))
+        ok &= check("and offered alongside the originals",
+                    len(item.candidates) == before + 1)
+        t = tally(item.id, "twi")
+        ok &= check("their answers are counted together",
+                    t["ranked"][0]["votes"] == 2, str(t["ranked"]))
+        ok &= check("and marked as a volunteer's wording",
+                    t["ranked"][0]["source"] == "volunteer")
+        v = volunteer("tapper-opt@example.com", "twi", [opts.id])
+        record_verdict(v, item.id, candidate_id=added[0].id)
+        t = tally(item.id, "twi")
+        ok &= check("a tap on it adds to the same total",
+                    t["ranked"][0]["votes"] == 3, str(t["ranked"]))
+        ok &= check("the item is finished at its target",
+                    state_for(item.id, "twi").done)
 
-    print("\neach project sets its own bar for agreement")
+    print("\neach project sets its own target")
     with app.app_context():
         strict = make_project("strict-job", "Check these place names", ["twi"],
                               n=5, threshold=2)
-        ok &= check("a project's own threshold is used",
-                    votes_needed(strict) == 2, str(votes_needed(strict)))
+        ok &= check("a project's own target is used",
+                    answers_target(strict) == 2, str(answers_target(strict)))
         ok &= check("and the core project keeps five",
-                    votes_needed(core()) == 5, str(votes_needed(core())))
+                    answers_target(core()) == 5, str(answers_target(core())))
         item = Word.query.filter_by(project_id=strict.id).first()
         opt = item.candidates[0]
         v1 = volunteer("s1@example.com", "twi", [strict.id])
         record_verdict(v1, item.id, candidate_id=opt.id)
-        ok &= check("one vote does not settle it",
+        ok &= check("one answer does not finish it",
                     not state_for(item.id, "twi").done)
         v2 = volunteer("s2@example.com", "twi", [strict.id])
         record_verdict(v2, item.id, candidate_id=opt.id)
         ok &= check("two does, in a project that asked for two",
                     state_for(item.id, "twi").done)
-        ok &= check("and it counts as verified",
-                    consensus.verified_count("twi",
-                                             project_id=strict.id) == 1)
+        ok &= check("and it counts as done",
+                    consensus.settled_count("twi", project_id=strict.id) == 1)
 
     print("\nthe fast progress query agrees with the slow one")
     with app.app_context():
@@ -318,6 +327,59 @@ def main():
                     all(slow_all[c] == fast_all[c] for c in codes),
                     f"slow={slow_all} fast={fast_all}")
 
+    print("\nattention is spread evenly, not piled on the nearly-done")
+    with app.app_context():
+        even = make_project("even-spread", "Answer these evenly", ["twi"],
+                            options=True, n=6, threshold=4)
+        # Ten volunteers, five items each: with 6 items and a target of 4 there
+        # is room for 24 answers, so nothing should get 4 while another gets 0.
+        for i in range(10):
+            v = volunteer(f"even{i}@example.com", "twi", [even.id])
+            top_up(v)
+        counts = {}
+        for a in Assignment.query.join(Word, Word.id == Assignment.word_id) \
+                .filter(Word.project_id == even.id).all():
+            counts[a.word_id] = counts.get(a.word_id, 0) + 1
+        spread = sorted(counts.values())
+        ok &= check("every item was handed to somebody",
+                    len(counts) == 6, f"{len(counts)} of 6 items touched")
+        ok &= check("and no item got far more attention than another",
+                    spread and spread[-1] - spread[0] <= 1,
+                    f"per-item counts {spread}")
+
+    print("\na skipped item goes back to the pool, but never to the same person")
+    with app.app_context():
+        skipping = make_project("skip-test", "Skip what you cannot answer",
+                                ["twi"], options=True, n=3, threshold=2)
+        skipper = volunteer("skipper@example.com", "twi", [skipping.id])
+        top_up(skipper)
+        first = skipper.assignments.first()
+        skipped_id = first.word_id
+        record_verdict(skipper, skipped_id, skipped=True)
+
+        ok &= check("the skip is not counted as an answer",
+                    state_for(skipped_id, "twi").total_votes == 0,
+                    str(state_for(skipped_id, "twi").total_votes))
+        ok &= check("the item is not finished by being skipped",
+                    not state_for(skipped_id, "twi").done)
+        ok &= check("it is still in the pool",
+                    skipped_id in {w.id for w in
+                                   open_query("twi", project_id=skipping.id)})
+
+        release_stale(skipper)
+        top_up(skipper)
+        ok &= check("and never comes back to the person who skipped it",
+                    skipped_id not in {a.word_id for a in
+                                       skipper.assignments.filter_by(
+                                           status="pending")},
+                    "a skipped item was handed back to the same volunteer")
+
+        other = volunteer("not-skipper@example.com", "twi", [skipping.id])
+        top_up(other)
+        ok &= check("but it does reach somebody else",
+                    skipped_id in {a.word_id for a in other.assignments},
+                    "a skipped item never reached another volunteer")
+
     print("\nreporting an item takes it out of everyone's queue")
     with app.app_context():
         reporter = volunteer("reporter@example.com", "twi", [core().id])
@@ -349,14 +411,16 @@ def main():
     with app.app_context():
         before = Project.query.count()
     fresh = app.test_client()
-    csv_bytes = b"text,option1,option2\nakwaaba,welcome,you are welcome\nmedaase,thanks,thank you\n"
+    csv_bytes = ("text,language,option1,option2\n"
+                 "akwaaba,twi,welcome,you are welcome\n"
+                 "medaase,twi,thanks,thank you\n").encode()
     r = fresh.post("/submit", data={
         "title": "Check these greetings in Twi",
         "summary": "Two ways each. Pick the natural one.",
-        "item_format": "word", "answer_mode": "choose",
-        "votes_to_settle": "3", "languages": ["twi"],
+        "item_format": "word",
+        "votes_to_settle": "3",
         "name": "Kofi", "email": "kofi@example.com", "org": "Kofi Labs",
-        "file_twi": (io_bytes(csv_bytes), "greetings.csv"),
+        "file": (io_bytes(csv_bytes), "greetings.csv"),
     }, content_type="multipart/form-data", follow_redirects=True)
     ok &= check("the submission is accepted", r.status_code == 200
                 and b"Submitted" in r.data, f"HTTP {r.status_code}")
@@ -375,44 +439,123 @@ def main():
                     len(joined(waiting)) == 0,
                     str([p.slug for _v, p in joined(waiting)]))
 
-    print("\nlanguages are named by the fields the form sends")
+    print("\none file, many languages, one item each")
     r = fresh.post("/submit", data={
         "title": "Two languages at once please",
-        "item_format": "word", "answer_mode": "choose",
-        "languages": ["twi", "ewe"], "email": "kofi@example.com",
-        "file_twi": (io_bytes(b"one,a,b\n"), "twi.csv"),
-        "file_ewe": (io_bytes(b"one,c,d\n"), "ewe.csv"),
+        "item_format": "word", "email": "kofi@example.com",
+        "file": (io_bytes(("text,language,option1,option2\n"
+                          "one,twi,a,b\n"
+                          "one,ewe,c,d\n"
+                          "two,twi,e,f\n"
+                          "three,ewe,,\n").encode()), "both.csv"),
     }, content_type="multipart/form-data", follow_redirects=True)
-    ok &= check("a file per language is accepted", r.status_code == 200
-                and b"Submitted" in r.data, f"HTTP {r.status_code}")
+    ok &= check("accepted", r.status_code == 200 and b"Submitted" in r.data,
+                f"HTTP {r.status_code}")
     with app.app_context():
         two = Project.query.filter_by(slug="two-languages-at-once-please").first()
-        ok &= check("both languages are recorded",
+        ok &= check("both languages recorded",
                     two is not None
                     and sorted(two.language_codes) == ["ewe", "twi"],
                     str(two.language_codes if two else None))
-        ok &= check("with the items from each file",
-                    two.item_count() == 2, str(two.item_count()))
+        ok &= check("three items, not four rows",
+                    two.item_count() == 3, str(two.item_count()))
+        shared = Word.query.filter_by(project_id=two.id, phrase="one").first()
+        ok &= check("the shared item exists once",
+                    Word.query.filter_by(project_id=two.id,
+                                         phrase="one").count() == 1)
+        ok &= check("with options in both languages",
+                    sorted({c.language for c in shared.candidates})
+                    == ["ewe", "twi"],
+                    str({c.language for c in shared.candidates}))
+        bare = Word.query.filter_by(project_id=two.id, phrase="three").first()
+        ok &= check("an item with no options is still an item",
+                    bare is not None and not bare.candidates)
+        ok &= check("filed under the one language that named it",
+                    bare.language == "ewe", str(bare.language))
+
+    print("\nan `all` row opens a project to every language")
     r = fresh.post("/submit", data={
-        "title": "A language with no file at all",
-        "item_format": "word", "answer_mode": "choose",
-        "languages": ["twi", "ewe"], "email": "kofi@example.com",
-        "file_twi": (io_bytes(b"one,a,b\n"), "twi.csv"),
+        "title": "Translate these into any language you speak",
+        "item_format": "word", "email": "kofi@example.com",
+        "file": (io_bytes(("text,language,option1,option2\n"
+                           "water,all,,\n"
+                           "fire,all,,\n").encode()), "any.csv"),
+    }, content_type="multipart/form-data", follow_redirects=True)
+    ok &= check("accepted", r.status_code == 200 and b"Submitted" in r.data,
+                f"HTTP {r.status_code}")
+    with app.app_context():
+        anylang = Project.query.filter_by(
+            slug="translate-these-into-any-language-you-speak").first()
+        ok &= check("it collects every language",
+                    anylang is not None
+                    and len(anylang.language_codes)
+                    == len(app.config["ALL_LANGUAGES"]),
+                    str(len(anylang.language_codes) if anylang else None))
+        ok &= check("and the items belong to none in particular",
+                    all(w.language is None for w in
+                        Word.query.filter_by(project_id=anylang.id)))
+
+    print("\na blank language is refused rather than assumed")
+    r = fresh.post("/submit", data={
+        "title": "A file with a blank language cell",
+        "item_format": "word", "email": "kofi@example.com",
+        "file": (io_bytes(("text,language,option1,option2\n"
+                           "something,,,\n").encode()), "blank.csv"),
     }, content_type="multipart/form-data")
-    ok &= check("a language with no file is refused", r.status_code == 400)
-    ok &= check("saying which one", b"Ewe: no file chosen" in r.data)
+    ok &= check("refused", r.status_code == 400, f"HTTP {r.status_code}")
+    ok &= check("telling them to write `all` if that is what they mean",
+                b"every language" in r.data)
+
+    print("\na mistyped code is named, with a suggestion")
+    r = fresh.post("/submit", data={
+        "title": "A file with a mistyped language code",
+        "item_format": "word", "email": "kofi@example.com",
+        "file": (io_bytes(("text,language,option1,option2\n"
+                           "something,twii,a,b\n").encode()), "typo.csv"),
+    }, content_type="multipart/form-data")
+    ok &= check("refused", r.status_code == 400, f"HTTP {r.status_code}")
+    ok &= check("suggesting the real code", b"Did you mean twi" in r.data,
+                "expected a suggestion")
+
+    print("\nthe template and the code list are downloadable")
+    r = fresh.get("/template.csv")
+    ok &= check("the template comes back as CSV",
+                r.status_code == 200 and b"text,language,priority" in r.data,
+                r.data[:60])
+    r = fresh.get("/languages.csv")
+    ok &= check("so does the code list",
+                r.status_code == 200 and b"language,code" in r.data)
+    ok &= check("with a real code in it", b",twi" in r.data)
+
+    print("\nlanguages come from the file, and only from the file")
+    r = fresh.post("/submit", data={
+        "title": "Languages come from the file",
+        "item_format": "sentence", "email": "kofi@example.com",
+        "file": (io_bytes(("text,language,option1,option2\n"
+                           "hello there,ga,a,b\n").encode()), "ga.csv"),
+    }, content_type="multipart/form-data", follow_redirects=True)
+    ok &= check("accepted with nothing ticked anywhere",
+                r.status_code == 200 and b"Submitted" in r.data,
+                f"HTTP {r.status_code}")
+    with app.app_context():
+        from_file = Project.query.filter_by(
+            slug="languages-come-from-the-file").first()
+        ok &= check("the language was read from the column",
+                    from_file is not None
+                    and from_file.language_codes == ["ga"],
+                    str(from_file.language_codes if from_file else None))
 
     print("\na bad file is refused with the line numbers, not half imported")
     with app.app_context():
         before = Word.query.count()
     r = fresh.post("/submit", data={
         "title": "A file with problems in it",
-        "item_format": "word", "answer_mode": "choose",
-        "languages": ["twi"], "email": "kofi@example.com",
-        "file_twi": (io_bytes(b"market,dwaso\nwater\n"), "bad.csv"),
+        "item_format": "word", "email": "kofi@example.com",
+        "file": (io_bytes("text,language,option1,option2\n"
+                          "market,zzz,a,b\n".encode()), "bad.csv"),
     }, content_type="multipart/form-data")
     ok &= check("refused", r.status_code == 400, f"HTTP {r.status_code}")
-    ok &= check("naming the line", b"Line 1" in r.data)
+    ok &= check("naming the line", b"Line 2" in r.data)
     with app.app_context():
         ok &= check("and nothing was written",
                     Word.query.count() == before, str(Word.query.count()))
@@ -488,33 +631,57 @@ def main():
         ok &= check("and leaving everything is refused",
                     len(joined(leaver)) >= 1)
 
-    print("\nthe API answers in projects")
+    print("\nthe API reports every answer with its votes")
     api = app.test_client()
     r = api.get("/api/projects")
     ok &= check("projects are listed", r.status_code == 200
                 and b"everyday-words" in r.data)
     data = r.get_json()
     entry = next(p for p in data["projects"] if p["slug"] == "read-sentences")
-    ok &= check("a typed project says it cannot verify",
-                entry["verifiable"] is False
-                and entry["votes_to_verify"] is None, str(entry))
-    r = api.get("/api/items/read-sentences/twi")
-    ok &= check("its answers come back as typed, not verified",
-                r.get_json()["answers"] == "typed"
-                and r.get_json()["verified"] is False)
-    ok &= check("and say so in a note", "not consensus"
-                in r.get_json()["note"])
-    r = api.get("/api/items/strict-job/twi")
-    ok &= check("a project with options returns verified answers",
-                r.get_json()["answers"] == "verified"
-                and r.get_json()["min_votes"] == 2, str(r.get_json())[:120])
+    ok &= check("each says how many answers it wants",
+                entry["answers_wanted"] == 3, str(entry["answers_wanted"]))
+    ok &= check("and how far along it is", "progress" in entry
+                and "item_total" in entry["progress"],
+                str(entry.get("progress")))
+    ok &= check("progress counts items, not items times languages",
+                entry["progress"]["item_total"] == 30,
+                str(entry["progress"]))
+
+    r = api.get("/api/items/with-options/twi")
+    body = r.get_json()
+    ok &= check("answers come back with their counts",
+                r.status_code == 200 and body["entries"], str(body)[:160])
+    first = body["entries"][0]
+    ok &= check("every answer is listed", len(first["answers"]) >= 1,
+                str(first))
+    ok &= check("each with how many chose it",
+                all("chose" in a for a in first["answers"]), str(first))
+    ok &= check("and where it came from",
+                all(a["from"] in ("option", "volunteer")
+                    for a in first["answers"]), str(first))
+    ok &= check("the leading answer is marked", first["leading"], str(first))
+    ok &= check("with ties reported as ties", "tied" in first, str(first))
+    ok &= check("and the target is stated",
+                first["answers_wanted"] == 3, str(first))
+    ok &= check("nothing is called verified",
+                b"verified" not in r.data, "the word should be gone")
+
+    r = api.get("/api/items/collect-only/twi")
+    ok &= check("a project with no options reports the same way",
+                r.status_code == 200 and r.get_json()["entries"],
+                str(r.get_json())[:140])
+    r = api.get("/api/items/collect-only/twi?answers=typed")
+    ok &= check("typed answers can still be asked for separately",
+                r.get_json()["answers"] == "typed")
+    r = api.get("/api/items/with-options/twi?format=csv")
+    ok &= check("csv carries every answer and its count",
+                r.status_code == 200
+                and b"item,answer,chose,share,total_answers,from,leading"
+                in r.data, r.data[:90])
     r = api.get("/api/items/read-sentences/ga")
     ok &= check("a language the project ignores 404s", r.status_code == 404)
     r = api.get("/api/items/nope/twi")
     ok &= check("an unknown project 404s", r.status_code == 404)
-    r = api.get("/api/items/strict-job/twi?format=csv")
-    ok &= check("csv works too", r.status_code == 200
-                and b"item,answer,votes" in r.data)
     r = api.get("/api/words/twi")
     ok &= check("the old words endpoint still answers", r.status_code == 200)
 

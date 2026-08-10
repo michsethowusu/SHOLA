@@ -30,18 +30,19 @@
       </div>
       <div class="stat">
         <span class="n">{{ progress.pct | round(1) }}%</span>
-        <span class="k">{{ project.item_plural }} finished</span>
+        <span class="k">finished across all its languages</span>
       </div>
     </div>
 
     <h2 style="margin-top:40px">What you would be doing</h2>
     <p class="muted">
       {% if project.has_options %}
-        Each {{ project.item_noun }} comes with options. Tap the one you would
-        use, or type your own if none of them are right.
+        Most {{ project.item_plural }} come with options. Tap the one you would
+        use, edit one that is nearly right, or write your own — and what you
+        write becomes an option the next speaker sees.
       {% else %}
-        Each {{ project.item_noun }} comes with no answer yet — you type what it
-        should be, and the next speaker can agree with your wording.
+        Each {{ project.item_noun }} comes with no answer yet. You write what it
+        should be, and your wording becomes the option the next speaker sees.
       {% endif %}
     </p>
 
@@ -67,10 +68,10 @@
 
     <h2 style="margin-top:40px">Progress</h2>
     <p class="muted">
-      {{ progress.closed | thousands }} of {{ progress.total | thousands }}
-      {{ project.item_plural }} are finished — an item is done once it has
-      {{ project.votes_to_settle }}
-      {% if project.has_options %}matching answers{% else %}answers{% endif %},
+      {{ progress.done | thousands }} of {{ progress.item_total | thousands }}
+      {{ project.item_plural }} are finished in
+      {{ ALL_LANGUAGES[language].name if language else 'this language' }} — an
+      item is done once {{ project.votes_to_settle }} people have answered it,
       and the project is done when every item has.
     </p>
     <div class="scroll-x" style="margin-top:12px">
@@ -78,7 +79,8 @@
         <thead>
           <tr>
             <th>Language</th>
-            <th>{{ 'Verified' if project.has_options else 'Answers collected' }}</th>
+            <th>Items done</th>
+            <th>Answers typed</th>
             <th>Download</th>
           </tr>
         </thead>
@@ -86,13 +88,8 @@
           {% for code in project.language_codes %}
             <tr>
               <td><strong>{{ ALL_LANGUAGES[code].name }}</strong></td>
-              <td>
-                {% if project.has_options %}
-                  {{ verified.get(code, 0) | thousands }}
-                {% else %}
-                  {{ typed.get(code, 0) | thousands }}
-                {% endif %}
-              </td>
+              <td>{{ verified.get(code, 0) | thousands }}</td>
+              <td>{{ typed.get(code, 0) | thousands }}</td>
               <td>
                 <a href="{{ url_for('main.api_items', slug=project.slug, language=code, format='csv') }}">CSV</a>
                 ·

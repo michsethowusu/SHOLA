@@ -860,6 +860,30 @@ def flag_item(token, word_id):
     return redirect(url_for("main.evaluate", token=token))
 
 
+@main.route("/template.csv")
+def template_csv():
+    """The example file, so nobody has to retype the header from a screenshot."""
+    rows = [
+        ["text", "language", "priority", "option1", "option2", "option3"],
+        ["Where is the market?", "twi", "1", "Ɛhe na dwaso wɔ?",
+         "Dwaso wɔ he?", ""],
+        ["Where is the market?", "ewe", "1", "Afi ka asi le?", "", ""],
+        ["Where is the market?", "gaa", "1", "", "", ""],
+        ["How much is this?", "all", "2", "", "", ""],
+    ]
+    return _csv_response(rows[0], rows[1:], "shola-template")
+
+
+@main.route("/languages.csv")
+def languages_csv():
+    """Every language and its code, for looking up what to put in the column."""
+    rows = [[info["name"], code]
+            for code, info in sorted(
+                current_app.config["ALL_LANGUAGES"].items(),
+                key=lambda kv: kv[1]["name"])]
+    return _csv_response(["language", "code"], rows, "shola-language-codes")
+
+
 @main.route("/submit", methods=["GET", "POST"])
 def submit_project():
     """Anyone can propose a body of work. An admin decides whether it runs."""
@@ -870,8 +894,6 @@ def submit_project():
     title = (request.form.get("title") or "").strip()[:160]
     summary = (request.form.get("summary") or "").strip()[:600]
     item_format = request.form.get("item_format") or "word"
-    languages = [c for c in request.form.getlist("languages")
-                 if c in current_app.config["ALL_LANGUAGES"]]
 
     name = (request.form.get("name") or "").strip()[:120]
     email = (request.form.get("email") or "").strip().lower()[:255]
@@ -888,75 +910,57 @@ def submit_project():
     if item_format not in ITEM_FORMATS:
         errors.append("Choose whether the items are words, sentences or "
                       "paragraphs.")
-    if not languages:
-        errors.append("Choose at least one language.")
     if "@" not in email or "." not in email.split("@")[-1]:
         errors.append("We need an email address to tell you the outcome.")
     if not 2 <= threshold <= 20:
         errors.append("Each item needs between 2 and 20 answers.")
 
-    # One file per language, parsed before anything is written: a project that
-    # is half imported is worse than one that was refused.
-    #
-    # The shape is read from the files rather than declared: whether volunteers
-    # choose between options or type the answer is a property the data already
-    # has, and asking the submitter to say it again only creates a way for the
-    # two to disagree.
-    parsed, problems, shapes = {}, [], {}
-    for code in languages:
-        upload = request.files.get(f"file_{code}")
-        label = current_app.config["ALL_LANGUAGES"][code]["name"]
-        if upload is None or not upload.filename:
-            problems.append(f"{label}: no file chosen.")
-            continue
-        rows, issues = importer.parse(upload.stream)
-        problems.extend(f"{label}: {i}" for i in issues)
-        if rows:
-            parsed[code] = rows
-            shapes[code] = any(options for _text, options in rows)
+    # One file, parsed before anything is written: a project that is half
+    # imported is worse than one that was refused.
+    all_languages = current_app.config["ALL_LANGUAGES"]
+    upload = request.files.get("file")
+    items, problems, meta = [], [], {}
+    if upload is None or not upload.filename:
+        problems.append("Choose the CSV file.")
+    else:
+        items, problems, meta = importer.parse(upload.stream,
+                                               known_languages=set(all_languages))
 
-    # Every language must be the same shape. One with options and one without
-    # would mean the same job is verifiable in Twi and not in Ewe.
-    if len(set(shapes.values())) > 1:
-        with_options = sorted(current_app.config["ALL_LANGUAGES"][c]["name"]
-                              for c, has in shapes.items() if has)
-        without = sorted(current_app.config["ALL_LANGUAGES"][c]["name"]
-                         for c, has in shapes.items() if not has)
-        problems.append(
-            f"{', '.join(with_options)} carry options but "
-            f"{', '.join(without)} do not. Every language in a project needs "
-            "the same shape, or the same job would be verifiable in one "
-            "language and not another.")
-    want_options = any(shapes.values())
+    # The file decides which languages the project collects. `all` on any row
+    # means every language, which is what the translation project is.
+    languages = sorted(meta.get("languages") or ())
+    if meta.get("any_language"):
+        languages = sorted(all_languages)
 
-    if errors or problems or not parsed:
+    if errors or problems or not items:
         for e in errors + problems[:20]:
             flash(e, "error")
         return render_template("submit.html", formats=ITEM_FORMATS,
-                               languages=current_app.config["ALL_LANGUAGES"],
+                               languages=all_languages,
                                form=request.form), 400
+
+    has_options = any(item["options"] for item in items)
 
     project = Project(
         slug=unique_slug(title), title=title, summary=summary,
         item_format=item_format, votes_to_settle=threshold,
-        has_options=want_options, status="pending",
+        has_options=has_options, status="pending",
         submitter_name=name, submitter_email=email, submitter_org=org,
         sort_order=100)
     db.session.add(project)
     db.session.flush()
-    for code in parsed:
+    for code in languages:
         db.session.add(ProjectLanguage(project_id=project.id, language=code))
     db.session.flush()
 
-    total = 0
-    for code, rows in parsed.items():
-        total += importer.import_rows(project, code, rows)
+    total, options_made = importer.import_items(project, items)
 
-    current_app.logger.info("project %s submitted: %s items across %s",
-                            project.slug, total, ",".join(parsed))
+    current_app.logger.info("project %s submitted: %s items, %s options, %s",
+                            project.slug, total, options_made,
+                            ",".join(languages))
     notify_admins_of_submission(project, total)
     return render_template("submitted.html", project=project, total=total,
-                           languages=list(parsed))
+                           options=options_made, languages=languages)
 
 
 @main.route("/w/<token>/done")
@@ -1008,7 +1012,7 @@ def api_projects():
             Project.sort_order, Project.id).all():
         # Two grouped queries per project rather than two per language: with 88
         # languages the per-language helpers turned this page into 176 queries.
-        verified = consensus.verified_counts(project_id=proj.id)
+        settled = consensus.settled_counts(project_id=proj.id)
         typed = consensus.typed_counts(project_id=proj.id)
         out.append({
             "slug": proj.slug,
@@ -1018,14 +1022,10 @@ def api_projects():
             "status": proj.status,
             "languages": proj.language_codes,
             "items": proj.item_count(),
-            "answers_are": "chosen from options" if proj.has_options
-                           else "typed by volunteers",
-            "verifiable": proj.has_options,
-            "answers_per_item": proj.votes_to_settle,
-            "votes_to_verify": proj.votes_to_settle if proj.has_options else None,
+            "answers_wanted": proj.votes_to_settle,
             "progress": proj.progress(),
-            "verified": {code: verified.get(code, 0)
-                         for code in proj.language_codes},
+            "items_complete": {code: settled.get(code, 0)
+                               for code in proj.language_codes},
             "typed_answers": {code: typed.get(code, 0)
                               for code in proj.language_codes},
         })
@@ -1034,11 +1034,13 @@ def api_projects():
 
 @main.route("/api/items/<slug>/<language>")
 def api_items(slug, language):
-    """Verified answers for one project in one language.
+    """Every answer collected for one project in one language, with its votes.
 
-    Only projects that offer options can verify anything. For a project where
-    every answer is typed, ask for `?answers=typed` - those are contributions
-    rather than consensus and are never mixed into the verified set.
+    Nothing is filtered on our judgement of correctness. Each item lists the
+    answers volunteers gave and how many chose each, `leading` marks the answer
+    or answers with the most votes, and `tied` says when there is more than one.
+    What counts as good enough is yours to decide from the counts - pass
+    `min_votes` if you want us to drop the thin ones.
     """
     proj = Project.query.filter_by(slug=slug).first()
     if not proj:
@@ -1050,49 +1052,70 @@ def api_items(slug, language):
         return jsonify({"error": "this project does not collect that language",
                         "languages": proj.language_codes}), 404
 
-    want = (request.args.get("answers") or "verified").lower()
     limit = min(max(1, request.args.get("limit", 100, type=int)), 1000)
     offset = max(0, request.args.get("offset", 0, type=int))
+    min_votes = max(0, request.args.get("min_votes", 0, type=int))
     fmt = (request.args.get("format") or "json").lower()
+    want = (request.args.get("answers") or "all").lower()
 
-    if want == "typed" or not proj.has_options:
+    if want == "typed":
         rows = list(consensus.typed_rows(language, project_id=proj.id))
         page = rows[offset:offset + limit]
-        entries = [{"item": r[0], "answer": r[1], "answered_on": r[2]}
-                   for r in page]
-        payload = {
-            "project": proj.slug, "language": language,
-            "answers": "typed",
-            "verified": False,
-            "note": ("Typed by one volunteer each. Nobody agreed with these - "
-                     "they are contributions, not consensus."),
-            "total": len(rows), "returned": len(entries),
-            "offset": offset, "limit": limit, "entries": entries,
-        }
         if fmt == "csv":
-            return _csv_response(
-                ["item", "answer", "answered_on"],
-                [[e["item"], e["answer"], e["answered_on"]] for e in entries],
-                f"shola-{proj.slug}-{language}-typed")
-        return jsonify(payload)
+            return _csv_response(["item", "answer", "answered_on"],
+                                 [list(r) for r in page],
+                                 f"shola-{proj.slug}-{language}-typed")
+        return jsonify({
+            "project": proj.slug, "language": language, "answers": "typed",
+            "note": ("Every wording a volunteer typed, one row each, before "
+                     "anyone else weighed in on it."),
+            "total": len(rows), "returned": len(page), "offset": offset,
+            "limit": limit,
+            "entries": [{"item": r[0], "answer": r[1], "answered_on": r[2]}
+                        for r in page],
+        })
 
-    min_votes = max(1, request.args.get("min_votes", proj.votes_to_settle,
-                                        type=int))
-    rows = list(consensus.export_rows(language, min_votes=min_votes,
-                                      project_id=proj.id))
-    page = rows[offset:offset + limit]
-    entries = [{"item": r[0], "answer": r[1], "votes": r[2],
-                "agreement": r[3], "total_votes": r[4]} for r in page]
+    ids = consensus.item_ids_with_answers(language, project_id=proj.id)
+    page_ids = ids[offset:offset + limit]
+    entries, flat = [], []
+    for wid in page_ids:
+        t = consensus.tally(wid, language)
+        if not t["ranked"]:
+            continue
+        if min_votes and t["ranked"][0]["votes"] < min_votes:
+            continue
+        item = db.session.get(Word, wid)
+        top = consensus.leaders(wid, language)
+        entries.append({
+            "item": item.phrase,
+            "total_answers": t["votes"],
+            "answers_wanted": proj.votes_to_settle,
+            "complete": t["votes"] >= proj.votes_to_settle,
+            "leading": [r["text"] for r in top],
+            "tied": len(top) > 1,
+            "answers": [{"answer": r["text"], "chose": r["votes"],
+                         "share": round(r["share"], 3),
+                         "from": r["source"]} for r in t["ranked"]],
+        })
+        for r in t["ranked"]:
+            flat.append([item.phrase, r["text"], r["votes"],
+                         round(r["share"], 3), t["votes"], r["source"],
+                         "yes" if r["votes"] == t["ranked"][0]["votes"]
+                         else "no"])
+
     if fmt == "csv":
         return _csv_response(
-            ["item", "answer", "votes", "agreement", "total_votes"],
-            [[e["item"], e["answer"], e["votes"], e["agreement"],
-              e["total_votes"]] for e in entries],
-            f"shola-{proj.slug}-{language}")
+            ["item", "answer", "chose", "share", "total_answers", "from",
+             "leading"], flat, f"shola-{proj.slug}-{language}")
+
     return jsonify({
-        "project": proj.slug, "language": language, "answers": "verified",
-        "verified": True, "min_votes": min_votes,
-        "total": len(rows), "returned": len(entries),
+        "project": proj.slug, "language": language, "answers": "all",
+        "answers_wanted": proj.votes_to_settle,
+        "note": ("Every answer with the number of volunteers who chose it. "
+                 "`leading` is the most-chosen answer, or several where they "
+                 "tie. Judging what is correct is yours to do from the counts."),
+        "min_votes": min_votes,
+        "total": len(ids), "returned": len(entries),
         "offset": offset, "limit": limit, "entries": entries,
     })
 

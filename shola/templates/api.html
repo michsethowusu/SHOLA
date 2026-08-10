@@ -12,22 +12,22 @@
     </p>
 
     <div class="notice" style="margin-top:22px">
-      <strong>Verified, or collected.</strong> An item is
-      <strong>verified</strong> once that project's number of speakers
-      <em>tapped the same offered option</em> — five for the translation
-      project, and each project sets its own. Items where speakers disagreed are
-      left out.
+      <strong>We report, you judge.</strong> Every answer volunteers gave comes
+      back with the number who chose it. Nothing is filtered on our opinion of
+      whether it is right, because that opinion would be worth less than the
+      counts it replaced.
       <br><br>
-      A wording a volunteer <em>typed</em> is never counted as agreement, however
-      many people type the same thing: spelling, spacing and dialect differ, so
-      there is no way to establish that two people meant the same. It is kept as
-      a <strong>collected answer</strong> and it becomes an option for the next
-      speaker — once <em>they</em> tap it, those taps count like any other, and a
-      volunteer's own wording can end up the verified answer.
+      <code>leading</code> is the answer with the most votes, or several where
+      they tie — a tie is a real result about the language, not something for us
+      to break. Each answer says whether it came with the project
+      (<code>option</code>) or was written by a volunteer
+      (<code>volunteer</code>), and a wording a volunteer writes becomes an
+      option the next speaker can choose.
       <br><br>
-      A project whose file carried no options verifies nothing at all. Its
-      answers are all collected; ask for them with <code>?answers=typed</code>,
-      and they are never mixed into the verified set.
+      <code>answers_wanted</code> is how many answers each item is asked for;
+      <code>complete</code> says whether it got them. Pass
+      <code>min_votes</code> to drop thin evidence, or
+      <code>?answers=typed</code> for only the wordings volunteers wrote.
     </div>
 
     <h2 style="margin-top:44px">Projects</h2>
@@ -40,7 +40,8 @@
       <table class="plain">
         <thead>
           <tr>
-            <th>Project</th><th>slug</th><th>Items are</th><th>Answers</th>
+            <th>Project</th><th>slug</th><th>Items are</th>
+            <th>Answers wanted</th>
           </tr>
         </thead>
         <tbody>
@@ -49,13 +50,7 @@
               <td>{{ project.title }}</td>
               <td><code>{{ project.slug }}</code></td>
               <td>{{ project.item_plural }}</td>
-              <td>
-                {% if project.has_options %}
-                  verified at {{ project.votes_to_settle }} matching
-                {% else %}
-                  collected, not verified
-                {% endif %}
-              </td>
+              <td>{{ project.votes_to_settle }} per item</td>
             </tr>
           {% endfor %}
         </tbody>
@@ -66,13 +61,13 @@
     <div class="card" style="margin-top:14px">
 <pre style="margin:0;overflow-x:auto"><code>curl "{{ config.SITE_URL }}/api/items/everyday-words/twi?limit=50"
 curl "{{ config.SITE_URL }}/api/items/everyday-words/twi?format=csv"
-curl "{{ config.SITE_URL }}/api/items/&lt;slug&gt;/&lt;language&gt;?answers=typed"</code></pre>
+curl "{{ config.SITE_URL }}/api/items/&lt;slug&gt;/&lt;language&gt;?answers=typed"
+curl "{{ config.SITE_URL }}/api/items/everyday-words/twi?min_votes=3"</code></pre>
     </div>
     <p class="hint">
       <code>limit</code> up to 1000, <code>offset</code> to page,
-      <code>min_votes</code> to raise the bar, <code>format=csv</code> for a
-      spreadsheet. A project that cannot verify returns collected answers
-      whether or not you ask for them, and says <code>"verified": false</code>.
+      <code>min_votes</code> to drop thin evidence, <code>format=csv</code> for a
+      spreadsheet — the CSV has one row per answer, with its vote count.
     </p>
 
     <h2 style="margin-top:44px">The translation project by language</h2>

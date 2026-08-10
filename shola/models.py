@@ -241,41 +241,39 @@ class Project(db.Model):
         return out
 
     def progress(self, language=None):
-        """How much of this project is finished, and what finished means.
+        """How much of this project is done.
 
-        An item closes once it has `votes_to_settle` answers - matching ones
-        where there are options to match. The project is done when every item
-        has closed, which is the only definition available for a project that
-        cannot verify anything.
+        An item exists once, however many languages answer it. For one language
+        that is simply items done out of items; across a project it is the share
+        of (items x languages) finished, reported as a percentage rather than a
+        count - "42,136,336 items" would be a nonsense number to put on a page
+        when the project has 478,822 items in it.
 
-        Counted from WordState rather than by scanning items per language.
-        WordState only has rows for items somebody has answered, so this is
-        proportional to work done rather than to corpus size: the same query
-        over 478,822 items in 88 languages took 34 seconds the other way.
-
-        Without a language, an item counts once per language the project
-        collects, since an item settled in Twi is still open in Ewe.
+        Counted from WordState, which only holds rows for items somebody has
+        answered, so the cost follows work done rather than corpus size.
         """
         codes = [language] if language else self.language_codes
-        if not codes:
-            return {"total": 0, "closed": 0, "open": 0, "pct": 0.0,
-                    "finished": False, "answers_each": self.votes_to_settle}
-
         items = self.item_count(language)
-        total = items * len(codes)
-        closed = 0
-        if total:
-            closed = (db.session.query(db.func.count(WordState.id))
-                      .join(Word, Word.id == WordState.word_id)
-                      .filter(Word.project_id == self.id,
-                              WordState.language.in_(codes),
-                              db.or_(WordState.done.is_(True),
-                                     WordState.contested.is_(True)))
-                      .scalar() or 0)
-            closed = min(closed, total)
-        return {"total": total, "closed": closed, "open": total - closed,
-                "pct": (closed / total * 100) if total else 0.0,
-                "finished": bool(total) and closed >= total,
+        # Not called "items": a template reading `progress.items` gets dict.items
+        # in Jinja, which formats as a bound method and has bitten this codebase
+        # twice.
+        if not codes or not items:
+            return {"item_total": items, "languages": len(codes), "done": 0,
+                    "left": items, "pct": 0.0, "finished": False,
+                    "answers_each": self.votes_to_settle}
+
+        done = (db.session.query(db.func.count(WordState.id))
+                .join(Word, Word.id == WordState.word_id)
+                .filter(Word.project_id == self.id,
+                        WordState.language.in_(codes),
+                        WordState.done.is_(True))
+                .scalar() or 0)
+        slots = items * len(codes)
+        done = min(done, slots)
+        return {"item_total": items, "languages": len(codes), "done": done,
+                "left": slots - done,
+                "pct": (done / slots * 100) if slots else 0.0,
+                "finished": bool(slots) and done >= slots,
                 "answers_each": self.votes_to_settle}
 
 

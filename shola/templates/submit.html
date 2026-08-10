@@ -15,23 +15,62 @@
 
     <div class="card" style="margin-top:26px; text-align:left">
       <h3>The file</h3>
-      <p class="muted">One CSV per language, saved as <strong>CSV UTF-8</strong>
-         so ɛ, ɔ and ŋ survive. Two shapes are accepted:</p>
-<pre style="margin:12px 0 0;overflow-x:auto"><code>text,option1,option2,option3
-Where is the market?,Ɛhe na dwaso wɔ?,Dwaso wɔ he?,Dwaso no wɔ he?</code></pre>
-      <p class="muted" style="margin-top:10px">…for volunteers to choose
-         between, or a single column…</p>
-<pre style="margin:0;overflow-x:auto"><code>text
-Where is the market?</code></pre>
-      <p class="muted" style="margin-top:10px">…for volunteers to type the
-         answer themselves. A header row is optional. Two to five options per
-         line; every line must have options or none of them may.</p>
-      <p class="muted" style="margin-top:10px">
-        You do not choose between these — the file decides. With options,
-        answers can be verified by agreement; without, they are collected as
-        contributions. Either way volunteers can write their own answer, and
-        that wording becomes an option for the next speaker.
+      <p class="muted">
+        One CSV, whatever the project — it decides everything, including which
+        languages you are asking about. Save it as <strong>CSV UTF-8</strong> so
+        ɛ, ɔ and ŋ survive.
       </p>
+<pre style="margin:12px 0 0;overflow-x:auto"><code>text,language,priority,option1,option2,option3
+Where is the market?,twi,1,Ɛhe na dwaso wɔ?,Dwaso wɔ he?,
+Where is the market?,ewe,1,Afi ka asi le?,,
+Where is the market?,gaa,1,,,
+How much is this?,all,2,,,</code></pre>
+      <p style="margin-top:14px">
+        <a class="btn ghost small" href="{{ url_for('main.template_csv') }}">
+          Download this template</a>
+      </p>
+
+      <ul class="muted" style="padding-left:20px; margin-top:16px">
+        <li><strong>text</strong> — the item. Rows with the same text are the
+          <em>same item</em>: it exists once however many languages answer it.</li>
+        <li><strong>language</strong> — required, and a language code, even for a
+          single language. Write <code>all</code> for a line that applies to
+          every language.</li>
+        <li><strong>priority</strong> — optional. 1 is finished before 2 is
+          started, so the part that matters most gets done even if the project
+          never finishes.</li>
+        <li><strong>option1…</strong> — optional, up to five, per language. Give
+          them where you have them; leave them out and the first speaker writes
+          the wording, which becomes the option the next speaker sees. Both at
+          once is fine — the translation project here has machine translations in
+          four languages and nothing in the other eighty-four.</li>
+      </ul>
+      <p class="muted" style="margin-top:10px">
+        A header row is expected. Volunteers can always write or edit an answer,
+        whatever the file says.
+      </p>
+    </div>
+
+    <div class="card" style="margin-top:18px; text-align:left">
+      <h3>Language codes</h3>
+      <p class="muted">
+        ISO 639-3, which is what goes in the language column.
+        <a href="{{ url_for('main.languages_csv') }}">Download the list</a>, or
+        search it here.
+      </p>
+      <input type="search" id="code-search" style="margin-top:12px"
+             placeholder="Search {{ languages | length }} languages"
+             aria-label="Search language codes" aria-controls="code-list">
+      <div class="scroll-x" style="max-height:280px; overflow-y:auto; margin-top:12px">
+        <table class="plain" id="code-list">
+          <thead><tr><th>Language</th><th>Code</th></tr></thead>
+          <tbody>
+            {% for code, info in languages.items() | sort(attribute='1.name') %}
+              <tr><td>{{ info.name }}</td><td><code>{{ code }}</code></td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
     </div>
 
     <form method="post" enctype="multipart/form-data" style="margin-top:32px"
@@ -68,20 +107,15 @@ Where is the market?</code></pre>
         <label for="votes_to_settle">How many times should each item be
           answered?</label>
         <p class="hint">
-          An item stops going out once it reaches this, and your project is
-          finished when every item has. Five is the default across SHOLA.
-          <br><br>
-          <strong>If your file has no options</strong>, this is simply how many
-          separate answers to collect for each item — we spread the work so
-          every item gets that many. Nothing is verified: typed answers cannot
-          be checked against each other.
-          <br><br>
-          <strong>If your file carries options</strong>, it counts
-          <em>matching</em> answers — this many speakers tapping the same option
-          is what <strong>verified</strong> means, and higher is stronger
-          evidence. Volunteers can still write their own answer, which becomes
-          an option for the next speaker; it only counts towards verification
-          once others tap it.
+          In each language. An item stops going out once it reaches this, and
+          your project is finished when every item has. Five is the default
+          across SHOLA.
+        </p>
+        <p class="hint">
+          We do not rule on which answer is right. You get every answer with the
+          number of volunteers who chose it, the most-chosen one marked, and ties
+          reported as ties — the judgement is yours to make from the counts,
+          which is why we keep them.
         </p>
         <input type="number" id="votes_to_settle" name="votes_to_settle"
                min="2" max="20" step="1" style="max-width:140px"
@@ -89,39 +123,9 @@ Where is the market?</code></pre>
       </div>
 
       <div class="field">
-        <span class="label">Which languages, and the file for each?</span>
-        <p class="hint">Search for a language and pick it. Each one you add gets
-           its own file box — add as many as you need.</p>
-        {% set chosen = (form.getlist('languages') if form else []) %}
-
-        <div class="lang-pick">
-          <input type="search" id="lang-search" autocomplete="off"
-                 placeholder="Search {{ languages | length }} languages"
-                 aria-label="Search for a language"
-                 aria-controls="lang-results" aria-expanded="false"
-                 role="combobox">
-          <ul class="lang-results" id="lang-results" role="listbox" hidden></ul>
-        </div>
-
-        <div class="stack" id="lang-chosen" style="margin-top:14px"></div>
-
-        <p class="hint" id="lang-empty">No language added yet.</p>
-
-        <noscript>
-          <p class="hint">Searching needs JavaScript. With it switched off,
-             email the files to
-             <a href="mailto:michsethowusu@gmail.com">michsethowusu@gmail.com</a>
-             and we will load them for you.</p>
-        </noscript>
-
-        {# The full list is the data the search reads. Kept in the page rather
-           than fetched, since it is small and never changes between requests. #}
-        <script type="application/json" id="lang-data">
-          {{ languages.items() | map('list') | list | tojson }}
-        </script>
-        <script type="application/json" id="lang-chosen-data">
-          {{ chosen | tojson }}
-        </script>
+        <label for="file">The CSV</label>
+        <p class="hint">One file for the whole project.</p>
+        <input type="file" id="file" name="file" accept=".csv,text/csv" required>
       </div>
 
       <div class="field">
@@ -155,145 +159,18 @@ Where is the market?</code></pre>
 
 {% block scripts %}
 <script>
-  /* Search-and-add rather than 88 checkboxes: a wall of every Ghanaian language
-     is unusable, and most projects want one or two. Each language added gets
-     its own file box, because a project is one file per language. */
-  var data = JSON.parse(document.getElementById("lang-data").textContent);
-  var already = JSON.parse(document.getElementById("lang-chosen-data").textContent);
-  var names = {};
-  data.forEach(function (row) { names[row[0]] = row[1].name; });
-
-  var search = document.getElementById("lang-search");
-  var results = document.getElementById("lang-results");
-  var chosenBox = document.getElementById("lang-chosen");
-  var emptyNote = document.getElementById("lang-empty");
-  var picked = [];
-
-  function syncEmpty() {
-    emptyNote.hidden = picked.length > 0;
-  }
-
-  function add(code) {
-    if (!code || picked.indexOf(code) !== -1 || !names[code]) return;
-    picked.push(code);
-
-    // The name and the remove control share a line; the file box gets its own,
-    // at full width. Squeezed onto one line the file box had no room to show
-    // which file had been chosen, which is the only thing it is there to say.
-    var row = document.createElement("div");
-    row.className = "lang-row";
-    row.dataset.code = code;
-
-    var head = document.createElement("div");
-    head.className = "lang-row-head";
-    var label = document.createElement("span");
-    label.className = "t";
-    label.textContent = names[code];
-    head.appendChild(label);
-
-    var remove = document.createElement("button");
-    remove.type = "button";
-    remove.className = "report-btn";
-    remove.textContent = "Remove";
-    remove.addEventListener("click", function () {
-      picked = picked.filter(function (c) { return c !== code; });
-      row.remove();
-      syncEmpty();
-      search.focus();
-    });
-    head.appendChild(remove);
-    row.appendChild(head);
-
-    var file = document.createElement("input");
-    file.type = "file";
-    file.name = "file_" + code;
-    file.accept = ".csv,text/csv";
-    row.appendChild(file);
-
-    // The value the form actually submits. Hidden rather than a checkbox: it is
-    // not a thing to toggle, it is a consequence of having added the language.
-    var value = document.createElement("input");
-    value.type = "hidden";
-    value.name = "languages";
-    value.value = code;
-    row.appendChild(value);
-
-    chosenBox.appendChild(row);
-    syncEmpty();
-  }
-
-  function matches(q) {
-    q = q.trim().toLowerCase();
-    if (!q) return [];
-    var out = [];
-    for (var i = 0; i < data.length && out.length < 8; i++) {
-      var code = data[i][0];
-      var name = data[i][1].name;
-      if (picked.indexOf(code) !== -1) continue;
-      if (name.toLowerCase().indexOf(q) === 0 ||
-          name.toLowerCase().indexOf(q) > -1 ||
-          code.toLowerCase() === q) {
-        out.push([code, name]);
-      }
-    }
-    // Names starting with the query first: typing "ga" should offer Ga before
-    // Dagbani.
-    out.sort(function (a, b) {
-      var ai = a[1].toLowerCase().indexOf(q) === 0 ? 0 : 1;
-      var bi = b[1].toLowerCase().indexOf(q) === 0 ? 0 : 1;
-      return ai - bi || a[1].localeCompare(b[1]);
-    });
-    return out;
-  }
-
-  function showResults() {
-    var found = matches(search.value);
-    results.innerHTML = "";
-    found.forEach(function (row) {
-      var li = document.createElement("li");
-      li.setAttribute("role", "option");
-      li.textContent = row[1];
-      li.addEventListener("mousedown", function (e) {
-        e.preventDefault();
-        add(row[0]);
-        search.value = "";
-        hideResults();
+  /* Filtering the code table, because scrolling 88 rows to find one code is not
+     a reasonable ask of somebody preparing a file. */
+  var search = document.getElementById("code-search");
+  var rows = Array.prototype.slice.call(
+    document.querySelectorAll("#code-list tbody tr"));
+  if (search) {
+    search.addEventListener("input", function () {
+      var q = search.value.trim().toLowerCase();
+      rows.forEach(function (row) {
+        row.hidden = !!q && row.textContent.toLowerCase().indexOf(q) === -1;
       });
-      results.appendChild(li);
     });
-    var open = found.length > 0;
-    results.hidden = !open;
-    search.setAttribute("aria-expanded", open ? "true" : "false");
   }
-
-  function hideResults() {
-    results.hidden = true;
-    search.setAttribute("aria-expanded", "false");
-  }
-
-  search.addEventListener("input", showResults);
-  search.addEventListener("focus", showResults);
-  search.addEventListener("blur", function () { setTimeout(hideResults, 120); });
-  search.addEventListener("keydown", function (e) {
-    if (e.key === "Enter") {
-      // Enter picks the top match, so the whole thing works from the keyboard
-      // without arrowing through a list.
-      e.preventDefault();
-      var found = matches(search.value);
-      if (found.length) {
-        add(found[0][0]);
-        search.value = "";
-        hideResults();
-      }
-    } else if (e.key === "Escape") {
-      hideResults();
-    }
-  });
-
-  // A rejected submission comes back with the languages still chosen; the files
-  // cannot come back with it, so those boxes start empty and say nothing about
-  // having been filled before.
-  already.forEach(add);
-  syncEmpty();
 </script>
 {% endblock %}

@@ -33,12 +33,18 @@ TIER_THRESHOLDS = [
     (5, 0),       # everything else     ~407,808
 ]
 
-# A word is settled when one wording has this many votes. Speakers who disagree
-# do not settle it - only matching answers count towards the total.
+# How many answers an item wants in each language before it stops being handed
+# out. The default; each project carries its own. Read it through
+# answers_target() rather than directly.
 #
-# The default; each project carries its own, because the cost of being wrong is
-# not the same everywhere. Read it through votes_needed() rather than directly.
-VOTES_TO_SETTLE = 5
+# This is a target, not a bar for agreement. Nothing here decides that two
+# answers "agree": the answers and their vote counts are published, and the
+# person building on the data judges. Trying to rule on it here would mean
+# throwing away the evidence that lets them.
+ANSWERS_PER_ITEM = 5
+
+# Old name, still imported in places and by anything outside this repo.
+VOTES_TO_SETTLE = ANSWERS_PER_ITEM
 
 # How long a leased word waits for an answer before returning to the queue.
 LEASE_DAYS = 10
@@ -54,19 +60,22 @@ LEASE_DAYS = 10
 MAX_VERDICTS_BEFORE_CONTESTED = 20
 
 
-def votes_needed(project=None, project_id=None):
-    """Matching answers that settle an item in this project.
+def answers_target(project=None, project_id=None):
+    """How many answers an item wants in each language before it is done.
 
-    A project with no options to choose from never settles anything: there is
-    nothing for a typed answer to agree with, so those projects collect and
-    export rather than verify. Callers check `has_options` before treating a
-    count as verification.
+    The same rule for every project. It is a target, not a test of agreement:
+    the answers are published with their vote counts and whoever uses the data
+    decides what agreement means to them.
     """
     if project is None and project_id is not None:
         project = db.session.get(Project, project_id)
     if project is None:
-        return VOTES_TO_SETTLE
-    return max(1, project.votes_to_settle or VOTES_TO_SETTLE)
+        return ANSWERS_PER_ITEM
+    return max(1, project.votes_to_settle or ANSWERS_PER_ITEM)
+
+
+# Old name, kept so nothing breaks while the wording settles.
+votes_needed = answers_target
 
 
 def project_of(word_id):
@@ -96,53 +105,39 @@ def state_for(word_id, language, create=True):
 
 
 def refresh_word(word_id, language, commit=True):
-    """Recompute one language's vote state for one item.
+    """Recompute one language's answer state for one item.
 
-    Votes are counted within the language only. Pooling them would let Twi
-    answers settle an item for Ga speakers, who never saw it.
+    Answers are counted within the language only. Pooling them would let Twi
+    answers close an item for Ga speakers, who never saw it.
 
-    Two counts, deliberately different. `top_votes` is agreement and only a tap
-    on an offered option adds to it: two people writing the same thing have not
-    agreed with each other in any way we can check, since spelling, spacing and
-    dialect all differ, and verification has to mean something. `total_votes` is
-    how many times the item has been answered at all, typing included - that is
-    what finishes an item in a project where nothing can be verified.
-
-    A typed wording becomes an option, so the next speaker can tap it, and those
-    taps count like any other.
+    `total_votes` is how many times the item has been answered here, and
+    reaching the project's target is what closes it - the same rule whether the
+    answers were tapped or typed. `top_votes` is how many landed on the most
+    popular single wording; it ranks the answers rather than deciding anything,
+    because what counts as agreement is for whoever uses the data to judge, from
+    the vote counts we publish.
     """
     evals = Evaluation.query.filter_by(word_id=word_id, language=language,
                                        skipped=False).all()
     counts = Counter()
     answers = 0
     for ev in evals:
-        answers += 1
-        # A typed answer is an answer - it counts towards how many times this
-        # item has been done, which is what finishes a project where nothing can
-        # be verified. It never counts towards agreement, because agreeing with
-        # somebody's spelling is not something we can establish.
-        if ev.custom_text:
-            continue
         text = ev.chosen_text
-        if text:
-            counts[normalise(text)] += 1
+        if not text:
+            continue
+        answers += 1
+        counts[normalise(text)] += 1
 
     project = project_of(word_id)
-    needed = votes_needed(project)
+    target = answers_target(project)
     row = state_for(word_id, language)
     row.total_votes = answers
     row.top_votes = max(counts.values()) if counts else 0
-    # A project without options cannot settle anything - every answer is typed
-    # and there is nothing to agree with. Those items close once they have the
-    # number of answers the project asked for, so they stop being handed out,
-    # but nothing here is called verified.
-    if project is not None and not project.has_options:
-        row.done = row.total_votes >= needed
-        row.contested = False
-    else:
-        row.done = row.top_votes >= needed
-        row.contested = (not row.done
-                         and row.total_votes >= MAX_VERDICTS_BEFORE_CONTESTED)
+    row.done = row.total_votes >= target
+    # Kept for items an admin has withdrawn after a report. Nothing else sets
+    # it now: an item that collected its target is done, and disagreement inside
+    # that is reported rather than treated as failure.
+    row.contested = bool(row.contested) and not row.done
     if commit:
         db.session.commit()
     return row.done
@@ -151,13 +146,12 @@ def refresh_word(word_id, language, commit=True):
 def open_query(language, project_id=None):
     """Items still worth handing out in this language.
 
-    Left join, because an item with no votes yet has no state row at all and
+    Left join, because an item with no answers yet has no state row at all and
     must still count as open.
 
-    Items belonging to a project that collects a separate file per language are
-    filtered to that language; items with no language of their own (an English
-    word awaiting translation) are open to every speaker. Flagged items are
-    excluded until someone has looked at the report.
+    Items filed under one language are filtered to it; items with no language of
+    their own - an English word awaiting translation - are open to every speaker.
+    Flagged items are excluded until someone has looked at the report.
     """
     from .models import Flag
 
@@ -176,14 +170,18 @@ def open_query(language, project_id=None):
 
 
 def active_tier(language, project_id=None):
-    """The lowest tier still holding items this language can settle."""
+    """The lowest tier still holding items this language can answer."""
     return (open_query(language, project_id=project_id)
             .with_entities(func.min(Word.tier))
             .scalar())
 
 
 def tier_progress(language, project_id=None):
-    """Per-tier totals for one language."""
+    """Per-tier totals for one language.
+
+    The slow, obvious version. tier_progress_all() answers the same question for
+    many languages at once; the tests hold the two against each other.
+    """
     rows = (db.session.query(
         Word.tier, func.count(Word.id),
         func.sum(db.case((WordState.done.is_(True), 1), else_=0)),
@@ -285,11 +283,15 @@ def outstanding_leases(word_ids, language):
 def lease_from_project(volunteer, project, count, today=None):
     """Hand a volunteer up to `count` items from one project.
 
-    Items closest to being settled come first, so a tier converges instead of
-    accumulating half-voted entries. Within that, the commonest first for the
-    translation project, and file order for anything uploaded - an uploaded
-    project has no frequency data, so `occurrences` is zero throughout and
-    `position` decides.
+    The item with the fewest answers goes first, so attention is spread evenly
+    rather than piling onto whatever happens to be near its target. Everything
+    in a tier then approaches completion together, and the project finishes when
+    the last item reaches its target instead of leaving a tail of items nobody
+    ever saw.
+
+    Ties are broken by the commonest first for the translation project, and by
+    file order for anything uploaded - an uploaded project has no frequency
+    data, so `occurrences` is zero throughout and `position` decides.
     """
     if count <= 0:
         return 0
@@ -299,7 +301,7 @@ def lease_from_project(volunteer, project, count, today=None):
     if tier is None:
         return 0
 
-    needed_votes = votes_needed(project)
+    target = answers_target(project)
 
     # Items this volunteer has already judged, or already holds.
     mine = db.session.query(Evaluation.word_id).filter(
@@ -311,7 +313,7 @@ def lease_from_project(volunteer, project, count, today=None):
     candidates = (open_query(language, project_id=project.id)
                   .filter(Word.tier == tier,
                           ~Word.id.in_(mine), ~Word.id.in_(held))
-                  .order_by(func.coalesce(WordState.top_votes, 0).desc(),
+                  .order_by(func.coalesce(WordState.total_votes, 0).asc(),
                             Word.occurrences.desc(), Word.position.asc(),
                             Word.id.asc())
                   .limit(count * 6)
@@ -330,13 +332,10 @@ def lease_from_project(volunteer, project, count, today=None):
         if given >= count:
             break
         state = states.get(word.id)
-        if project.has_options:
-            have = state.top_votes if state else 0
-        else:
-            # Nothing agrees with anything here, so what matters is how many
-            # answers the item still wants, not how many matched.
-            have = state.total_votes if state else 0
-        still_needed = needed_votes - have - live.get(word.id, 0)
+        # How many answers it still wants, minus what is already promised by
+        # live leases, so an item is not handed to more people than it needs.
+        have = state.total_votes if state else 0
+        still_needed = target - have - live.get(word.id, 0)
         if still_needed <= 0:
             continue
         db.session.add(Assignment(volunteer_id=volunteer.id, word_id=word.id,
@@ -462,11 +461,11 @@ def answers_needed(language, tier=None, project_id=None):
         tier = active_tier(language, project_id=project_id)
     if tier is None:
         return 0
-    needed = votes_needed(project_id=project_id)
+    target = answers_target(project_id=project_id)
     rows = (open_query(language, project_id=project_id)
             .filter(Word.tier == tier)
             .with_entities(func.sum(
-                needed - func.coalesce(WordState.top_votes, 0)))
+                target - func.coalesce(WordState.total_votes, 0)))
             .scalar())
     return int(rows or 0)
 
