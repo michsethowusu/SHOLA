@@ -458,8 +458,22 @@ things into `instance/backups`:
 The second is the one that matters. Words and translations can be re-imported
 from the published dataset in minutes; a volunteer's email, the days they chose
 and the answers they gave exist nowhere else, and the file is a few hundred
-kilobytes. Both land inside the mounted volume, so copy them off the host as
-well if the data matters.
+kilobytes.
+
+**Local copies are deleted once the upload is verified.** They used not to be,
+and the nightly archives filled a 96 GB disk with 63 GB of backups, which took
+the site down: SQLite could not write a journal, Docker could not build, and
+neither error mentioned backups. Retention lives in the bucket. The exception is
+a failed upload, where the local copy is the only copy and is kept.
+
+`SHOLA_BACKUP_DIRS` archives other applications' upload directories, which are
+the large objects here - a nightly `tar.gz` of a 7 GB directory is not the same
+kind of thing as a 200 KB volunteer export, and keeping seven of each was set
+without ever measuring one. Keep that list to directories that are both
+irreplaceable and small; for anything large, mirror it rather than snapshotting
+it nightly, so unchanged files are not re-uploaded. `--keep-dirs` defaults to 2.
+
+The backup prints how much is left on disk and warns below 5 GB free.
 
 ## The live deployment
 
@@ -480,11 +494,14 @@ build, and waits for the new commit to appear in `/healthz`. Waiting for a 200
 is not enough — the old container answers 200 throughout a rolling update, which
 reported success early twice before the commit check was added.
 
-`/healthz` reports the serving commit and whether SMTP is configured:
+`/healthz` reports the serving commit, whether SMTP is configured, and how much
+room is left where the database lives - there is no shell on that host, and a
+full disk was invisible from outside until it caused an outage:
 
 ```bash
 curl -s https://sholaproject.org/healthz
-# {"build":"34c3bef","email":true,"ok":true,"today":"2026-08-03"}
+# {"build":"...","email":true,"ok":true,"today":"...",
+#  "disk":{"free_mb":11240,"total_mb":98304,"used_pct":88.6,"db_mb":214}}
 ```
 
 ### Moving to another hostname

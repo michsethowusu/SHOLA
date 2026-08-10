@@ -441,8 +441,10 @@ def languages_cmd():
               help="full database copies to retain.")
 @click.option("--keep-people", default=60, show_default=True,
               help="volunteer exports to retain. Cheap, so keep many.")
-@click.option("--keep-dirs", default=7, show_default=True,
-              help="archives of each backed-up directory to retain.")
+@click.option("--keep-dirs", default=2, show_default=True,
+              help="archives of each backed-up directory to retain. These are "
+                   "the big ones - a nightly tar of a 7 GB upload directory - "
+                   "so few, and only as a fallback for a failed upload.")
 @click.option("--keep-config", default=30, show_default=True,
               help="Coolify configuration exports to retain.")
 def backup(out, keep_db, keep_people, keep_dirs, keep_config):
@@ -542,18 +544,38 @@ def backup(out, keep_db, keep_people, keep_dirs, keep_config):
         click.echo(f"config    {os.path.getsize(cfg_path)//1024} KB  "
                    f"{len(cfg.get('applications', []))} apps")
 
-    prune_local(out_dir, made)
-
     if os.environ.get("SHOLA_S3_BUCKET"):
         try:
             for path, stem, keep in made:
                 key = upload_to_s3([path], keep=keep, stem=stem)[0]
                 click.echo(f"uploaded  {key}")
+                # Gone from the disk the moment it is safely in the bucket, and
+                # verified there by size. Keeping local copies as well filled a
+                # 96 GB disk with 63 GB of archives and took the site down: the
+                # nightly tar of a 6.9 GB upload directory is not the same kind
+                # of object as a 200 KB volunteer export, and retaining seven of
+                # each was never measured against the disk.
+                if not os.environ.get("SHOLA_KEEP_LOCAL"):
+                    os.remove(path)
         except Exception as exc:      # noqa: BLE001 - report loudly, fail loudly
             click.echo(f"S3 upload FAILED: {exc}", err=True)
+            # Leave what is on disk: a failed upload is the one case where the
+            # local copy is the only copy.
+            prune_local(out_dir, made)
             raise SystemExit(1)
+        # Anything left from an earlier failure, now that this run succeeded.
+        prune_local(out_dir, made)
     else:
         click.echo("no SHOLA_S3_BUCKET set, so this backup stays on this host")
+        prune_local(out_dir, made)
+
+    left = sum(os.path.getsize(f) for f in glob.glob(os.path.join(out_dir, "*")))
+    free = shutil.disk_usage(out_dir).free
+    click.echo(f"local     {left//1048576} MB kept, "
+               f"{free//1073741824} GB free on disk")
+    if free < 5 * 1073741824:
+        click.echo("WARNING: under 5 GB free. SQLite needs room for a journal "
+                   "as large as the rows a transaction touches.", err=True)
 
 
 def prune_local(out_dir, made):
