@@ -380,6 +380,86 @@ def main():
                     skipped_id in {a.word_id for a in other.assignments},
                     "a skipped item never reached another volunteer")
 
+    print("\nenough skips makes it a problem, not everybody's problem")
+    with app.app_context():
+        skips = make_project("skip-target", "Answer what you can", ["twi"],
+                             options=True, n=3, threshold=3)
+        item = Word.query.filter_by(project_id=skips.id).first()
+        # Two skips is not enough, even with an answer alongside.
+        for i in range(2):
+            v = volunteer(f"pass{i}@example.com", "twi", [skips.id])
+            record_verdict(v, item.id, skipped=True)
+        st = state_for(item.id, "twi")
+        ok &= check("two of three skips is not a problem yet",
+                    st.skips == 2 and not st.problem,
+                    f"skips={st.skips} problem={st.problem}")
+        ok &= check("and it is still offered",
+                    item.id in {w.id for w in
+                                open_query("twi", project_id=skips.id)})
+        answerer = volunteer("answered@example.com", "twi", [skips.id])
+        record_verdict(answerer, item.id,
+                       candidate_id=item.candidates[0].id)
+        st = state_for(item.id, "twi")
+        ok &= check("an answer alongside does not cancel the skips",
+                    st.skips == 2 and st.total_votes == 1,
+                    f"skips={st.skips} answers={st.total_votes}")
+
+        v = volunteer("pass3@example.com", "twi", [skips.id])
+        record_verdict(v, item.id, skipped=True)
+        st = state_for(item.id, "twi")
+        ok &= check("the third skip marks it a problem", st.problem,
+                    f"skips={st.skips} problem={st.problem}")
+        ok &= check("and it stops being offered to anyone",
+                    item.id not in {w.id for w in
+                                    open_query("twi", project_id=skips.id)})
+        later = volunteer("spared@example.com", "twi", [skips.id])
+        top_up(later)
+        ok &= check("so the remaining speakers never see it",
+                    item.id not in {a.word_id for a in later.assignments})
+
+    print("\nthe three lists are definitive")
+    api = app.test_client()
+    r = api.get("/api/items/skip-target/twi/problem")
+    body = r.get_json()
+    ok &= check("the skipped item is on the problem list",
+                r.status_code == 200 and body["total"] >= 1, str(body)[:120])
+    entry = next((x for x in body["items"] if x["why"] == "skipped"), None)
+    ok &= check("labelled with why", entry is not None, str(body["items"])[:140])
+    ok &= check("and how many passed over it",
+                entry and "3 speakers" in entry["note"], str(entry))
+
+    with app.app_context():
+        clear = make_project("clear-answers", "Pick the natural one", ["twi"],
+                             options=True, n=2, threshold=2)
+        item = Word.query.filter_by(project_id=clear.id).first()
+        opt = item.candidates[0]
+        for i in range(2):
+            v = volunteer(f"agree-c{i}@example.com", "twi", [clear.id])
+            record_verdict(v, item.id, candidate_id=opt.id)
+        # And one that ties, which must not appear as verified.
+        tied = Word.query.filter_by(project_id=clear.id).offset(1).first()
+        for i, c in enumerate(tied.candidates[:2]):
+            v = volunteer(f"tie-c{i}@example.com", "twi", [clear.id])
+            record_verdict(v, tied.id, candidate_id=c.id)
+    r = api.get("/api/items/clear-answers/twi/verified")
+    body = r.get_json()
+    ok &= check("a clear winner is verified", body["total"] == 1, str(body)[:160])
+    ok &= check("with the answer, not a vote table",
+                set(body["items"][0]) == {"item", "answer", "chose", "of",
+                                          "from"},
+                str(body["items"][0]))
+    r = api.get("/api/items/clear-answers/twi/problem")
+    body = r.get_json()
+    ok &= check("the tie is a problem, not a verified answer",
+                any(x["why"] == "no agreement" for x in body["items"]),
+                str(body["items"])[:160])
+    r = api.get("/api/items/clear-answers/twi/verified?format=csv")
+    ok &= check("csv works on the lists",
+                r.status_code == 200 and b"item,answer,chose,of,from" in r.data,
+                r.data[:60])
+    r = api.get("/api/items/clear-answers/zzz/verified")
+    ok &= check("an unknown language still 404s", r.status_code == 404)
+
     print("\nreporting an item takes it out of everyone's queue")
     with app.app_context():
         reporter = volunteer("reporter@example.com", "twi", [core().id])

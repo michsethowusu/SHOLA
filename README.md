@@ -73,9 +73,17 @@ discarded the only evidence a consumer could have used.
 tier approaches completion together instead of piling attention on whatever is
 nearest its target and leaving a tail nobody ever saw.
 
-**A skip is not an answer.** It returns the item to the pool for other speakers
-and never shows it to that volunteer again — they have already told us they
-cannot answer it.
+**A skip is not an answer, but it is counted.** It returns the item to the pool
+and never goes back to that volunteer. When as many speakers have skipped an item
+as the project wants answers, it is marked a **problem** and stops being offered
+at all — the people who would know have collectively shrugged, and asking the
+remaining speakers adds nothing. An answer alongside does not cancel the skips;
+the two counts run independently.
+
+**Three lists come out of the API**, so a consumer never has to decide what a
+vote count means: `/verified` (target reached, one wording ahead), `/problem`
+(skipped past the target, reported, or tied), and the base endpoint for
+everything with counts.
 
 **One CSV describes any project.** `text,language,priority,option1…` — rows
 sharing the same text are the *same item*, so an item exists once however many

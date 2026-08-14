@@ -116,12 +116,19 @@ def refresh_word(word_id, language, commit=True):
     popular single wording; it ranks the answers rather than deciding anything,
     because what counts as agreement is for whoever uses the data to judge, from
     the vote counts we publish.
+
+    `skips` is counted the same way and against the same target. An item that
+    the target number of speakers all passed over is marked a problem and stops
+    being offered.
     """
-    evals = Evaluation.query.filter_by(word_id=word_id, language=language,
-                                       skipped=False).all()
+    evals = Evaluation.query.filter_by(word_id=word_id,
+                                       language=language).all()
     counts = Counter()
-    answers = 0
+    answers = skips = 0
     for ev in evals:
+        if ev.skipped:
+            skips += 1
+            continue
         text = ev.chosen_text
         if not text:
             continue
@@ -133,7 +140,13 @@ def refresh_word(word_id, language, commit=True):
     row = state_for(word_id, language)
     row.total_votes = answers
     row.top_votes = max(counts.values()) if counts else 0
+    row.skips = skips
     row.done = row.total_votes >= target
+    # As many speakers passing over it as the project wants answers. They are
+    # the people who would know, so their collective shrug is the result: the
+    # item stops being offered and is published as a problem rather than being
+    # put to everyone in turn.
+    row.problem = skips >= target
     # Kept for items an admin has withdrawn after a report. Nothing else sets
     # it now: an item that collected its target is done, and disagreement inside
     # that is reported rather than treated as failure.
@@ -162,6 +175,7 @@ def open_query(language, project_id=None):
                             WordState.language == language))
          .filter(func.coalesce(WordState.done, False).is_(False),
                  func.coalesce(WordState.contested, False).is_(False),
+                 func.coalesce(WordState.problem, False).is_(False),
                  db.or_(Word.language.is_(None), Word.language == language),
                  ~Word.id.in_(flagged)))
     if project_id is not None:

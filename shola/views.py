@@ -27,7 +27,8 @@ from .config import canonical_language
 from . import consensus
 from .assignment import leaderboard, record_verdict
 from .tiers import (VOTES_TO_SETTLE, active_tier, answers_needed, daily_quota,
-                    recruitment, tier_progress, tier_progress_all, top_up)
+                    recruitment, state_for, tier_progress, tier_progress_all,
+                    top_up)
 from .mailer import build_otp_email, make_token, read_token
 from .models import (Assignment, Candidate, Flag, PendingSignup, Project,
                      ProjectLanguage, Volunteer, Word, db, site_stats)
@@ -1000,9 +1001,9 @@ def done(token):
 def api_docs():
     """Human-readable documentation for the words API."""
     shown = shown_languages()
-    counts = {code: consensus.verified_count(code) for code in shown}
-    sample = consensus.sample_entries("twi", limit=3)
-    return render_template("api.html", counts=counts, sample=sample,
+    counts = {code: sum(1 for _ in consensus.verified_rows(code))
+              for code in shown}
+    return render_template("api.html", counts=counts,
                            SHOWN_LANGUAGES=shown,
                            projects=approved_projects())
 
@@ -1049,26 +1050,72 @@ def api_projects():
     return jsonify({"projects": out, "count": len(out)})
 
 
-@main.route("/api/items/<slug>/<language>")
-def api_items(slug, language):
-    """Every answer collected for one project in one language, with its votes.
-
-    Nothing is filtered on our judgement of correctness. Each item lists the
-    answers volunteers gave and how many chose each, `leading` marks the answer
-    or answers with the most votes, and `tied` says when there is more than one.
-    What counts as good enough is yours to decide from the counts - pass
-    `min_votes` if you want us to drop the thin ones.
-    """
+def _project_or_404(slug, language):
+    """(project, language, error response). One place, three endpoints."""
     proj = Project.query.filter_by(slug=slug).first()
     if not proj:
-        return jsonify({"error": "unknown project",
-                        "projects": [p.slug for p in
-                                     Project.query.filter_by(
-                                         status="approved").all()]}), 404
-    language = canonical_language(language)
-    if language not in proj.language_codes:
-        return jsonify({"error": "this project does not collect that language",
-                        "languages": proj.language_codes}), 404
+        return None, None, (jsonify({
+            "error": "unknown project",
+            "projects": [p.slug for p in
+                         Project.query.filter_by(status="approved").all()],
+        }), 404)
+    code = canonical_language(language)
+    if code not in proj.language_codes:
+        return None, None, (jsonify({
+            "error": "this project does not collect that language",
+            "languages": proj.language_codes,
+        }), 404)
+    return proj, code, None
+
+
+def _page(rows, limit_default=1000):
+    limit = min(max(1, request.args.get("limit", limit_default, type=int)), 5000)
+    offset = max(0, request.args.get("offset", 0, type=int))
+    return rows[offset:offset + limit], limit, offset
+
+
+@main.route("/api/items/<slug>/<language>/verified")
+def api_verified(slug, language):
+    """Items with one clear answer. The list to build a dictionary from."""
+    proj, code, err = _project_or_404(slug, language)
+    if err:
+        return err
+    rows = list(consensus.verified_rows(code, project_id=proj.id))
+    page, limit, offset = _page(rows)
+    if (request.args.get("format") or "").lower() == "csv":
+        return _csv_response(
+            ["item", "answer", "chose", "of", "from"],
+            [[r["item"], r["answer"], r["chose"], r["of"], r["from"]]
+             for r in page], f"shola-{proj.slug}-{code}-verified")
+    return jsonify({"project": proj.slug, "language": code, "set": "verified",
+                    "total": len(rows), "returned": len(page),
+                    "offset": offset, "limit": limit, "items": page})
+
+
+@main.route("/api/items/<slug>/<language>/problem")
+def api_problem(slug, language):
+    """Items needing a human: skipped past the target, reported, or tied."""
+    proj, code, err = _project_or_404(slug, language)
+    if err:
+        return err
+    rows = list(consensus.problem_rows(code, project_id=proj.id))
+    page, limit, offset = _page(rows)
+    if (request.args.get("format") or "").lower() == "csv":
+        return _csv_response(
+            ["item", "why", "note"],
+            [[r["item"], r["why"], r["note"] or ""] for r in page],
+            f"shola-{proj.slug}-{code}-problem")
+    return jsonify({"project": proj.slug, "language": code, "set": "problem",
+                    "total": len(rows), "returned": len(page),
+                    "offset": offset, "limit": limit, "items": page})
+
+
+@main.route("/api/items/<slug>/<language>")
+def api_items(slug, language):
+    """Everything collected, with vote counts. The full record."""
+    proj, language, err = _project_or_404(slug, language)
+    if err:
+        return err
 
     limit = min(max(1, request.args.get("limit", 100, type=int)), 1000)
     offset = max(0, request.args.get("offset", 0, type=int))
@@ -1085,8 +1132,6 @@ def api_items(slug, language):
                                  f"shola-{proj.slug}-{language}-typed")
         return jsonify({
             "project": proj.slug, "language": language, "answers": "typed",
-            "note": ("Every wording a volunteer typed, one row each, before "
-                     "anyone else weighed in on it."),
             "total": len(rows), "returned": len(page), "offset": offset,
             "limit": limit,
             "entries": [{"item": r[0], "answer": r[1], "answered_on": r[2]}
@@ -1104,11 +1149,14 @@ def api_items(slug, language):
             continue
         item = db.session.get(Word, wid)
         top = consensus.leaders(wid, language)
+        state = state_for(wid, language, create=False)
         entries.append({
             "item": item.phrase,
             "total_answers": t["votes"],
             "answers_wanted": proj.votes_to_settle,
             "complete": t["votes"] >= proj.votes_to_settle,
+            "skipped_by": state.skips if state else 0,
+            "problem": bool(state and state.problem),
             "leading": [r["text"] for r in top],
             "tied": len(top) > 1,
             "answers": [{"answer": r["text"], "chose": r["votes"],
@@ -1129,9 +1177,6 @@ def api_items(slug, language):
     return jsonify({
         "project": proj.slug, "language": language, "answers": "all",
         "answers_wanted": proj.votes_to_settle,
-        "note": ("Every answer with the number of volunteers who chose it. "
-                 "`leading` is the most-chosen answer, or several where they "
-                 "tie. Judging what is correct is yours to do from the counts."),
         "min_votes": min_votes,
         "total": len(ids), "returned": len(entries),
         "offset": offset, "limit": limit, "entries": entries,

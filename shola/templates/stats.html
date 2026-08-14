@@ -62,9 +62,7 @@
       </div>
       <p class="hint">
         An item is done once it has been answered as many times as its project
-        asks for. Every answer is published with the number of volunteers who
-        chose it — <a href="{{ url_for('main.api_docs') }}">see the API</a> —
-        and what counts as agreement is for whoever uses the data to decide.
+        asks for.
       </p>
     </div>
 
@@ -220,18 +218,10 @@
       </div>
     </div>
 
-    <div class="card" style="margin-top:36px">
-      <h3>Using this data</h3>
-      <p class="muted" style="margin-bottom:10px">
-        Confirmed translations are free to download for each language. See the
-        <a href="{{ url_for('main.api_docs') }}">API</a> for details.
-      </p>
-      <p style="margin:0">
-        {% for code in SHOWN_LANGUAGES %}
-          <a href="{{ url_for('main.api_words', language=code) }}"><code>/api/words/{{ code }}</code></a>{% if not loop.last %} · {% endif %}
-        {% endfor %}
-      </p>
-    </div>
+    <p class="hint" style="margin-top:36px">
+      All of this is free to download — <a href="{{ url_for('main.api_docs') }}">the
+      API</a>.
+    </p>
   </div>
 </section>
 {% endblock %}

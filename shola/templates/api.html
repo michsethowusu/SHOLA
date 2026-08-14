@@ -6,243 +6,100 @@
   <div class="wrap">
     <p class="eyebrow">For developers</p>
     <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">Data API</h1>
-    <p class="lede" style="max-width:56ch">
-      Pull Ghanaian-language data straight out of SHOLA. No key, no sign-up, no
-      rate limit. Every answer here came from a speaker, not a machine.
+    <p class="lede" style="max-width:52ch">
+      Ghanaian-language data, answered by speakers. No key, no sign-up, no rate
+      limit, <a href="https://creativecommons.org/licenses/by/4.0/"
+      target="_blank" rel="noopener">CC BY 4.0</a>.
     </p>
 
-    <div class="notice" style="margin-top:22px">
-      <strong>We report, you judge.</strong> Every answer volunteers gave comes
-      back with the number who chose it. Nothing is filtered on our opinion of
-      whether it is right, because that opinion would be worth less than the
-      counts it replaced.
-      <br><br>
-      <code>leading</code> is the answer with the most votes, or several where
-      they tie — a tie is a real result about the language, not something for us
-      to break. Each answer says whether it came with the project
-      (<code>option</code>) or was written by a volunteer
-      (<code>volunteer</code>), and a wording a volunteer writes becomes an
-      option the next speaker can choose.
-      <br><br>
-      <code>answers_wanted</code> is how many answers each item is asked for;
-      <code>complete</code> says whether it got them. Pass
-      <code>min_votes</code> to drop thin evidence, or
-      <code>?answers=typed</code> for only the wordings volunteers wrote.
+    <h2 style="margin-top:40px">Three lists</h2>
+    <div class="scroll-x" style="margin-top:12px">
+      <table class="plain">
+        <thead><tr><th>You want</th><th>Ask for</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>A dictionary</strong><br>
+              <span class="muted">one clear answer each</span></td>
+            <td><code>/api/items/&lt;project&gt;/&lt;language&gt;/verified</code></td>
+          </tr>
+          <tr>
+            <td><strong>The hard cases</strong><br>
+              <span class="muted">skipped, reported or tied</span></td>
+            <td><code>/api/items/&lt;project&gt;/&lt;language&gt;/problem</code></td>
+          </tr>
+          <tr>
+            <td><strong>Everything</strong><br>
+              <span class="muted">every answer, with counts</span></td>
+            <td><code>/api/items/&lt;project&gt;/&lt;language&gt;</code></td>
+          </tr>
+        </tbody>
+      </table>
     </div>
+    <p class="hint">
+      <code>?format=csv</code> on any of them. <code>limit</code> and
+      <code>offset</code> to page.
+    </p>
 
-    <h2 style="margin-top:44px">Projects</h2>
-    <p class="muted">Each project is a separate body of work with its own
-       items, languages and bar for agreement.</p>
-    <div class="card" style="margin-top:14px">
+    <h2 style="margin-top:40px">Example</h2>
+    <div class="card" style="margin-top:12px">
+<pre style="margin:0;overflow-x:auto"><code>curl "{{ config.SITE_URL }}/api/items/everyday-words/twi/verified?limit=5"
+
+{
+  "project": "everyday-words", "language": "twi", "set": "verified",
+  "total": {{ counts.get('twi', 0) }},
+  "items": [
+    { "item": "water", "answer": "nsuo", "chose": 5, "of": 5, "from": "option" }
+  ]
+}</code></pre>
+    </div>
+    <p class="hint">
+      <code>from</code> is <code>option</code> if the answer came with the
+      project, <code>volunteer</code> if a speaker wrote it.
+    </p>
+
+    <h2 style="margin-top:40px">Projects</h2>
+    <div class="card" style="margin-top:12px">
 <pre style="margin:0;overflow-x:auto"><code>curl "{{ config.SITE_URL }}/api/projects"</code></pre>
     </div>
     <div class="scroll-x" style="margin-top:14px">
       <table class="plain">
         <thead>
-          <tr>
-            <th>Project</th><th>slug</th><th>Items are</th>
-            <th>Answers wanted</th>
-          </tr>
+          <tr><th>Project</th><th>project</th><th>Items</th><th>Languages</th></tr>
         </thead>
         <tbody>
           {% for project in projects %}
             <tr>
               <td>{{ project.title }}</td>
               <td><code>{{ project.slug }}</code></td>
-              <td>{{ project.item_plural }}</td>
-              <td>{{ project.votes_to_settle }} per item</td>
+              <td>{{ project.item_count() | thousands }}</td>
+              <td>{{ project.languages.count() }}</td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
 
-    <h2 style="margin-top:44px">One project, one language</h2>
-    <div class="card" style="margin-top:14px">
-<pre style="margin:0;overflow-x:auto"><code>curl "{{ config.SITE_URL }}/api/items/everyday-words/twi?limit=50"
-curl "{{ config.SITE_URL }}/api/items/everyday-words/twi?format=csv"
-curl "{{ config.SITE_URL }}/api/items/&lt;slug&gt;/&lt;language&gt;?answers=typed"
-curl "{{ config.SITE_URL }}/api/items/everyday-words/twi?min_votes=3"</code></pre>
-    </div>
-    <p class="hint">
-      <code>limit</code> up to 1000, <code>offset</code> to page,
-      <code>min_votes</code> to drop thin evidence, <code>format=csv</code> for a
-      spreadsheet — the CSV has one row per answer, with its vote count.
-    </p>
-
-    <h2 style="margin-top:44px">The translation project by language</h2>
-    <p class="muted">The original body of work, kept at its own endpoints so
-       nothing built against them breaks.</p>
-    <div class="scroll-x" style="margin-top:14px">
+    <h2 style="margin-top:40px">Languages</h2>
+    <p class="muted">ISO 639-3 codes —
+      <a href="{{ url_for('main.languages_csv') }}">download the list</a>.</p>
+    <div class="scroll-x" style="margin-top:12px">
       <table class="plain">
-        <thead>
-          <tr><th>Language</th><th>Verified entries</th><th>JSON</th><th>CSV</th></tr>
-        </thead>
+        <thead><tr><th>Language</th><th>Code</th><th>Verified</th></tr></thead>
         <tbody>
           {% for code, lang in SHOWN_LANGUAGES.items() %}
             <tr>
-              <td><strong>{{ lang.name }}</strong> <span class="faint">{{ lang.note }}</span></td>
+              <td>{{ lang.name }}</td>
+              <td><code>{{ ISO_CODES.get(code, code) }}</code></td>
               <td>{{ counts.get(code, 0) | thousands }}</td>
-              <td><a href="{{ url_for('main.api_words', language=code) }}"><code>/api/words/{{ code }}</code></a></td>
-              <td><a href="{{ url_for('main.api_words', language=code, format='csv') }}">download</a></td>
             </tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
-    <p class="hint">
-      Counts start at zero and grow as volunteers work. Verification runs in
-      tiers, commonest words first — see <a href="{{ url_for('main.stats') }}">progress</a>.
+
+    <p class="hint" style="margin-top:26px">
+      Questions: <a href="mailto:michsethowusu@gmail.com">michsethowusu@gmail.com</a>
     </p>
-
-    <h2 style="margin-top:44px">The endpoint</h2>
-    <div class="card" style="margin-top:14px">
-      <p style="margin:0 0 10px"><code>GET /api/words/&lt;language&gt;</code></p>
-      <p class="muted" style="margin:0">
-        <code>language</code> is an ISO 639-3 code. {{ LANGUAGE_COUNT }}
-        Ghanaian languages are accepted; these have words to serve so far:
-        {% for code in SHOWN_LANGUAGES %}<code>{{ code }}</code>{% if not loop.last %}, {% endif %}{% endfor %}.
-      </p>
-    </div>
-
-    <div class="scroll-x" style="margin-top:18px">
-      <table class="plain">
-        <thead>
-          <tr><th>Parameter</th><th>Default</th><th>What it does</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>min_votes</code></td><td>2</td>
-            <td>How many speakers must have agreed. Raise it for a stricter list.</td>
-          </tr>
-          <tr>
-            <td><code>limit</code></td><td>100</td>
-            <td>Entries per response, up to 1000.</td>
-          </tr>
-          <tr>
-            <td><code>offset</code></td><td>0</td>
-            <td>Skip this many entries. Page through with <code>limit</code>.</td>
-          </tr>
-          <tr>
-            <td><code>format</code></td><td>json</td>
-            <td><code>csv</code> returns a downloadable file instead.</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <h2 style="margin-top:44px">What comes back</h2>
-    <div class="card" style="margin-top:14px">
-<pre style="margin:0;overflow-x:auto"><code>{
-  "language": "twi",
-  "language_name": "Twi",
-  "min_votes": 2,
-  "offset": 0,
-  "limit": 100,
-  "returned": {{ sample | length }},
-  "total_verified": {{ counts.get('twi', 0) }},
-  "entries": [
-{%- if sample %}
-{%- for e in sample %}
-    {
-      "phrase": {{ e.phrase | tojson }},
-      "translation": {{ e.translation | tojson }},
-      "votes": {{ e.votes }},
-      "agreement": {{ e.agreement }},
-      "total_votes": {{ e.total_votes }}
-    }{% if not loop.last %},{% endif %}
-{%- endfor %}
-{%- else %}
-    { "phrase": "blood bank",
-      "translation": "mogya adekoraeɛ",
-      "votes": 3,
-      "agreement": 0.75,
-      "total_votes": 4 }
-{%- endif %}
-  ]
-}</code></pre>
-    </div>
-    <div class="scroll-x" style="margin-top:16px">
-      <table class="plain">
-        <thead><tr><th>Field</th><th>Meaning</th></tr></thead>
-        <tbody>
-          <tr><td><code>phrase</code></td><td>The English word.</td></tr>
-          <tr><td><code>translation</code></td><td>The wording speakers agreed on.</td></tr>
-          <tr><td><code>votes</code></td><td>Speakers who chose that wording.</td></tr>
-          <tr><td><code>agreement</code></td><td>Their share of all votes on the entry: 1.0 means unanimous.</td></tr>
-          <tr><td><code>total_votes</code></td><td>All votes cast on the entry.</td></tr>
-        </tbody>
-      </table>
-    </div>
-
-    <h2 style="margin-top:44px">Examples</h2>
-
-    <h3 style="margin-top:20px">Fetch a page of Twi words</h3>
-    <div class="card" style="margin-top:10px">
-<pre style="margin:0;overflow-x:auto"><code>curl "{{ config.SITE_URL }}/api/words/twi?limit=50"</code></pre>
-    </div>
-
-    <h3 style="margin-top:20px">Only entries three speakers agreed on</h3>
-    <div class="card" style="margin-top:10px">
-<pre style="margin:0;overflow-x:auto"><code>curl "{{ config.SITE_URL }}/api/words/ewe?min_votes=3"</code></pre>
-    </div>
-
-    <h3 style="margin-top:20px">Straight into pandas</h3>
-    <div class="card" style="margin-top:10px">
-<pre style="margin:0;overflow-x:auto"><code>import pandas as pd
-
-df = pd.read_csv("{{ config.SITE_URL }}/api/words/ga?format=csv&amp;limit=1000")
-df.head()</code></pre>
-    </div>
-
-    <h3 style="margin-top:20px">Page through everything</h3>
-    <div class="card" style="margin-top:10px">
-<pre style="margin:0;overflow-x:auto"><code>import requests
-
-BASE = "{{ config.SITE_URL }}/api/words/dagbani"
-entries, offset = [], 0
-while True:
-    page = requests.get(BASE, params={"limit": 1000, "offset": offset}).json()
-    entries += page["entries"]
-    if len(page["entries"]) &lt; 1000:
-        break
-    offset += 1000
-
-print(len(entries), "verified entries")</code></pre>
-    </div>
-
-    <h2 style="margin-top:44px">One entry in detail</h2>
-    <p class="muted">
-      To see every wording given for one word, including those that were not
-      chosen:
-    </p>
-    <div class="card" style="margin-top:10px">
-<pre style="margin:0;overflow-x:auto"><code>GET /api/entry/&lt;id&gt;/&lt;language&gt;</code></pre>
-    </div>
-    <p class="hint">
-      Returns the full tally — each wording, its vote count and its share —
-      alongside the confirmed answer. Useful when you want all the variants
-      rather than one.
-    </p>
-
-    <h2 style="margin-top:44px">Notes</h2>
-    <ul class="muted" style="padding-left:20px">
-      <li>Responses are UTF-8. Ghanaian orthographies use characters like
-          <strong>ɛ ɔ ŋ ɖ ƒ ɣ ʋ ʒ</strong>, so decode as UTF-8 rather than
-          Latin-1 or they will arrive mangled.</li>
-      <li>Nothing is cached. Every request reflects the answers given up to
-          that moment, so a word can become verified between two calls.</li>
-      <li>The words are released under
-          <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank"
-             rel="noopener">CC BY 4.0</a>: use them for anything, including
-          commercially, as long as you credit SHOLA and Ghana Open Data.</li>
-      <li>Unverified machine translations for all
-          {{ stats_words if stats_words else '478,822' }} words are published
-          separately in
-          <a href="https://github.com/GhanaNLP/GhanaNouns">GhanaNouns</a>. Use
-          those when you need full coverage, and this API when you need wording
-          a speaker stood behind.</li>
-    </ul>
   </div>
 </section>
 {% endblock %}

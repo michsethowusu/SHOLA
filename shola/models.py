@@ -430,6 +430,14 @@ class WordState(db.Model):
     done = db.Column(db.Boolean, default=False, nullable=False)
     contested = db.Column(db.Boolean, default=False, nullable=False)
 
+    # Skips are counted, not discarded. Enough speakers passing over the same
+    # item is itself a finding - the item is probably broken, ambiguous or
+    # untranslatable - and it should stop being offered rather than be put to
+    # everybody in turn.
+    skips = db.Column(db.Integer, default=0, nullable=False)
+    problem = db.Column(db.Boolean, default=False, nullable=False,
+                        index=True)
+
     word = db.relationship("Word")
 
 
@@ -542,6 +550,8 @@ def ensure_columns():
         "volunteers": {"paused_until": "DATE",
                        "missed_in_a_row": "INTEGER NOT NULL DEFAULT 0",
                        "nudged_on": "DATE"},
+        "word_state": {"skips": "INTEGER NOT NULL DEFAULT 0",
+                       "problem": "BOOLEAN NOT NULL DEFAULT 0"},
         "pending_signups": {"project_ids": "VARCHAR(200) NOT NULL DEFAULT ''",
                             "exclusive_project_id": "INTEGER"},
         "words": {"project_id": "INTEGER",

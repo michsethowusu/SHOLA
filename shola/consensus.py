@@ -198,6 +198,87 @@ def candidate_by_id(candidate_id):
     return db.session.get(Candidate, candidate_id)
 
 
+def verified_rows(language, project_id=None):
+    """Items with a clear answer: the target reached and one wording ahead.
+
+    A tie is not a verified answer, so it is left for the problem list. This is
+    the endpoint for somebody who wants a dictionary rather than evidence.
+    """
+    from .models import WordState
+
+    q = (db.session.query(WordState, Word)
+         .join(Word, Word.id == WordState.word_id)
+         .filter(WordState.language == language,
+                 WordState.done.is_(True),
+                 WordState.problem.is_(False)))
+    if project_id is not None:
+        q = q.filter(Word.project_id == project_id)
+    for state, word in q.order_by(Word.position, Word.id).all():
+        top = leaders(word.id, language)
+        if len(top) != 1:
+            continue
+        yield {"item": word.phrase, "answer": top[0]["text"],
+               "chose": top[0]["votes"], "of": state.total_votes,
+               "from": top[0]["source"]}
+
+
+def problem_rows(language, project_id=None):
+    """Items that need a human to look: skipped past the target, reported, or
+    finished with no single answer ahead.
+
+    Each carries `why`, so the list can be triaged rather than merely read.
+    """
+    from .models import Flag, WordState
+
+    flagged = {}
+    fq = (db.session.query(Flag, Word)
+          .join(Word, Word.id == Flag.word_id)
+          .filter(Flag.resolved.is_(False), Flag.language == language))
+    if project_id is not None:
+        fq = fq.filter(Word.project_id == project_id)
+    for flag, word in fq.all():
+        flagged[word.id] = (word, flag.reason, flag.note)
+
+    q = (db.session.query(WordState, Word)
+         .join(Word, Word.id == WordState.word_id)
+         .filter(WordState.language == language)
+         .filter(db.or_(WordState.problem.is_(True),
+                        WordState.done.is_(True),
+                        WordState.contested.is_(True)))
+         )
+    if project_id is not None:
+        q = q.filter(Word.project_id == project_id)
+
+    seen = set()
+    for state, word in q.order_by(Word.position, Word.id).all():
+        why = note = None
+        if state.problem:
+            why = "skipped"
+            note = f"{state.skips} speakers passed over it"
+        elif state.contested:
+            why = "withdrawn"
+            note = "taken out after a report"
+        elif state.done and len(leaders(word.id, language)) > 1:
+            why = "no agreement"
+            top = leaders(word.id, language)
+            note = (f"{len(top)} answers tied on "
+                    f"{top[0]['votes']} of {state.total_votes}")
+        if not why:
+            continue
+        seen.add(word.id)
+        row = {"item": word.phrase, "why": why, "note": note,
+               "answers": [{"answer": r["text"], "chose": r["votes"]}
+                           for r in answers(word.id, language)]}
+        yield row
+
+    for word_id, (word, reason, note) in flagged.items():
+        if word_id in seen:
+            continue
+        yield {"item": word.phrase, "why": "reported", "note": note or reason,
+               "answers": [{"answer": r["text"], "chose": r["votes"]}
+                           for r in answers(word_id, language)]}
+
+
 def settled_count(language, min_votes=None, project_id=None):
     """Items in this language that have collected the answers they wanted."""
     from .models import WordState

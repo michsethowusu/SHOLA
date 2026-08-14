@@ -627,12 +627,10 @@ def main():
     r = fresh.get("/api")
     ok &= check("API docs page renders", r.status_code == 200
                 and b"Data API" in r.data)
-    ok &= check("docs say we report rather than judge",
-                b"We report, you judge" in r.data)
-    ok &= check("and explain ties", b"a real result about the language"
-                in r.data)
-    ok &= check("and how to ask for only what volunteers wrote",
-                b"answers=typed" in r.data)
+    ok &= check("docs name the three lists",
+                b"/verified" in r.data and b"/problem" in r.data)
+    ok &= check("and stay short", len(r.data) < 22000,
+                f"{len(r.data)} bytes")
 
     print("\nsettings: days, a break, stopping, and coming back")
     with app.app_context():
