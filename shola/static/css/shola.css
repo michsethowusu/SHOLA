@@ -773,3 +773,100 @@ table.plain th { font-size: .8rem; text-transform: uppercase; letter-spacing: .0
 }
 .option-edit:hover { border-color: var(--ink); color: var(--ink); }
 .option-edit:focus-visible { outline: 3px solid var(--forest); outline-offset: 2px; }
+
+/* --- A list of projects that can grow ------------------------------------ */
+/* Filters wrap rather than scroll: on a phone they stack, on a laptop they sit
+   on one line. */
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-top: 26px;
+}
+.filters input[type=search] {
+  flex: 2 1 200px;
+  width: auto;
+  min-height: 46px;
+  max-width: 340px;
+}
+/* Capped: a select that wraps onto its own line would otherwise stretch the
+   full width and read as the most important control on the page. */
+.filters select {
+  flex: 1 1 150px;
+  width: auto;
+  min-height: 46px;
+  max-width: 220px;
+}
+.filters .btn { flex: 0 0 auto; }
+
+.project-list { display: grid; gap: 12px; margin-top: 8px; }
+
+.project-row {
+  display: grid;
+  gap: 6px;
+  padding: 16px 18px;
+  background: var(--paper);
+  border: 1.5px solid var(--line);
+  border-radius: var(--r-md);
+  text-decoration: none;
+  color: inherit;
+}
+.project-row:hover { border-color: var(--ink); background: #fff; }
+.project-row .head { display: flex; align-items: baseline; gap: 10px; }
+.project-row .t { font-weight: 600; }
+.project-row .sum { color: var(--ink-soft); font-size: .92rem; }
+/* Fixed-width columns would misalign as titles vary; a wrapping row of facts
+   reads the same at any width. */
+.project-row .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-family: var(--mono);
+  font-size: .76rem;
+  letter-spacing: .04em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+.project-row .tag {
+  font-family: var(--mono);
+  font-size: .68rem;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--red);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.project-row .bar {
+  display: block;
+  height: 4px;
+  margin-top: 4px;
+  background: var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.project-row .bar i {
+  display: block;
+  height: 100%;
+  background: var(--forest);
+  border-radius: 999px;
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 24px;
+  font-size: .92rem;
+}
+.pager a, .pager span {
+  padding: 8px 12px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--ink-soft);
+}
+.pager a:hover { background: var(--paper); color: var(--ink); }
+.pager .here { background: var(--ink); color: #fff; font-weight: 600; }
+.pager .off { color: var(--ink-faint); }

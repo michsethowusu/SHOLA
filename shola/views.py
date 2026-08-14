@@ -31,7 +31,8 @@ from .tiers import (VOTES_TO_SETTLE, active_tier, answers_needed, daily_quota,
                     top_up)
 from .mailer import build_otp_email, make_token, read_token
 from .models import (Assignment, Candidate, Flag, PendingSignup, Project,
-                     ProjectLanguage, Volunteer, Word, db, site_stats)
+                     ProjectLanguage, Volunteer, Word, WordState, db,
+                     site_stats)
 from . import importer
 from .projects import (active_for, approved_projects, item_counts, joined,
                        opt_in, opt_out)
@@ -736,14 +737,103 @@ def settings(token):
     return redirect(url_for("main.settings", token=token))
 
 
+PROJECTS_PER_PAGE = 12
+
+
+def page_window(page, pages, span=2):
+    """Page numbers to show, with None where a gap is elided.
+
+    Listing every page is fine for two and unusable for forty, which is the same
+    mistake the whole page was making before it was paged at all.
+    """
+    if pages <= 7:
+        return list(range(1, pages + 1))
+    keep = {1, pages}
+    keep.update(n for n in range(page - span, page + span + 1)
+                if 1 <= n <= pages)
+    out, last = [], 0
+    for n in sorted(keep):
+        if last and n > last + 1:
+            out.append(None)
+        out.append(n)
+        last = n
+    return out
+
+PROJECT_SORTS = {
+    "recommended": "Recommended",
+    "newest": "Newest first",
+    "name": "A to Z",
+}
+
+
 @main.route("/projects")
 def projects_page():
-    """What there is to work on, for anyone deciding whether to join."""
-    open_projects = approved_projects()
+    """The index of work available: searchable, filterable, paged.
+
+    Built for a list that grows. Counts come from two grouped queries rather
+    than one per project, and only the page being shown is measured - the
+    previous version called item_count() and preview() for every project, which
+    was fine for three and would not have been for thirty.
+    """
+    q = (request.args.get("q") or "").strip()
+    language = canonical_language(request.args.get("language") or "")
+    kind = request.args.get("kind") or ""
+    sort = request.args.get("sort") or "recommended"
+    page = max(1, request.args.get("page", 1, type=int))
+
+    query = Project.query.filter(Project.status.in_(("approved", "paused")))
+    if q:
+        like = f"%{q}%"
+        query = query.filter(db.or_(Project.title.ilike(like),
+                                    Project.summary.ilike(like)))
+    if language:
+        query = (query.join(ProjectLanguage,
+                            ProjectLanguage.project_id == Project.id)
+                 .filter(ProjectLanguage.language == language))
+    if kind in ITEM_FORMATS:
+        query = query.filter(Project.item_format == kind)
+
+    if sort == "newest":
+        query = query.order_by(Project.created_at.desc(), Project.id.desc())
+    elif sort == "name":
+        query = query.order_by(Project.title.asc())
+    else:
+        query = query.order_by(Project.sort_order, Project.id)
+
+    total = query.count()
+    pages = max(1, -(-total // PROJECTS_PER_PAGE))
+    page = min(page, pages)
+    shown = (query.limit(PROJECTS_PER_PAGE)
+             .offset((page - 1) * PROJECTS_PER_PAGE).all())
+
+    ids = [p.id for p in shown]
+    items = dict(db.session.query(Word.project_id, db.func.count(Word.id))
+                 .filter(Word.project_id.in_(ids))
+                 .group_by(Word.project_id).all()) if ids else {}
+    langs = dict(db.session.query(ProjectLanguage.project_id,
+                                  db.func.count(ProjectLanguage.id))
+                 .filter(ProjectLanguage.project_id.in_(ids))
+                 .group_by(ProjectLanguage.project_id).all()) if ids else {}
+    done = dict(db.session.query(Word.project_id,
+                                 db.func.count(WordState.id))
+                .join(WordState, WordState.word_id == Word.id)
+                .filter(Word.project_id.in_(ids),
+                        WordState.done.is_(True))
+                .group_by(Word.project_id).all()) if ids else {}
+
+    # Languages worth offering as a filter: those some project collects.
+    filter_languages = sorted(
+        {code for (code,) in db.session.query(ProjectLanguage.language)
+         .distinct()},
+        key=lambda c: current_app.config["ALL_LANGUAGES"].get(
+            c, {}).get("name", c))
+
     return render_template(
-        "projects.html", projects=open_projects,
-        counts={p.id: p.item_count() for p in open_projects},
-        previews={p.id: p.preview(limit=3) for p in open_projects})
+        "projects.html", projects=shown, counts=items, langs=langs, done=done,
+        total=total, page=page, pages=pages, q=q, language=language,
+        kind=kind, sort=sort, sorts=PROJECT_SORTS, formats=ITEM_FORMATS,
+        filter_languages=filter_languages,
+        window=page_window(page, pages))
 
 
 @main.route("/projects/<slug>")

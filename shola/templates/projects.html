@@ -1,60 +1,117 @@
 {% extends "base.html" %}
-{% block title %}What there is to work on{% endblock %}
+{% block title %}Projects{% endblock %}
 
 {% block content %}
 <section class="section">
-  <div class="wrap narrow">
+  <div class="wrap">
     <p class="eyebrow">Projects</p>
     <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">What there is to work on</h1>
-    <p class="lede">
+    <p class="lede" style="max-width:54ch">
       Each one is a body of work someone needs done in a Ghanaian language.
       Choose any of them when you sign up, and change your mind later.
     </p>
 
-    <div class="stack" style="margin-top:30px">
+    <form class="filters" method="get" action="{{ url_for('main.projects_page') }}">
+      <input type="search" name="q" value="{{ q }}"
+             placeholder="Search projects" aria-label="Search projects">
+      <select name="language" aria-label="Language">
+        <option value="">Any language</option>
+        {% for code in filter_languages %}
+          <option value="{{ code }}" {% if language == code %}selected{% endif %}>
+            {{ ALL_LANGUAGES[code].name if code in ALL_LANGUAGES else code }}
+          </option>
+        {% endfor %}
+      </select>
+      <select name="kind" aria-label="Kind of item">
+        <option value="">Any item</option>
+        {% for code, label in formats.items() %}
+          <option value="{{ code }}" {% if kind == code %}selected{% endif %}>
+            {{ label }}
+          </option>
+        {% endfor %}
+      </select>
+      <select name="sort" aria-label="Order">
+        {% for code, label in sorts.items() %}
+          <option value="{{ code }}" {% if sort == code %}selected{% endif %}>
+            {{ label }}
+          </option>
+        {% endfor %}
+      </select>
+      <button class="btn small" type="submit">Filter</button>
+      {% if q or language or kind or sort != 'recommended' %}
+        <a class="linkish" href="{{ url_for('main.projects_page') }}">Clear</a>
+      {% endif %}
+    </form>
+
+    <p class="hint" style="margin-top:14px">
+      {% if total %}
+        {{ total }} project{{ '' if total == 1 else 's' }}{% if pages > 1 %},
+        page {{ page }} of {{ pages }}{% endif %}
+      {% else %}
+        Nothing matches that.
+      {% endif %}
+    </p>
+
+    <div class="project-list">
       {% for project in projects %}
-        <a class="opt-in" href="{{ url_for('main.project_page', slug=project.slug) }}"
-           style="text-decoration:none">
-          <span class="body">
+        {% set n = counts.get(project.id, 0) %}
+        {% set finished = done.get(project.id, 0) %}
+        <a class="project-row" href="{{ url_for('main.project_page', slug=project.slug) }}">
+          <span class="head">
             <span class="t">{{ project.title }}</span>
-            <span class="s">
-              {{ counts.get(project.id, 0) | thousands }} {{ project.item_plural }}
-              · {{ project.languages.count() }}
-              language{{ '' if project.languages.count() == 1 else 's' }}
-              ·
-              {% if project.has_options %}
-                choose between options, {{ project.votes_to_settle }} must agree
-              {% else %}
-                type the answer
-              {% endif %}
-            </span>
-            {% if project.summary %}
-              <span class="s">{{ project.summary }}</span>
-            {% endif %}
-            {% set sample = previews.get(project.id) or [] %}
-            {% if sample %}
-              <span class="sample">
-                {% for row in sample %}{{ row.text }}{% if not loop.last %} · {% endif %}{% endfor %}
-              </span>
+            {% if project.status == 'paused' %}
+              <span class="tag">paused</span>
             {% endif %}
           </span>
+          {% if project.summary %}
+            <span class="sum">{{ project.summary }}</span>
+          {% endif %}
+          <span class="meta">
+            <span>{{ n | thousands }} {{ project.item_plural }}</span>
+            <span>{{ langs.get(project.id, 0) }}
+              language{{ '' if langs.get(project.id, 0) == 1 else 's' }}</span>
+            <span>{{ project.votes_to_settle }} answers each</span>
+          </span>
+          {% if n %}
+            <span class="bar" role="img"
+                  aria-label="{{ ((finished / n) * 100) | round | int }} percent done">
+              <i style="width:{{ [((finished / n) * 100), 100] | min | round(1) }}%"></i>
+            </span>
+          {% endif %}
         </a>
-      {% else %}
-        <p class="muted">Nothing is open just yet.</p>
       {% endfor %}
     </div>
 
-    <p style="margin-top:32px">
-      <a class="btn" href="{{ url_for('main.join') }}">Start with your language</a>
-    </p>
+    {% if pages > 1 %}
+      <nav class="pager" aria-label="Pages">
+        {% set args = {'q': q, 'language': language, 'kind': kind, 'sort': sort} %}
+        {% if page > 1 %}
+          <a href="{{ url_for('main.projects_page', page=page-1, **args) }}">← Back</a>
+        {% else %}
+          <span class="off">← Back</span>
+        {% endif %}
+        {% for n in window %}
+          {% if n is none %}
+            <span class="off">…</span>
+          {% elif n == page %}
+            <span class="here">{{ n }}</span>
+          {% else %}
+            <a href="{{ url_for('main.projects_page', page=n, **args) }}">{{ n }}</a>
+          {% endif %}
+        {% endfor %}
+        {% if page < pages %}
+          <a href="{{ url_for('main.projects_page', page=page+1, **args) }}">Next →</a>
+        {% else %}
+          <span class="off">Next →</span>
+        {% endif %}
+      </nav>
+    {% endif %}
 
     <div class="card" style="margin-top:40px; text-align:left">
       <h3>Have a dataset that needs human translations?</h3>
       <p class="muted">
-        Upload a CSV of the items, one file per language, with or without
-        options for volunteers to choose between. Once it is approved, speakers
-        can opt in and the results come out through the same public API as
-        everything else.
+        Upload one CSV. Once it is approved, speakers opt in and the results come
+        out through the same open API as everything else.
       </p>
       <p style="margin-top:14px">
         <a class="btn ghost" href="{{ url_for('main.submit_project') }}">Submit a project</a>

@@ -803,6 +803,67 @@ def main():
     r = api.get("/api/words/twi")
     ok &= check("the old words endpoint still answers", r.status_code == 200)
 
+    print("\nthe projects index searches, filters and pages")
+    with app.app_context():
+        # Enough to need more than one page.
+        for i in range(16):
+            make_project(f"bulk-{i}", f"Bulk project {i:02d} about markets",
+                         ["twi"] if i % 2 else ["ewe"], options=True, n=2,
+                         fmt="sentence" if i % 3 else "word", threshold=2)
+        from shola.models import Project as P
+        live = P.query.filter(P.status == "approved").count()
+
+    idx = app.test_client()
+    r = idx.get("/projects")
+    ok &= check("the index renders", r.status_code == 200)
+    body = r.data.decode()
+    rows = body.count('class="project-row"')
+    ok &= check("it pages rather than listing everything", rows <= 12,
+                f"{rows} rows on one page")
+    ok &= check("and says how many there are and where you are",
+                "page 1 of" in body, "expected a page indicator")
+    ok &= check("with pager links", 'class="pager"' in body)
+
+    r2 = idx.get("/projects?page=2")
+    b2 = r2.data.decode()
+    ok &= check("page 2 shows different projects",
+                b2.count('class="project-row"') > 0
+                and b2 != body, "page 2 looked identical")
+
+    r = idx.get("/projects?q=Bulk+project+03")
+    found = r.data.decode().count('class="project-row"')
+    ok &= check("search narrows it", found == 1, f"{found} matches")
+    r = idx.get("/projects?q=nothing-like-this-exists")
+    ok &= check("and says so when nothing matches",
+                b"Nothing matches that" in r.data)
+
+    r = idx.get("/projects?language=ewe")
+    ok &= check("filtering by language works",
+                r.status_code == 200
+                and b"Bulk project 00" in r.data, "expected an Ewe project")
+    ok &= check("and excludes the others",
+                b"Bulk project 01" not in r.data, "a Twi project leaked in")
+
+    r = idx.get("/projects?kind=word")
+    ok &= check("filtering by kind of item works", r.status_code == 200)
+    r = idx.get("/projects?sort=name")
+    ok &= check("sorting by name works", r.status_code == 200)
+    r = idx.get("/projects?sort=newest")
+    ok &= check("sorting by newest works", r.status_code == 200)
+
+    r = idx.get("/projects?page=999")
+    ok &= check("a page past the end lands on the last one, not an error",
+                r.status_code == 200 and b"project-row" in r.data)
+
+    from shola.views import page_window
+    ok &= check("a short pager lists every page",
+                page_window(1, 5) == [1, 2, 3, 4, 5], str(page_window(1, 5)))
+    ok &= check("a long one elides the middle",
+                page_window(10, 20) == [1, None, 8, 9, 10, 11, 12, None, 20],
+                str(page_window(10, 20)))
+    ok &= check("and always offers the first and last",
+                page_window(10, 40)[0] == 1 and page_window(10, 40)[-1] == 40)
+
     print("\nthe public pages hold together")
     for path in ("/", "/projects", "/projects/everyday-words", "/stats",
                  "/api", "/submit", "/join"):
