@@ -25,6 +25,20 @@ def create_app(config_object=Config):
 
     db.init_app(app)
 
+    # Flask's logger defaults to WARNING outside debug, so app.logger.info was
+    # being dropped - which is why the boot migration's "adopted N items" never
+    # appeared in the container log when it mattered. Info is the useful level
+    # for an app whose only window is `docker logs`.
+    import logging
+    app.logger.setLevel(
+        getattr(logging, os.environ.get("SHOLA_LOG_LEVEL", "INFO").upper(),
+                logging.INFO))
+    if not app.logger.handlers and not logging.getLogger().handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(logging.Formatter(
+            "%(asctime)s %(levelname)s %(message)s"))
+        app.logger.addHandler(handler)
+
     from .views import main
     app.register_blueprint(main)
 

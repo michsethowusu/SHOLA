@@ -215,7 +215,12 @@ def send_via_brevo(to_email, subject, text, html):
     if response.status_code not in (200, 201, 202):
         detail = response.text[:300]
         raise RuntimeError(f"Brevo refused ({response.status_code}): {detail}")
-    return (response.json() or {}).get("messageId")
+    message_id = (response.json() or {}).get("messageId")
+    # Logged because the absence of an error is not evidence of a delivery. With
+    # the id, a send can be traced in Brevo's own logs when somebody says an
+    # email never arrived.
+    current_app.logger.info("sent %s to %s via brevo", message_id, to_email)
+    return message_id
 
 
 def send_via_smtp(to_email, subject, text, html):
