@@ -220,7 +220,7 @@ class Config:
     # Who may approve projects and read reports. Deliberately not in the
     # database: gaining admin rights should mean changing the deployment, not
     # editing a row.
-    ADMIN_EMAILS = os.environ.get("SHOLA_ADMINS", "michseth@ghananlp.org")
+    ADMIN_EMAILS = os.environ.get("SHOLA_ADMINS", "shola@ghanaopenai.org")
 
     UPLOAD_DIR = INSTANCE_DIR / "uploads"
     # Covers a photo and a project's CSV files. A project with 200,000 items
