@@ -107,7 +107,7 @@ For a language nobody has started yet:
 **Local-language captions:** we have deliberately not written these. Copy in a
 Ghanaian language should be written by a speaker, not translated by us —
 getting it slightly wrong in a campaign about language accuracy would undercut
-the whole point. If you write one, send it to shola@ghanaopenai.org and we will add
+the whole point. If you write one, send it to ghanaopenai@gmail.com and we will add
 it here with credit.
 
 ## Hashtags
@@ -157,4 +157,4 @@ and the volunteers.
 
 ## Contact
 
-shola@ghanaopenai.org · [ghananlp.org](https://ghananlp.org)
+ghanaopenai@gmail.com · [ghananlp.org](https://ghananlp.org)

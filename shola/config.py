@@ -207,7 +207,10 @@ class Config:
     # The address volunteers see. Must be a sender verified in Brevo, or every
     # send is refused.
     MAIL_FROM = os.environ.get("SHOLA_MAIL_FROM", "shola@ghanaopenai.org")
-    MAIL_REPLY_TO = os.environ.get("SHOLA_MAIL_REPLY_TO", "")
+    # Where a reply goes. The sender address is send-only, so leaving this
+    # empty would point volunteers at a mailbox nobody reads.
+    MAIL_REPLY_TO = os.environ.get("SHOLA_MAIL_REPLY_TO",
+                                   "ghanaopenai@gmail.com")
 
     # Gmail SMTP, the fallback. Use a Google app password, not the account
     # password.
@@ -220,7 +223,7 @@ class Config:
     # Who may approve projects and read reports. Deliberately not in the
     # database: gaining admin rights should mean changing the deployment, not
     # editing a row.
-    ADMIN_EMAILS = os.environ.get("SHOLA_ADMINS", "shola@ghanaopenai.org")
+    ADMIN_EMAILS = os.environ.get("SHOLA_ADMINS", "ghanaopenai@gmail.com")
 
     UPLOAD_DIR = INSTANCE_DIR / "uploads"
     # Covers a photo and a project's CSV files. A project with 200,000 items

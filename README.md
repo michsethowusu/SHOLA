@@ -423,7 +423,8 @@ SHOLA_SITE_URL        https://sholaproject.org
 SHOLA_SMTP_HOST       smtp.gmail.com
 SHOLA_SMTP_PORT       587
 SHOLA_BREVO_API_KEY   Brevo transactional key. Present means Brevo is used
-SHOLA_MAIL_FROM       the address volunteers see; must be verified in Brevo
+SHOLA_MAIL_FROM       the sending address; must be verified in Brevo (send-only)
+SHOLA_MAIL_REPLY_TO   where replies go; a mailbox somebody actually reads
 SHOLA_MAX_BACKOFF_DAYS  ceiling on the wait between attempts (14)
 SHOLA_SMTP_USER       fallback SMTP: the address the app password belongs to
 SHOLA_SMTP_PASSWORD   a Gmail app password, not the account password
