@@ -13,7 +13,7 @@ import gzip
 import json
 import os
 import sys
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 
 import click
 from flask import current_app
@@ -181,7 +181,7 @@ def send_daily(window, dry_run, force):
     query = query.filter(db.or_(Volunteer.paused_until.is_(None),
                                 Volunteer.paused_until <= today))
 
-    sent = skipped = failed = 0
+    sent = skipped = failed = backing_off = 0
     for volunteer in query.all():
         if not force and volunteer.last_emailed_on == today:
             skipped += 1
@@ -190,10 +190,19 @@ def send_daily(window, dry_run, force):
             skipped += 1
             continue
 
-        # Did the last send go unanswered? Worked out before leasing, since
-        # leasing is what replaces the old list, but only written down once an
-        # email actually goes out: a send we never made is not a send they
-        # missed.
+        # --- backing off ----------------------------------------------------
+        # Sending behaves like a client talking to a service that is not
+        # answering: each unanswered send lengthens the wait before the next
+        # attempt, and answering anything clears it. The interval stretches; it
+        # never becomes silence, because an attempt is the only thing that gives
+        # them something to answer.
+        waiting = bool(volunteer.next_send_on
+                       and today < volunteer.next_send_on)
+        if waiting and not force:
+            backing_off += 1
+            continue
+
+        # Did the last send go unanswered?
         #
         # Compared as a datetime on purpose: created_at is a timestamp, and
         # leaning on string comparison against a bare date would be an accident
@@ -203,7 +212,32 @@ def send_daily(window, dry_run, force):
         missed_last_send = bool(
             since and not volunteer.evaluations.filter(
                 Evaluation.created_at >= since).first())
-        misses = volunteer.missed_in_a_row + 1 if missed_last_send else 0
+
+        # A wait that has come due is the retry. It is not re-penalised: the
+        # miss that caused it was charged when the wait was set, and charging it
+        # again on every attempt would push the next send out for ever and turn
+        # a back-off into an abandonment.
+        retrying = bool(volunteer.next_send_on
+                        and today >= volunteer.next_send_on)
+
+        # A miss is charged once, at the moment it is noticed, and that is when
+        # the wait is set. --force means "send now regardless", so it still
+        # charges the miss but does not wait.
+        if missed_last_send and not retrying:
+            volunteer.missed_in_a_row += 1
+            volunteer.backoff_days = min(volunteer.missed_in_a_row,
+                                         cfg["MAX_BACKOFF_DAYS"])
+            volunteer.next_send_on = today + timedelta(
+                days=volunteer.backoff_days)
+            db.session.commit()
+            if not force:
+                click.echo(f"back off  {volunteer.email}: "
+                           f"{volunteer.backoff_days} day(s), next attempt "
+                           f"{volunteer.next_send_on}")
+                backing_off += 1
+                continue
+
+        misses = volunteer.missed_in_a_row if missed_last_send else 0
 
         # A wrong schedule is worth one suggestion, not a weekly reminder that
         # they are behind.
@@ -234,6 +268,10 @@ def send_daily(window, dry_run, force):
             send(volunteer.email, subject, text, html)
             volunteer.last_emailed_on = today
             volunteer.missed_in_a_row = misses
+            if not missed_last_send:
+                # They answered: the schedule they chose resumes.
+                volunteer.backoff_days = 0
+            volunteer.next_send_on = None
             if nudge:
                 volunteer.nudged_on = today
             db.session.commit()
@@ -242,7 +280,8 @@ def send_daily(window, dry_run, force):
             failed += 1
             click.echo(f"  failed {volunteer.email}: {exc}", err=True)
 
-    click.echo(f"sent {sent}, skipped {skipped}, failed {failed}")
+    click.echo(f"sent {sent}, skipped {skipped}, "
+               f"backing off {backing_off}, failed {failed}")
     if failed:
         sys.exit(1)
 

@@ -184,8 +184,42 @@ def build_project_email(volunteer, project):
             render_template("email/project.html", **ctx))
 
 
-def send(to_email, subject, text, html):
-    """Send one message. Raises on failure so the caller can count it."""
+def send_via_brevo(to_email, subject, text, html):
+    """Hand one message to Brevo's transactional API.
+
+    Raises with Brevo's own message on failure. Their errors are specific and
+    worth passing through verbatim - an unverified sender and an unauthorised
+    IP look identical from the outside otherwise, and only one of them is
+    fixed by changing our code.
+    """
+    import httpx
+
+    cfg = current_app.config
+    payload = {
+        "sender": {"name": cfg["MAIL_FROM_NAME"], "email": cfg["MAIL_FROM"]},
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "textContent": text,
+        "htmlContent": html,
+    }
+    reply_to = cfg.get("MAIL_REPLY_TO")
+    if reply_to:
+        payload["replyTo"] = {"email": reply_to}
+
+    response = httpx.post(
+        "https://api.brevo.com/v3/smtp/email",
+        headers={"api-key": cfg["BREVO_API_KEY"],
+                 "accept": "application/json",
+                 "content-type": "application/json"},
+        json=payload, timeout=30)
+    if response.status_code not in (200, 201, 202):
+        detail = response.text[:300]
+        raise RuntimeError(f"Brevo refused ({response.status_code}): {detail}")
+    return (response.json() or {}).get("messageId")
+
+
+def send_via_smtp(to_email, subject, text, html):
+    """The original path, kept as a fallback and for local testing."""
     cfg = current_app.config
     missing = [name for name in ("SMTP_USER", "SMTP_PASSWORD")
                if not cfg[name]]
@@ -197,7 +231,8 @@ def send(to_email, subject, text, html):
 
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = formataddr((cfg["MAIL_FROM_NAME"], cfg["SMTP_USER"]))
+    msg["From"] = formataddr((cfg["MAIL_FROM_NAME"],
+                              cfg["MAIL_FROM"] or cfg["SMTP_USER"]))
     msg["To"] = to_email
     msg.set_content(text)
     msg.add_alternative(html, subtype="html")
@@ -213,3 +248,26 @@ def send(to_email, subject, text, html):
             s.starttls(context=context)
             s.login(cfg["SMTP_USER"], cfg["SMTP_PASSWORD"])
             s.send_message(msg)
+
+
+def send(to_email, subject, text, html):
+    """Send one message. Raises on failure so the caller can count it.
+
+    Brevo when a key is configured, SMTP otherwise. Two routes rather than one
+    because the fallback costs a dozen lines and having no way to send at all is
+    the failure that stops the project.
+    """
+    cfg = current_app.config
+    if cfg.get("BREVO_API_KEY"):
+        return send_via_brevo(to_email, subject, text, html)
+    return send_via_smtp(to_email, subject, text, html)
+
+
+def can_send():
+    """Whether a route out exists at all, for /healthz."""
+    cfg = current_app.config
+    if cfg.get("BREVO_API_KEY"):
+        return "brevo"
+    if cfg.get("SMTP_USER") and cfg.get("SMTP_PASSWORD"):
+        return "smtp"
+    return None

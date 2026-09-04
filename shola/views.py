@@ -29,7 +29,8 @@ from .assignment import leaderboard, record_verdict
 from .tiers import (VOTES_TO_SETTLE, active_tier, answers_needed, daily_quota,
                     recruitment, state_for, tier_progress, tier_progress_all,
                     top_up)
-from .mailer import build_otp_email, make_token, read_token
+from .mailer import build_otp_email, can_send as mailer_can_send, make_token, \
+    read_token
 from .models import (Assignment, Candidate, Flag, PendingSignup, Project,
                      ProjectLanguage, Volunteer, Word, WordState, db,
                      site_stats)
@@ -1362,7 +1363,8 @@ def healthz():
     cfg = current_app.config
     out = {"ok": True, "today": date.today().isoformat(),
            "build": cfg.get("BUILD", "unknown"),
-           "email": bool(cfg.get("SMTP_USER") and cfg.get("SMTP_PASSWORD"))}
+           "email": bool(mailer_can_send()),
+           "email_via": mailer_can_send()}
 
     # Free space where the database lives, and how big it has got. A migration
     # failed with "database or disk is full" and there was no way to see that

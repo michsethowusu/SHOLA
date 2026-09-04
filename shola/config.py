@@ -162,6 +162,11 @@ class Config:
     # Sends that came and went with no answer before we suggest a lighter
     # schedule. Three is enough to tell a busy week from a wrong schedule.
     MISSES_BEFORE_NUDGE = int(os.environ.get("SHOLA_MISSES_BEFORE_NUDGE", 3))
+
+    # The longest the wait between attempts can grow to. Without a ceiling a
+    # volunteer who stopped answering months ago would be scheduled years out,
+    # which is indistinguishable from having been dropped.
+    MAX_BACKOFF_DAYS = int(os.environ.get("SHOLA_MAX_BACKOFF_DAYS", 14))
     COMMITMENT_DAYS = int(os.environ.get("SHOLA_COMMITMENT_DAYS", 365))
 
     # What one volunteer covers in a year, used only by the recruitment
@@ -193,7 +198,19 @@ class Config:
     # hand at different moments during a move.
     OLD_HOSTS = _old_hosts(SITE_HOST)
 
-    # Gmail SMTP. Use a Google app password, not the account password.
+    # Brevo's transactional API, used when a key is present. Their sending IPs
+    # are allowlisted per account, so this works from the server and not from a
+    # laptop - a 401 mentioning an unrecognised IP address means the key is
+    # fine and the caller is not.
+    BREVO_API_KEY = os.environ.get("SHOLA_BREVO_API_KEY", "")
+
+    # The address volunteers see. Must be a sender verified in Brevo, or every
+    # send is refused.
+    MAIL_FROM = os.environ.get("SHOLA_MAIL_FROM", "shola@ghanaopenai.org")
+    MAIL_REPLY_TO = os.environ.get("SHOLA_MAIL_REPLY_TO", "")
+
+    # Gmail SMTP, the fallback. Use a Google app password, not the account
+    # password.
     SMTP_HOST = os.environ.get("SHOLA_SMTP_HOST", "smtp.gmail.com")
     SMTP_PORT = int(os.environ.get("SHOLA_SMTP_PORT", 465))
     SMTP_USER = os.environ.get("SHOLA_SMTP_USER", "")

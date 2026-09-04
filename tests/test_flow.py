@@ -841,6 +841,115 @@ def main():
     after = misses_now()
     ok &= check("answering clears the miss count", after == 0, str(after))
 
+    print("\nsending backs off while nobody answers, and recovers when they do")
+    with app.app_context():
+        core_id2 = core_project().id
+        for k in range(80):
+            db.session.add(Word(phrase=f"backoff word {k}",
+                                occurrences=700 - k, frequency=700 - k,
+                                project_id=core_id2))
+        db.session.commit()
+        assign_tiers()
+        quiet2 = add_volunteer("backoff@example.com")
+        bid = quiet2.id
+        top_up(quiet2)
+
+    runner2 = app.test_cli_runner()
+
+    def one_day(day):
+        """Run the send for a given day, without pretending time passed."""
+        with app.app_context():
+            v = db.session.get(Volunteer, bid)
+            # Sent yesterday, unanswered - the state each morning looks at.
+            if v.last_emailed_on is None:
+                v.last_emailed_on = day - timedelta(days=1)
+            db.session.commit()
+        mailbox.clear()
+        runner2.invoke(args=["shola", "send-daily"])
+        with app.app_context():
+            v = db.session.get(Volunteer, bid)
+            return {"sent": "backoff@example.com" in mailbox,
+                    "backoff": v.backoff_days,
+                    "next": v.next_send_on,
+                    "misses": v.missed_in_a_row}
+
+    today = date.today()
+    first = one_day(today)
+    ok &= check("the first unanswered send buys a one-day wait",
+                not first["sent"] and first["backoff"] == 1
+                and first["next"] == today + timedelta(days=1),
+                str(first))
+
+    # The wait has not elapsed, so nothing goes out.
+    held = one_day(today)
+    ok &= check("nothing is sent while the wait stands",
+                not held["sent"] and held["backoff"] == 1, str(held))
+    ok &= check("and the miss is not charged twice",
+                held["misses"] == 1, str(held))
+
+    with app.app_context():
+        # Bring the wait due, the way tomorrow would.
+        v = db.session.get(Volunteer, bid)
+        v.next_send_on = today
+        db.session.commit()
+    retry = one_day(today)
+    ok &= check("when the wait comes due it tries again",
+                retry["sent"], str(retry))
+    ok &= check("and the wait is cleared for the next round",
+                retry["next"] is None, str(retry))
+
+    # Still unanswered: the next wait is longer.
+    with app.app_context():
+        v = db.session.get(Volunteer, bid)
+        v.last_emailed_on = today - timedelta(days=1)
+        db.session.commit()
+    second = one_day(today)
+    ok &= check("a second miss waits two days",
+                second["backoff"] == 2
+                and second["next"] == today + timedelta(days=2), str(second))
+
+    print("\nanswering anything restores the schedule they chose")
+    with app.app_context():
+        v = db.session.get(Volunteer, bid)
+        v.next_send_on = today          # the wait comes due
+        db.session.commit()
+        top_up(v)
+        pending = v.assignments.filter_by(status="pending").first()
+        ok &= check("they have something to answer", pending is not None)
+        if pending:
+            record_verdict(v, pending.word_id, custom_text="answered at last")
+        v.last_emailed_on = today - timedelta(days=1)
+        db.session.commit()
+    recovered = one_day(today)
+    ok &= check("the next send goes out", recovered["sent"], str(recovered))
+    ok &= check("with no wait left", recovered["backoff"] == 0
+                and recovered["next"] is None, str(recovered))
+    ok &= check("and the miss count cleared", recovered["misses"] == 0,
+                str(recovered))
+
+    print("\nthe wait has a ceiling")
+    with app.app_context():
+        # A volunteer who has been away a long time and never answered, so the
+        # miss is real rather than cancelled by a recent verdict.
+        gone = add_volunteer("long-gone@example.com")
+        gone.missed_in_a_row = 500
+        gone.last_emailed_on = today - timedelta(days=1)
+        db.session.commit()
+        gid = gone.id
+        top_up(gone)
+    mailbox.clear()
+    runner2.invoke(args=["shola", "send-daily"])
+    with app.app_context():
+        gone = db.session.get(Volunteer, gid)
+        ok &= check("however long they are away, the wait stops growing",
+                    gone.backoff_days == app.config["MAX_BACKOFF_DAYS"],
+                    f"backoff={gone.backoff_days}")
+        ok &= check("and an attempt is still scheduled, not abandoned",
+                    gone.next_send_on is not None
+                    and (gone.next_send_on - today).days
+                    == app.config["MAX_BACKOFF_DAYS"],
+                    str(gone.next_send_on))
+
     print("\nevery email carries a way to change or stop")
     with app.app_context():
         mailed = add_volunteer("mailed@example.com")

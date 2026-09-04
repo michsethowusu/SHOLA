@@ -139,11 +139,20 @@ debt collected later - the words go straight to other speakers, and the next
 email is whatever the project needs then. Stopping releases outstanding words
 immediately.
 
-**A wrong schedule gets a suggestion, not a nag.** After
+**Sending backs off like a client talking to a service that is not
+answering.** Each unanswered send adds a day to the wait before the next
+attempt - one day, then two, then three - capped at `SHOLA_MAX_BACKOFF_DAYS`.
+Answering anything clears it and the schedule they chose resumes. The interval
+stretches; it never becomes silence, because an attempt is the only thing that
+gives them something to answer. A miss is charged once, when it is noticed,
+which is also when the wait is set: charging it again on every attempt would
+push the next send out for ever. `send-daily --force` still charges the miss but
+ignores the wait, so an operator can always send now.
+
+**A wrong schedule also gets a suggestion, not a nag.** After
 `SHOLA_MISSES_BEFORE_NUDGE` sends go unanswered in a row, one email offers a
 lighter schedule with a link that switches them to a single day a week. Sent
-once, tracked by `nudged_on`. A miss only counts when an email actually went
-out, and answering anything resets the count.
+once, tracked by `nudged_on`.
 
 **Every send is the same length.** `SHOLA_WORDS_PER_DAY` words, whatever days
 someone chose. What a volunteer controls is when the words arrive, not how many:
@@ -413,7 +422,10 @@ SHOLA_SECRET_KEY      generate: python3 -c "import secrets;print(secrets.token_u
 SHOLA_SITE_URL        https://sholaproject.org
 SHOLA_SMTP_HOST       smtp.gmail.com
 SHOLA_SMTP_PORT       587
-SHOLA_SMTP_USER       the sending address the app password belongs to (michseth@ghananlp.org)
+SHOLA_BREVO_API_KEY   Brevo transactional key. Present means Brevo is used
+SHOLA_MAIL_FROM       the address volunteers see; must be verified in Brevo
+SHOLA_MAX_BACKOFF_DAYS  ceiling on the wait between attempts (14)
+SHOLA_SMTP_USER       fallback SMTP: the address the app password belongs to
 SHOLA_SMTP_PASSWORD   a Gmail app password, not the account password
 SHOLA_MAIL_FROM_NAME  SHOLA
 SHOLA_OLD_HOSTS       hostnames to 301 to SHOLA_SITE_URL (default shola.inkika.org)

@@ -51,6 +51,13 @@ class Volunteer(db.Model):
     missed_in_a_row = db.Column(db.Integer, default=0, nullable=False)
     nudged_on = db.Column(db.Date)
 
+    # Sending backs off like a well-behaved API client. Each unanswered send
+    # adds a day to the wait before the next attempt; answering anything clears
+    # it and the schedule they chose resumes. Nobody is dropped - the interval
+    # stretches, it never becomes silence.
+    backoff_days = db.Column(db.Integer, default=0, nullable=False)
+    next_send_on = db.Column(db.Date)
+
     @property
     def paused(self):
         """True while a pause is running."""
@@ -549,7 +556,9 @@ def ensure_columns():
     wanted = {
         "volunteers": {"paused_until": "DATE",
                        "missed_in_a_row": "INTEGER NOT NULL DEFAULT 0",
-                       "nudged_on": "DATE"},
+                       "nudged_on": "DATE",
+                       "backoff_days": "INTEGER NOT NULL DEFAULT 0",
+                       "next_send_on": "DATE"},
         "word_state": {"skips": "INTEGER NOT NULL DEFAULT 0",
                        "problem": "BOOLEAN NOT NULL DEFAULT 0"},
         "pending_signups": {"project_ids": "VARCHAR(200) NOT NULL DEFAULT ''",
