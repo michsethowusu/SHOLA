@@ -11,8 +11,11 @@ INSTANCE_DIR = BASE_DIR / "instance"
 # visual identity, so they live in one place.
 LANGUAGES = {
     "twi": {
-        "name": "Twi",
-        "note": "Asante Twi",
+        # The code stays "twi": it carries 1.4 million existing candidates and
+        # every Twi volunteer signed up so far. Its translations are Asante, so
+        # that is what it is called - the note said as much all along.
+        "name": "Asante Twi",
+        "note": "Twi",
         "special": ["ɛ", "Ɛ", "ɔ", "Ɔ", "ŋ", "Ŋ"],
         # base letter -> variants offered on long press
         "longpress": {"e": ["ɛ", "Ɛ"], "o": ["ɔ", "Ɔ"], "n": ["ŋ", "Ŋ"]},
@@ -65,6 +68,20 @@ LANGUAGE_ALIASES = {
     "tw": "twi",
     "ak": "twi",
     "aka": "twi",
+    # Asante is what "twi" holds, so every way of writing it lands there.
+    "asante": "twi",
+    "twi-asante": "twi",
+    "twi_asante": "twi",
+    "twi-asa": "twi",
+    "tw-asante": "twi",
+    # Akuapem is its own answer set. ISO 639-3 does not separate the two, so
+    # there is no shorter code to reach for; these are the spellings a file is
+    # likely to use.
+    "akuapem": "twi-akuapem",
+    "twi_akuapem": "twi-akuapem",
+    "twi-aku": "twi-akuapem",
+    "tw-akuapem": "twi-akuapem",
+    "aku": "twi-akuapem",
 }
 
 # The code to publish for each stored one, where they differ. Shown on the
@@ -72,6 +89,11 @@ LANGUAGE_ALIASES = {
 ISO_CODES = {
     "ga": "gaa",
     "dagbani": "dag",
+    # ISO 639-3 has one code for both Twi varieties. Publishing it against each
+    # says truthfully what standard code they share, while the codes SHOLA
+    # answers on stay distinct - which is the distinction the data needs.
+    "twi": "twi",
+    "twi-akuapem": "twi",
 }
 
 
@@ -101,6 +123,23 @@ for _code, _name, _alt in OTHER_LANGUAGES:
     }
 for _info in LANGUAGES.values():
     _info["seeded"] = True
+
+# Akuapem Twi answers separately from Asante Twi. The two are close enough that
+# one machine translation often serves both - Google Translate has only `ak` and
+# is asked for it either way - and far enough apart that a speaker of one should
+# not be voting on wording for the other. Keeping them as two codes lets the
+# same English sentence collect an Asante answer and an Akuapem answer, which
+# is the useful outcome; merging them would have thrown one of the two away.
+#
+# It is not seeded: unlike the four above it arrives with nothing of its own in
+# the translation project.
+ALL_LANGUAGES["twi-akuapem"] = {
+    "name": "Akuapem Twi",
+    "note": "Twi",
+    "special": list(LANGUAGES["twi"]["special"]),
+    "longpress": {k: list(v) for k, v in LANGUAGES["twi"]["longpress"].items()},
+    "seeded": False,
+}
 
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
              "Saturday", "Sunday"]
