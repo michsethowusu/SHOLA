@@ -7,9 +7,7 @@
     <p class="eyebrow">Model scores</p>
     <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">What speakers agree with</h1>
     <p class="lede" style="max-width:56ch">
-      Where a project says which system wrote an option, every answer is a
-      comparison. This is how often each system's wording is the one a speaker
-      chose.
+      How often speakers pick each machine translation.
     </p>
 
     {% if model_scores %}
@@ -37,15 +35,11 @@
       </div>
 
       <ul class="muted" style="padding-left:20px; margin-top:18px">
-        <li><strong>Offered</strong> — answers where that system had an option
-          in front of the speaker.</li>
-        <li><strong>Picked</strong> — how many of those the speaker's answer
-          matched. It counts the wording, not the click: typing out the same
-          words a model proposed is agreeing with it.</li>
-        <li><strong>Its own</strong> — wins not shared with another system that
-          happened to say the same thing.</li>
-        <li><strong>People</strong> is the baseline: options a project attached
-          no model to.</li>
+        <li><strong>Offered</strong> — times its answer was on screen.</li>
+        <li><strong>Picked</strong> — times the speaker went with it. Typing
+          the same wording counts, not just tapping it.</li>
+        <li><strong>Its own</strong> — wins no other system shared.</li>
+        <li><strong>People</strong> — answers nobody credited to a model.</li>
       </ul>
 
       {% if model_pairs %}
@@ -72,19 +66,13 @@
     {% else %}
       <div class="card" style="margin-top:26px; text-align:left">
         <p class="muted" style="margin:0">
-          Nothing scored yet. A system appears here once a project has named it
-          against an option and a speaker has answered an item it was offered
-          on.
+          Nothing scored yet. Systems show up here once speakers start
+          answering the items they wrote answers for.
         </p>
       </div>
     {% endif %}
 
     <p class="hint" style="margin-top:30px">
-      Nothing here judges a language. It records what speakers chose when shown
-      these options, which is the only sense in which one machine translation
-      is measurably better than another.
-    </p>
-    <p class="hint">
       <a href="{{ url_for('main.api_models') }}">The same numbers as JSON</a>,
       or per project and per language through the
       <a href="{{ url_for('main.api_docs') }}">API</a>.
