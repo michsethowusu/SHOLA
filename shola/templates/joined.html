@@ -8,31 +8,30 @@
     <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">Akwaaba, {{ volunteer.name.split()[0] }}.</h1>
     <p class="lede" style="margin:0 auto 8px">
       {{ assigned | thousands }} {{ ALL_LANGUAGES[volunteer.language].name }}
-      {{ plural }} are waiting for you, and {{ WORDS_PER_DAY }} more arrive
-      {% if volunteer.available_days %}
-        on each of the
-        {{ volunteer.day_numbers | length }}
-        {{ 'day' if volunteer.day_numbers | length == 1 else 'days' }} you chose
-      {% else %}
+      {{ plural }} are ready for you now.
+      {{ WORDS_PER_DAY }} more arrive
+      {%- if volunteer.available_days %}
+        on each day you chose
+      {%- else %}
         every day
-      {% endif %}
-      — for as long as you want to keep going.
+      {%- endif %}, for as long as you want.
     </p>
 
     <div class="card" style="margin:28px 0; text-align:left">
       <h3>What happens next</h3>
       <p class="muted" style="margin-bottom:0">
-        Your first email arrives tomorrow
-        {% if volunteer.time_window != 'anytime' %}
-          in the {{ TIME_WINDOWS[volunteer.time_window] | lower }}{% endif %},
-        with that day's list. If you miss a day, nothing is lost — it comes
-        back in your next email, and if you are away long enough it goes to
-        another speaker so nothing stalls on you.
+        Your first email arrives tomorrow{% if volunteer.time_window != 'anytime' %}
+        in the {{ TIME_WINDOWS[volunteer.time_window] | lower }}{% endif %},
+        with that day's list.
       </p>
       <p class="muted" style="margin:14px 0 0">
-        Your days are not fixed. Change them, take a break, or stop from
-        <a href="{{ url_for('main.settings', token=token) }}">your settings</a>
-        — the link is in the footer of every email too.
+        Miss a day and nothing is lost. It comes back next time, and if you are
+        away a while another speaker picks it up.
+      </p>
+      <p class="muted" style="margin:14px 0 0">
+        Change your days, take a break, or stop in
+        <a href="{{ url_for('main.settings', token=token) }}">your settings</a>.
+        Every email links there too.
       </p>
     </div>
 
