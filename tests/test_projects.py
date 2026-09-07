@@ -924,6 +924,36 @@ def main():
     r = api.get("/api/words/twi")
     ok &= check("the old words endpoint still answers", r.status_code == 200)
 
+    print("\nthe announcement email says what will actually arrive")
+    with app.app_context():
+        from shola.mailer import build_project_email
+        told = make_project("announced-job", "Check these song titles",
+                            ["twi"], n=4, status="approved")
+        listener = volunteer("told@example.com", "twi")
+
+        _s, text, html = build_project_email(listener, told)
+        ok &= check("no opting in is asked for",
+                    "opt in" not in text.lower()
+                    and "opt in" not in html.lower())
+        ok &= check("nothing is asked of them at all",
+                    "You do not have to do anything" in text)
+        ok &= check("it says the list is shared",
+                    "shared between this and what you already do" in text)
+        ok &= check("and does not claim to be the only thing",
+                    "this is what your list will be" not in text)
+
+        told.start_exclusive(30)
+        db.session.commit()
+        _s, text, html = build_project_email(listener, told)
+        ok &= check("during an exclusive run it says so instead",
+                    "this is what your list will be" in text
+                    and "shared between this and what you already do"
+                    not in text)
+        ok &= check("in the html too",
+                    "this is what your list will be" in html)
+        told.exclusive_until = None
+        db.session.commit()
+
     print("\nthe pager helper elides sensibly")
     from shola.views import page_window
     ok &= check("a short pager lists every page",

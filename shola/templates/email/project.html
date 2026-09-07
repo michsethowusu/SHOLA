@@ -57,8 +57,13 @@
         <tr>
           <td style="padding:14px 26px 0;">
             <p style="margin:0;font:15px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#57514a;">
-              It is already in your list — still {{ send_size }} items each
-              time, not more, shared between this and what you already do.
+              {% if exclusive %}
+                For the next few weeks this is what your list will be — still
+                {{ send_size }} items each time, not more.
+              {% else %}
+                It is already in your list — still {{ send_size }} items each
+                time, not more, shared between this and what you already do.
+              {% endif %}
             </p>
           </td>
         </tr>
@@ -69,8 +74,8 @@
               Have a look
             </a>
             <p style="margin:10px 0 0;font:14px/1.5 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;color:#8b8379;">
-              Nothing to do if you would rather not — your next list arrives as
-              usual either way.
+              You do not have to do anything. Your next list arrives as
+              usual.
             </p>
           </td>
         </tr>

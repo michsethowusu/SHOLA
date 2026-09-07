@@ -134,8 +134,10 @@ class PendingSignup(db.Model):
     photo = db.Column(db.String(255))
     photo_consent = db.Column(db.Boolean, default=False, nullable=False)
 
-    # Projects picked at sign-up, as "1,4". Held here rather than created as
-    # opt-ins because nothing exists to opt in until the code comes back.
+    # Both vestigial: sign-up used to carry a list of chosen projects and
+    # possibly one to pin. Nothing is chosen now - a volunteer offers a
+    # language - and nothing reads either column. Kept because dropping a
+    # column in SQLite means rebuilding the table.
     project_ids = db.Column(db.String(200), default="", nullable=False)
     exclusive_project_id = db.Column(db.Integer)
 
@@ -344,7 +346,11 @@ class ProjectLanguage(db.Model):
 
 
 class VolunteerProject(db.Model):
-    """A volunteer opting in to a project.
+    """Vestigial: a volunteer used to opt in to particular projects.
+
+    Nothing writes or reads this any more. A volunteer offers a language and
+    every project collecting it draws on them, so there is no opting in to
+    record. The rows already written are left alone.
 
     There used to be an `exclusive` column here, marking someone who arrived
     through a project's own share link so that nothing else was sent to them.

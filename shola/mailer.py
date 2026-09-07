@@ -158,9 +158,15 @@ def build_weekly_offer_email(volunteer, words):
 def build_project_email(volunteer, project):
     """Tell an existing volunteer a new project exists, and let them decide.
 
-    Framed as an offer with a decision attached, not an announcement: the only
-    thing being asked is whether they want it, and ignoring it must cost them
-    nothing.
+    An announcement, not an offer. There is nothing to opt in to - a project
+    collecting their language is already in their list - so the mail says what
+    is coming rather than asking them to choose it, and there is nothing they
+    have to do about it.
+
+    It says which of the two is happening, because during an exclusive run this
+    project is the only thing being sent rather than one of several sharing the
+    list, and telling somebody the wrong one is a small lie about what lands in
+    their inbox tomorrow.
     """
     base = current_app.config["SITE_URL"].rstrip("/")
     token = make_token(volunteer)
@@ -179,6 +185,8 @@ def build_project_email(volunteer, project):
         # No opting in to do: it is already in their list. The link goes
         # where the work is.
         "words_link": f"{base}/w/{token}",
+        "exclusive": project.is_exclusive,
+        "exclusive_until": project.exclusive_until,
         "settings_link": settings_link(volunteer),
     }
     return (f"New on SHOLA: {project.title}",
