@@ -67,9 +67,6 @@
           <button class="btn" name="action" value="approve" type="submit">Approve</button>
           <button class="btn ghost" name="action" value="reject" type="submit">Reject</button>
         {% elif project.status == 'approved' %}
-          <button class="btn" name="action" value="announce" type="submit">
-            {% if project.announced_at %}Email volunteers again{% else %}Email volunteers{% endif %}
-          </button>
           <button class="btn ghost" name="action" value="pause" type="submit">Pause</button>
         {% elif project.status == 'paused' %}
           <button class="btn" name="action" value="resume" type="submit">Resume</button>

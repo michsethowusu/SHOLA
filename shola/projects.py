@@ -106,11 +106,6 @@ def rotate(projects, offset):
     return projects[k:] + projects[:k]
 
 
-def mark_announced(project):
-    project.announced_at = datetime.utcnow()
-    db.session.commit()
-
-
 def item_counts(project):
     """Items per language, for the admin dashboard and the project page."""
     rows = (db.session.query(Word.language, db.func.count(Word.id))

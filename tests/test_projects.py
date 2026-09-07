@@ -924,35 +924,39 @@ def main():
     r = api.get("/api/words/twi")
     ok &= check("the old words endpoint still answers", r.status_code == 200)
 
-    print("\nthe announcement email says what will actually arrive")
+    print("\napproving a project just puts it in the queue, quietly")
     with app.app_context():
-        from shola.mailer import build_project_email
-        told = make_project("announced-job", "Check these song titles",
-                            ["twi"], n=4, status="approved")
-        listener = volunteer("told@example.com", "twi")
+        import shola.mailer as mailer_mod
+        # Nothing may be emailed on approval: an approved project joins the
+        # distribution queue and volunteers never have to think about which
+        # project an item came from.
+        ok &= check("there is no project announcement email to build",
+                    not hasattr(mailer_mod, "build_project_email"))
+        from shola import cli as cli_mod
+        ok &= check("and no way to announce one",
+                    not hasattr(cli_mod, "announce_project"))
 
-        _s, text, html = build_project_email(listener, told)
-        ok &= check("no opting in is asked for",
-                    "opt in" not in text.lower()
-                    and "opt in" not in html.lower())
-        ok &= check("nothing is asked of them at all",
-                    "You do not have to do anything" in text)
-        ok &= check("it says the list is shared",
-                    "shared between this and what you already do" in text)
-        ok &= check("and does not claim to be the only thing",
-                    "this is what your list will be" not in text)
+        sent = []
+        real_send = mailer_mod.send
+        mailer_mod.send = lambda *a, **k: sent.append(a)
+        try:
+            quiet = make_project("quiet-job", "Check these riddles", ["twi"],
+                                 n=3, status="pending")
+            qid = quiet.id
+        finally:
+            pass
+        anon.post(f"/admin/project/{qid}/decide",
+                  data={"action": "approve"}, follow_redirects=True)
+        mailer_mod.send = real_send
 
-        told.start_exclusive(30)
-        db.session.commit()
-        _s, text, html = build_project_email(listener, told)
-        ok &= check("during an exclusive run it says so instead",
-                    "this is what your list will be" in text
-                    and "shared between this and what you already do"
-                    not in text)
-        ok &= check("in the html too",
-                    "this is what your list will be" in html)
-        told.exclusive_until = None
-        db.session.commit()
+        approved = db.session.get(Project, qid)
+        ok &= check("it is approved", approved.status == "approved",
+                    approved.status)
+        ok &= check("nobody was emailed about it", sent == [], str(sent))
+        ok &= check("and it is in the queue for its speakers",
+                    qid in {p.id for p in active_for(
+                        volunteer("quiet@example.com", "twi"))},
+                    "an approved project must reach its speakers")
 
     print("\nthe pager helper elides sensibly")
     from shola.views import page_window

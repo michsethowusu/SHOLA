@@ -155,45 +155,6 @@ def build_weekly_offer_email(volunteer, words):
             render_template("email/weekly.html", **ctx))
 
 
-def build_project_email(volunteer, project):
-    """Tell an existing volunteer a new project exists, and let them decide.
-
-    An announcement, not an offer. There is nothing to opt in to - a project
-    collecting their language is already in their list - so the mail says what
-    is coming rather than asking them to choose it, and there is nothing they
-    have to do about it.
-
-    It says which of the two is happening, because during an exclusive run this
-    project is the only thing being sent rather than one of several sharing the
-    list, and telling somebody the wrong one is a small lie about what lands in
-    their inbox tomorrow.
-    """
-    base = current_app.config["SITE_URL"].rstrip("/")
-    token = make_token(volunteer)
-    first = volunteer.name.split()[0] if volunteer.name else "there"
-    ctx = {
-        "first": first,
-        "title": project.title,
-        "summary": project.summary,
-        "item_count": f"{project.item_count(volunteer.language):,}",
-        "item_plural": project.item_plural,
-        "has_options": project.has_options,
-        "language_name": current_app.config["ALL_LANGUAGES"][
-            volunteer.language]["name"],
-        "preview": project.preview(volunteer.language, limit=3),
-        "send_size": current_app.config["WORDS_PER_DAY"],
-        # No opting in to do: it is already in their list. The link goes
-        # where the work is.
-        "words_link": f"{base}/w/{token}",
-        "exclusive": project.is_exclusive,
-        "exclusive_until": project.exclusive_until,
-        "settings_link": settings_link(volunteer),
-    }
-    return (f"New on SHOLA: {project.title}",
-            render_template("email/project.txt", **ctx),
-            render_template("email/project.html", **ctx))
-
-
 def send_via_brevo(to_email, subject, text, html):
     """Hand one message to Brevo's transactional API.
 

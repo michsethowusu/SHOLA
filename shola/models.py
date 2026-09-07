@@ -209,6 +209,10 @@ class Project(db.Model):
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     approved_at = db.Column(db.DateTime)
+    # Vestigial: approving a project used to be followed by emailing every
+    # speaker of its languages. Nothing is announced now - an approved project
+    # simply joins the distribution queue, and which project an item came from
+    # is not something a volunteer has to think about.
     announced_at = db.Column(db.DateTime)
 
     # Ordering on the sign-up page. The core project sits first.

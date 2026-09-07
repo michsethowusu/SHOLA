@@ -286,50 +286,6 @@ def send_daily(window, dry_run, force):
         sys.exit(1)
 
 
-def announce_project(project):
-    """Email every volunteer who speaks a language this project collects.
-
-    Returns how many were emailed. Failures are logged and skipped rather than
-    aborting: one bad address must not stop the rest being told.
-    """
-    from .mailer import build_project_email, send
-    from .models import ProjectLanguage
-    from .projects import mark_announced
-
-    codes = [pl.language for pl in project.languages]
-    if not codes:
-        return 0
-    volunteers = (Volunteer.query
-                  .filter(Volunteer.active.is_(True),
-                          Volunteer.language.in_(codes))
-                  .all())
-    sent = 0
-    for volunteer in volunteers:
-        try:
-            subject, text, html = build_project_email(volunteer, project)
-            send(volunteer.email, subject, text, html)
-            sent += 1
-        except Exception as exc:      # noqa: BLE001
-            current_app.logger.warning("announce failed for %s: %s",
-                                       volunteer.email, exc)
-    mark_announced(project)
-    return sent
-
-
-@shola_cli.command("announce-project")
-@click.option("--slug", required=True)
-def announce_project_cmd(slug):
-    """Email volunteers about an approved project."""
-    from .models import Project
-
-    project = Project.query.filter_by(slug=slug).first()
-    if not project:
-        raise click.UsageError(f"no project {slug!r}")
-    if project.status != "approved":
-        raise click.UsageError(f"{slug} is {project.status}, not approved")
-    click.echo(f"emailed {announce_project(project)} volunteers")
-
-
 @shola_cli.command("projects")
 def projects_cmd():
     """Every project, its state and its size."""
@@ -540,8 +496,8 @@ def import_project_cmd(csv_path, title, slug, summary, item_format, threshold,
     click.echo(f"imported {made:,} items and {options_made:,} options into "
                f"{project.slug!r} ({project.status}).")
     if project.status == "pending":
-        click.echo("It is pending: approve it in the admin dashboard, then "
-                   "`shola announce-project --slug " + project.slug + "`.")
+        click.echo("It is pending: approve it in the admin dashboard and it "
+                   "joins the queue.")
 
 
 @shola_cli.command("name-model")

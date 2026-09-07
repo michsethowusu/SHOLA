@@ -235,18 +235,13 @@ def decide(project_id):
                   f"going out in its languages until then.", "ok")
         else:
             db.session.commit()
-            flash("Approved. It goes out with the other projects; announce it "
-                  "when you are ready.", "ok")
+            flash("Approved. It is in the queue and its items start going "
+                  "out with the rest.", "ok")
     elif action == "reject":
         proj.status = "rejected"
         proj.review_note = note
         db.session.commit()
         flash("Rejected. The note is kept with the project.", "ok")
-    elif action == "announce":
-        from .cli import announce_project
-        sent = announce_project(proj)
-        flash(f"Emailed {sent} volunteers who speak a language this project "
-              f"collects.", "ok")
     elif action == "pause":
         proj.status = "paused"
         db.session.commit()
