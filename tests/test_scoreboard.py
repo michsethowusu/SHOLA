@@ -334,10 +334,17 @@ def test_api(app):
     check("an unknown project is a 404", r.status_code == 404,
           str(r.status_code))
 
-    r = client.get("/stats")
-    check("the stats page renders with a board", r.status_code == 200,
+    r = client.get("/models")
+    check("the scoreboard has its own page", r.status_code == 200,
           str(r.status_code))
-    check("and shows the heading", b"What speakers agree with" in r.data)
+    check("and lists the systems on it", b"model-a" in r.data)
+    check("with the heading", b"What speakers agree with" in r.data)
+
+    r = client.get("/stats")
+    check("progress still renders", r.status_code == 200, str(r.status_code))
+    check("without the board on it",
+          b"What speakers agree with" not in r.data)
+    check("and links to it from the footer", b"/models" in r.data)
 
 
 def main():

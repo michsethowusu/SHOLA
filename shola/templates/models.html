@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}What speakers agree with{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap">
+    <p class="eyebrow">Model scores</p>
+    <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">What speakers agree with</h1>
+    <p class="lede" style="max-width:56ch">
+      Where a project says which system wrote an option, every answer is a
+      comparison. This is how often each system's wording is the one a speaker
+      chose.
+    </p>
+
+    {% if model_scores %}
+      <div class="scroll-x" style="margin-top:26px">
+        <table class="plain">
+          <thead>
+            <tr>
+              <th>System</th><th>Offered</th><th>Picked</th><th>Rate</th>
+              <th>Its own</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in model_scores %}
+              <tr>
+                <td>{% if row.human %}<span class="muted">People</span>
+                    {% else %}<code>{{ row.name }}</code>{% endif %}</td>
+                <td>{{ row.offered | thousands }}</td>
+                <td>{{ row.picked | thousands }}</td>
+                <td><strong>{{ (row.rate * 100) | round | int }}%</strong></td>
+                <td>{{ row.sole | thousands }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <ul class="muted" style="padding-left:20px; margin-top:18px">
+        <li><strong>Offered</strong> — answers where that system had an option
+          in front of the speaker.</li>
+        <li><strong>Picked</strong> — how many of those the speaker's answer
+          matched. It counts the wording, not the click: typing out the same
+          words a model proposed is agreeing with it.</li>
+        <li><strong>Its own</strong> — wins not shared with another system that
+          happened to say the same thing.</li>
+        <li><strong>People</strong> is the baseline: options a project attached
+          no model to.</li>
+      </ul>
+
+      {% if model_pairs %}
+        <h2 style="margin-top:40px">Head to head</h2>
+        <p class="muted">Only the answers where both were on screen and
+          proposed different wordings.</p>
+        <div class="scroll-x" style="margin-top:14px">
+          <table class="plain">
+            <thead>
+              <tr><th>Compared</th><th>Times</th><th>Result</th></tr>
+            </thead>
+            <tbody>
+              {% for p in model_pairs %}
+                <tr>
+                  <td><code>{{ p.left }}</code> v <code>{{ p.right }}</code></td>
+                  <td>{{ p.compared | thousands }}</td>
+                  <td><strong>{{ p.left_wins }}&ndash;{{ p.right_wins }}</strong></td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      {% endif %}
+    {% else %}
+      <div class="card" style="margin-top:26px; text-align:left">
+        <p class="muted" style="margin:0">
+          Nothing scored yet. A system appears here once a project has named it
+          against an option and a speaker has answered an item it was offered
+          on.
+        </p>
+      </div>
+    {% endif %}
+
+    <p class="hint" style="margin-top:30px">
+      Nothing here judges a language. It records what speakers chose when shown
+      these options, which is the only sense in which one machine translation
+      is measurably better than another.
+    </p>
+    <p class="hint">
+      <a href="{{ url_for('main.api_models') }}">The same numbers as JSON</a>,
+      or per project and per language through the
+      <a href="{{ url_for('main.api_docs') }}">API</a>.
+    </p>
+  </div>
+</section>
+{% endblock %}

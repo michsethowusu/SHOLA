@@ -969,7 +969,7 @@ def main():
                 page_window(10, 40)[0] == 1 and page_window(10, 40)[-1] == 40)
 
     print("\nthe public pages hold together")
-    for path in ("/", "/stats", "/api", "/submit", "/join"):
+    for path in ("/", "/stats", "/models", "/api", "/submit", "/join"):
         r = api.get(path)
         ok &= check(f"{path} renders", r.status_code == 200,
                     f"HTTP {r.status_code}")

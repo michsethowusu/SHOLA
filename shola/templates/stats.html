@@ -27,86 +27,6 @@
     </div>
 
     <div style="margin-top:44px">
-      <h2>By project</h2>
-      <p class="muted">
-        Each project is a separate body of work. Every speaker of a language a
-        project collects is sent items from it, and a day's list is shared
-        between the projects covering their language.
-      </p>
-      <div class="scroll-x" style="margin-top:14px">
-        <table class="plain">
-          <thead>
-            <tr>
-              <th>Project</th><th>Items</th><th>Items done</th>
-              <th>Answers written</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in per_project %}
-              <tr>
-                <td>
-                  <strong>{{ row.project.title }}</strong>
-                  <div class="muted" style="font-size:.82rem">
-                    {{ row.project.item_plural }} ·
-                    {{ row.project.languages.count() }}
-                    language{{ '' if row.project.languages.count() == 1 else 's' }}
-                  </div>
-                </td>
-                <td>{{ row.item_total | thousands }}</td>
-                <td>{{ row.verified | thousands }}</td>
-                <td>{{ row.typed | thousands }}</td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      <p class="hint">
-        An item is done once it has been answered as many times as its project
-        asks for.
-      </p>
-    </div>
-
-    {% if model_scores %}
-    <div style="margin-top:44px">
-      <h2>What speakers agree with</h2>
-      <p class="muted">
-        Where a project says which system wrote an option, every answer is a
-        comparison. <strong>Picked</strong> counts the wording, not the click:
-        typing the same words a model proposed is agreeing with it.
-      </p>
-      <div class="scroll-x" style="margin-top:14px">
-        <table class="plain">
-          <thead>
-            <tr><th>System</th><th>Offered</th><th>Picked</th><th>Rate</th></tr>
-          </thead>
-          <tbody>
-            {% for row in model_scores %}
-              <tr>
-                <td>{% if row.human %}<span class="muted">People</span>
-                    {% else %}<code>{{ row.name }}</code>{% endif %}</td>
-                <td>{{ row.offered | thousands }}</td>
-                <td>{{ row.picked | thousands }}</td>
-                <td><strong>{{ (row.rate * 100) | round | int }}%</strong></td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      {% if model_pairs %}
-        <p class="hint">
-          Head to head, where they disagreed:
-          {% for p in model_pairs %}
-            {{ p.left }} {{ p.left_wins }}&ndash;{{ p.right_wins }}
-            {{ p.right }}{{ '; ' if not loop.last }}
-          {% endfor %}
-        </p>
-      {% endif %}
-      <p class="hint"><a href="{{ url_for('main.api_models') }}">Same numbers as
-        JSON</a></p>
-    </div>
-    {% endif %}
-
-    <div style="margin-top:44px">
       <h2>Volunteers we still need</h2>
       <p class="muted">
         To finish the group each language is on within a year. Nobody signs up
@@ -176,59 +96,13 @@
     </div>
 
     <div style="margin-top:40px">
-      <h2>What we are working on</h2>
-      <p class="muted">
-        The most common items come first. Each language finishes one group
-        before starting the next, so what people use every day is confirmed
-        soonest.
-      </p>
-
-      {% for code, lang in SHOWN_LANGUAGES.items() %}
-        {% set info = by_language.get(code) %}
-        <h3 style="margin-top:26px">{{ lang.name }}</h3>
-        <div class="scroll-x" style="margin-top:10px">
-          <table class="plain">
-            <thead>
-              <tr>
-                <th>Group</th><th>Items</th><th>Confirmed</th>
-                <th>No agreement</th><th>Still to check</th><th>Progress</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in info.tiers %}
-                <tr{% if row.tier == info.active %} style="background:var(--gold-wash)"{% endif %}>
-                  <td>
-                    <strong>Group {{ row.tier }}</strong>
-                    {% if row.tier == info.active %}<span class="faint">in progress</span>{% endif %}
-                  </td>
-                  <td>{{ row.total | thousands }}</td>
-                  <td>{{ row.done | thousands }}</td>
-                  <td>{{ row.contested | thousands }}</td>
-                  <td>{{ row.left | thousands }}</td>
-                  <td style="min-width:120px">
-                    <div class="track"><i style="width:{{ '%.1f' % row.pct }}%"></i></div>
-                    <span class="faint" style="font-size:.8rem">{{ '%.1f' % row.pct }}%</span>
-                  </td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      {% endfor %}
-
-      <p class="hint" style="margin-top:14px">
-        An item is <strong>done</strong> once {{ VOTES_TO_SETTLE }} speakers of
-        that language have answered it. Where they disagree, every wording is
-        kept with its vote count rather than one being picked — several equally
-        good translations is a fact about the language, not a failure.
-      </p>
-    </div>
-
-    <div style="margin-top:40px">
       <h2>By language</h2>
       <p class="muted">
         Each item is answered {{ VOTES_TO_SETTLE }} times before it is done, so
-        the done count is always well below the number of answers given.
+        the done count is always well below the number of answers given. Where
+        speakers disagree, every wording is kept with its vote count rather
+        than one being picked — several equally good translations is a fact
+        about the language, not a failure.
       </p>
       <div class="scroll-x" style="margin-top:16px">
         <table class="plain">

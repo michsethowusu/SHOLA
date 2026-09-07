@@ -173,7 +173,6 @@ def stats():
         tier = open_rows[0]["tier"] if open_rows else None
         needed = answers_needed(code, tier) if tier is not None else 0
         by_language[code] = {
-            "tiers": rows,
             "active": tier,
             "recruit": recruitment(code, target, rate, signed_up.get(code, 0),
                                    tier=tier, needed_answers=needed),
@@ -186,26 +185,30 @@ def stats():
         "answers_needed": sum(v["recruit"]["answers_needed"]
                               for v in by_language.values()),
     }
-    # Which system's wording speakers agree with. Options that name no model
-    # sit on the board as `human`, which is the baseline worth comparing to.
-    model_scores = scoreboard.scores()
+    # `per_project` used to be assembled here, three aggregate queries per
+    # project. Nothing reads it now: the page said the same thing four ways.
     return render_template("stats.html", stats=site_stats(),
-                           model_scores=model_scores,
-                           model_pairs=scoreboard.head_to_head()[:6],
                            per_language=consensus.language_progress(),
                            by_language=by_language, totals=totals,
                            completion_rate=rate, words_per_volunteer=target,
                            words_per_day=current_app.config["WORDS_PER_DAY"],
                            projects=live_projects,
-                           per_project=[{
-                               "project": p,
-                               "verified": sum(consensus.verified_counts(
-                                   project_id=p.id).values()),
-                               "typed": sum(consensus.typed_counts(
-                                   project_id=p.id).values()),
-                               "item_total": p.item_count(),
-                           } for p in live_projects],
                            SHOWN_LANGUAGES=shown)
+
+
+@main.route("/models")
+def models_page():
+    """The model scoreboard, on its own page.
+
+    Off the nav on purpose. It answers a question almost no visitor has - which
+    machine translation speakers agree with most - and putting it beside
+    Progress would suggest the project is a model evaluation rather than a
+    language record. Whoever wants it can find it in the footer.
+    """
+    return render_template("models.html",
+                           model_scores=scoreboard.scores(),
+                           model_pairs=scoreboard.head_to_head()[:10],
+                           projects=approved_projects())
 
 
 @main.route("/brand")
