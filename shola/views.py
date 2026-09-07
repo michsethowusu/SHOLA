@@ -190,7 +190,7 @@ def stats():
     return render_template("stats.html", stats=site_stats(),
                            per_language=consensus.language_progress(),
                            by_language=by_language, totals=totals,
-                           completion_rate=rate, words_per_volunteer=target,
+                           completion_rate=rate,
                            words_per_day=current_app.config["WORDS_PER_DAY"],
                            projects=live_projects,
                            SHOWN_LANGUAGES=shown)
