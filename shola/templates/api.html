@@ -57,6 +57,17 @@
       project, <code>volunteer</code> if a speaker wrote it.
     </p>
 
+    <h2 style="margin-top:40px">Model scores</h2>
+    <p class="muted">How often each system's wording is the one speakers
+      picked.</p>
+    <div class="card" style="margin-top:12px">
+<pre style="margin:0;overflow-x:auto"><code>curl "{{ config.SITE_URL }}/api/models/everyday-words"</code></pre>
+    </div>
+    <p class="hint">
+      <code>offered</code> is the answers it was on screen for,
+      <code>picked</code> how many matched its wording.
+    </p>
+
     <h2 style="margin-top:40px">Projects</h2>
     <div class="card" style="margin-top:12px">
 <pre style="margin:0;overflow-x:auto"><code>curl "{{ config.SITE_URL }}/api/projects"</code></pre>

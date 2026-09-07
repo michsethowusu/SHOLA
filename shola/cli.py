@@ -474,6 +474,132 @@ def languages_cmd():
         click.echo(f"  {info['name']:24s} {n:>4} volunteers   {mark}")
 
 
+@shola_cli.command("import-project")
+@click.option("--csv", "csv_path", type=click.Path(exists=True), required=True,
+              help="One file in the template format.")
+@click.option("--title", required=True, help="What a volunteer will be doing.")
+@click.option("--slug", default=None, help="Defaults to a slug of the title.")
+@click.option("--summary", default="", help="One line for the projects page.")
+@click.option("--format", "item_format", default="sentence",
+              type=click.Choice(["word", "sentence", "paragraph"]))
+@click.option("--answers", "threshold", default=None, type=int,
+              help="Answers wanted per item. Defaults to the site setting.")
+@click.option("--status", default="pending",
+              type=click.Choice(["pending", "approved", "paused"]),
+              help="`pending` waits for the admin dashboard, as an upload does.")
+@click.option("--check", is_flag=True,
+              help="Validate the file and report, writing nothing.")
+def import_project_cmd(csv_path, title, slug, summary, item_format, threshold,
+                       status, check):
+    """Load a project from a CSV, for files too large to upload in a browser.
+
+    The same parser and the same rules as the web form - this exists because a
+    45,000 row file does not survive a browser upload, not to skip validation.
+    Nothing is written unless the whole file parses.
+    """
+    from .importer import import_items, parse
+    from .models import Project, ProjectLanguage
+    from .tiers import ANSWERS_PER_ITEM
+    from .views import unique_slug
+
+    all_languages = current_app.config["ALL_LANGUAGES"]
+    with open(csv_path, "rb") as fh:
+        items, problems, meta = parse(fh.read(), set(all_languages))
+
+    if problems:
+        click.echo(f"{len(problems)} problem(s):")
+        for line in problems:
+            click.echo(f"  {line}")
+        raise click.ClickException("Nothing imported. Fix the file and re-run.")
+    if not items:
+        raise click.ClickException("The file has no rows in it.")
+
+    languages = sorted(meta.get("languages") or ())
+    if meta.get("any_language"):
+        languages = sorted(all_languages)
+    options = sum(len(o) for item in items for o in item["options"].values())
+
+    click.echo(f"{len(items):,} items, {options:,} options, "
+               f"{len(languages)} language(s): {', '.join(languages)}")
+    if check:
+        click.echo("--check given; nothing written.")
+        return
+
+    project = Project(
+        slug=slug or unique_slug(title), title=title, summary=summary,
+        item_format=item_format, has_options=bool(options), status=status,
+        votes_to_settle=threshold or ANSWERS_PER_ITEM,
+        sort_order=50)
+    db.session.add(project)
+    db.session.flush()
+    for code in languages:
+        db.session.add(ProjectLanguage(project_id=project.id, language=code))
+    db.session.commit()
+
+    made, options_made = import_items(project, items)
+    click.echo(f"imported {made:,} items and {options_made:,} options into "
+               f"{project.slug!r} ({project.status}).")
+    if project.status == "pending":
+        click.echo("It is pending: approve it in the admin dashboard, then "
+                   "`shola announce-project --slug " + project.slug + "`.")
+
+
+@shola_cli.command("name-model")
+@click.option("--project", "slug", required=True,
+              help="Project slug whose options are being attributed.")
+@click.option("--model", "model", required=True,
+              help='What wrote them, e.g. "gemini-3.6-flash".')
+@click.option("--was", default=None,
+              help="Only rename options currently recorded as this.")
+@click.option("--language", default=None, help="One language only.")
+@click.option("--yes", is_flag=True, help="Do it, rather than counting first.")
+def name_model_cmd(slug, model, was, language, yes):
+    """Say what wrote a project's existing options, for the scoreboard.
+
+    Options imported before the model column existed carry a placeholder. This
+    puts the real name on them so they can be scored. Wordings volunteers typed
+    are never touched - they are not a model's work.
+    """
+    from .config import canonical_language
+    from .models import Candidate, Project, Word
+
+    project = Project.query.filter_by(slug=slug).first()
+    if project is None:
+        raise click.ClickException(f"No project with slug {slug!r}.")
+
+    q = (Candidate.query.join(Word, Candidate.word_id == Word.id)
+         .filter(Word.project_id == project.id)
+         .filter(Candidate.source != "volunteer"))
+    if was is not None:
+        q = q.filter(Candidate.source == was)
+    if language:
+        q = q.filter(Candidate.language == canonical_language(language))
+
+    n = q.count()
+    if not n:
+        click.echo("Nothing matches; nothing to do.")
+        return
+    if not yes:
+        click.echo(f"{n:,} options in {project.title} would be recorded as "
+                   f"{model!r}. Re-run with --yes to do it.")
+        return
+
+    # Chunked, and walked by id rather than by re-running the filter: one
+    # statement over a million rows is what filled the disk the last time, and
+    # a filter that still matches the rows it just updated never terminates.
+    ids = [row[0] for row in q.with_entities(Candidate.id)
+           .order_by(Candidate.id).all()]
+    done = 0
+    for start in range(0, len(ids), 5000):
+        chunk = ids[start:start + 5000]
+        (db.session.query(Candidate).filter(Candidate.id.in_(chunk))
+         .update({Candidate.source: model}, synchronize_session=False))
+        db.session.commit()
+        done += len(chunk)
+        click.echo(f"  {done:,} / {n:,}")
+    click.echo(f"Recorded {done:,} options as {model!r}.")
+
+
 @shola_cli.command("backup")
 @click.option("--out", default="instance/backups", show_default=True)
 @click.option("--keep-db", default=3, show_default=True,

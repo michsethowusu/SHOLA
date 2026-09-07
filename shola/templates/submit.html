@@ -21,11 +21,11 @@
         ɛ, ɔ and ŋ survive.
       </p>
 {% set demo = LANGUAGES.keys() | list %}
-<pre style="margin:12px 0 0;overflow-x:auto"><code>text,language,priority,option1,option2,option3
-Where is the market?,{{ demo[0] }},1,Ɛhe na dwaso wɔ?,Dwaso wɔ he?,
-Where is the market?,{{ demo[1] }},1,Afi ka asi le?,,
-Where is the market?,{{ demo[2] }},1,,,
-How much is this?,all,2,,,</code></pre>
+<pre style="margin:12px 0 0;overflow-x:auto"><code>text,language,priority,option1,option2,option3,model1,model2
+Where is the market?,{{ demo[0] }},1,Ɛhe na dwaso wɔ?,Dwaso wɔ he?,,model-a,model-b
+Where is the market?,{{ demo[1] }},1,Afi ka asi le?,,,model-a,
+Where is the market?,{{ demo[2] }},1,,,,,
+How much is this?,all,2,,,,,</code></pre>
       <p style="margin-top:14px">
         <a class="btn ghost small" href="{{ url_for('main.template_csv') }}">
           Download this template</a>
@@ -45,6 +45,11 @@ How much is this?,all,2,,,</code></pre>
           the wording, which becomes the option the next speaker sees. Both at
           once is fine — the translation project here has machine translations in
           four languages and nothing in the other eighty-four.</li>
+        <li><strong>model1…</strong> — optional. Name what wrote each option and
+          we report how often speakers agree with each system, so options from
+          different models on one row become a real comparison. One
+          <code>model</code> column instead covers the whole row. Left out, the
+          options count as a person's.</li>
       </ul>
       <p class="muted" style="margin-top:10px">
         A header row is expected. Volunteers can always write or edit an answer,

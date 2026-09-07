@@ -35,6 +35,7 @@ from .models import (Assignment, Candidate, Flag, PendingSignup, Project,
                      ProjectLanguage, Volunteer, Word, WordState, db,
                      site_stats)
 from . import importer
+from . import scoreboard
 from .projects import (active_for, approved_projects, item_counts, joined,
                        opt_in, opt_out)
 
@@ -185,7 +186,12 @@ def stats():
         "answers_needed": sum(v["recruit"]["answers_needed"]
                               for v in by_language.values()),
     }
+    # Which system's wording speakers agree with. Options that name no model
+    # sit on the board as `human`, which is the baseline worth comparing to.
+    model_scores = scoreboard.scores()
     return render_template("stats.html", stats=site_stats(),
+                           model_scores=model_scores,
+                           model_pairs=scoreboard.head_to_head()[:6],
                            per_language=consensus.language_progress(),
                            by_language=by_language, totals=totals,
                            completion_rate=rate, words_per_volunteer=target,
@@ -965,15 +971,20 @@ def template_csv():
     seeded = [c for c in current_app.config["LANGUAGES"]][:3]
     while len(seeded) < 3:
         seeded.append(next(iter(current_app.config["ALL_LANGUAGES"])))
+    # model1/model2 are optional and say what wrote each option. Named, the
+    # scoreboard reports how often speakers agree with each system; left blank,
+    # the option counts as a person's.
     rows = [
         ["Where is the market?", seeded[0], "1", "first way to say it",
-         "second way", ""],
-        ["Where is the market?", seeded[1], "1", "how it goes here", "", ""],
-        ["Where is the market?", seeded[2], "1", "", "", ""],
-        ["How much is this?", "all", "2", "", "", ""],
+         "second way", "", "some-model-v1", "another-model-v2"],
+        ["Where is the market?", seeded[1], "1", "how it goes here", "", "",
+         "some-model-v1", ""],
+        ["Where is the market?", seeded[2], "1", "", "", "", "", ""],
+        ["How much is this?", "all", "2", "", "", "", "", ""],
     ]
     return _csv_response(
-        ["text", "language", "priority", "option1", "option2", "option3"],
+        ["text", "language", "priority", "option1", "option2", "option3",
+         "model1", "model2"],
         rows, "shola-template")
 
 
@@ -1199,6 +1210,43 @@ def api_problem(slug, language):
     return jsonify({"project": proj.slug, "language": code, "set": "problem",
                     "total": len(rows), "returned": len(page),
                     "offset": offset, "limit": limit, "items": page})
+
+
+@main.route("/api/models")
+@main.route("/api/models/<slug>")
+def api_models(slug=None):
+    """How often each system's wording is the one speakers picked.
+
+    `offered` is the answers where that system had an option on screen;
+    `picked` is how many of those the speaker's answer matched, whether they
+    clicked it or typed the same words. `sole` is the wins it did not share
+    with another system that happened to say the same thing.
+    """
+    project = None
+    if slug:
+        project = Project.query.filter_by(slug=slug).first()
+        if project is None or project.status not in ("approved", "paused"):
+            return jsonify({"error": "No project by that name."}), 404
+    language = request.args.get("language") or None
+    if language:
+        language = canonical_language(language)
+    min_offered = max(1, request.args.get("min_offered", 1, type=int))
+    project_id = project.id if project else None
+    rows = scoreboard.scores(project_id, language, min_offered)
+    if (request.args.get("format") or "").lower() == "csv":
+        return _csv_response(
+            ["model", "offered", "picked", "rate", "sole"],
+            [[r["name"], r["offered"], r["picked"], round(r["rate"], 4),
+              r["sole"]] for r in rows],
+            f"shola-models-{project.slug if project else 'all'}")
+    return jsonify({
+        "project": project.slug if project else None,
+        "language": language,
+        "models": rows,
+        "head_to_head": scoreboard.head_to_head(project_id, language),
+        "note": "picked counts the wording, not the click: a speaker who "
+                "types the same words a model proposed is agreeing with it.",
+    })
 
 
 @main.route("/api/items/<slug>/<language>")

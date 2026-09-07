@@ -30,6 +30,19 @@ four languages arrived with machine translations and the other eighty-four
 started from nothing, and there is no reason a submitted project should have to
 be tidier than that.
 
+**model** is optional and says what wrote the options, so the scoreboard can
+report how often each system's wording is the one speakers pick. One `model`
+column covers every option on the row; `model1`, `model2`, … name them
+separately, which is the case worth uploading - when the options on a row come
+from different systems, every answer is a comparison between them.
+
+    text,language,option1,option2,model1,model2
+    Wo ho te sɛn?,twi,How are you?,How is your body?,gemini-3.6-flash,nllb-200
+
+No model column means the options are a person's work. That is deliberately the
+default: crediting a machine that was never named would put invented numbers on
+the scoreboard.
+
 **priority** is optional. 1 is worked to completion before 2, so the part that
 matters most is finished first even if the project never finishes. Left out,
 everything is one band. It is the same mechanism the translation project uses to
@@ -58,6 +71,19 @@ TEXT_HEADERS = {"text", "item", "phrase", "word", "sentence", "paragraph",
 LANG_HEADERS = {"language", "lang", "language_code", "code", "target"}
 PRIORITY_HEADERS = {"priority", "tier", "band", "group", "rank"}
 MAX_PRIORITY = 20
+
+# Who or what wrote the options. `model` covers every option on the row;
+# `model1`, `model2`, … name them one at a time, for a row whose options came
+# from different systems - which is the interesting case, because then the
+# volunteers are choosing between models and the choice is a score.
+#
+# No model column at all means the options are a person's work. That is the
+# right default: a project that says nothing about where its options came from
+# is not making a claim about a machine, and crediting one silently would put
+# invented numbers on the scoreboard.
+MODEL_HEADERS = {"model", "system", "generator", "model_name", "source_model"}
+HUMAN = "human"
+MAX_MODEL = 60
 
 
 def _clean(value):
@@ -104,6 +130,9 @@ def parse(stream_or_bytes, known_languages=None):
     seen_pairs = set()
     has_language_column = False
     priority_at = None
+    model_at = None          # a `model` column covering the whole row
+    model_slots = {}         # option slot number -> column index, from model<N>
+    skip_columns = set()     # columns that are not options
     rows_read = 0
     named = set()
     any_language = False
@@ -121,6 +150,14 @@ def parse(stream_or_bytes, known_languages=None):
             for index, name in enumerate(headers):
                 if name in PRIORITY_HEADERS:
                     priority_at = index
+                    skip_columns.add(index)
+                elif name in MODEL_HEADERS:
+                    model_at = index
+                    skip_columns.add(index)
+                elif name.startswith("model") and name[5:].isdigit():
+                    model_slots[int(name[5:])] = index
+                    skip_columns.add(index)
+            skip_columns.update({0, 1})
             if not has_language_column:
                 problems.append(
                     "The second column must be the language. The format is "
@@ -138,7 +175,6 @@ def parse(stream_or_bytes, known_languages=None):
         # Whatever they wrote, stored as the code we publish - so a file using
         # the codes anybody would look up works, including the two we had wrong.
         language = canonical_language(cells[1] if len(cells) > 1 else "")
-        rest = cells[2:]
 
         priority = None
         if priority_at is not None:
@@ -154,9 +190,26 @@ def parse(stream_or_bytes, known_languages=None):
                     problems.append(f"Line {line_no}: priority must be between "
                                     f"1 and {MAX_PRIORITY}.")
                     continue
-            rest = [c for i, c in enumerate(cells)
-                    if i > 1 and i != priority_at]
-        options = [c for c in rest if c]
+
+        def cell(index):
+            return cells[index] if index is not None and index < len(cells) else ""
+
+        row_model = cell(model_at)[:MAX_MODEL] or HUMAN
+        # Option columns are whatever is left once the columns that mean
+        # something else are set aside. Slot numbers count those columns, blanks
+        # included, so `model2` names the option under `option2` even when
+        # `option1` on that row is empty.
+        options, option_models = [], []
+        slot = 0
+        for index, value in enumerate(cells):
+            if index in skip_columns:
+                continue
+            slot += 1
+            if not value:
+                continue
+            options.append(value)
+            named_model = cell(model_slots.get(slot))[:MAX_MODEL]
+            option_models.append(named_model or row_model)
 
         if not item_text:
             problems.append(f"Line {line_no}: no text in the first column.")
@@ -199,8 +252,8 @@ def parse(stream_or_bytes, known_languages=None):
                                 "Split the file.")
                 break
             order.append(key)
-            items[key] = {"text": item_text, "options": {}, "langs": set(),
-                          "priority": priority, "any": False}
+            items[key] = {"text": item_text, "options": {}, "models": {},
+                          "langs": set(), "priority": priority, "any": False}
         entry = items[key]
         if priority is not None and entry["priority"] is None:
             entry["priority"] = priority
@@ -223,19 +276,26 @@ def parse(stream_or_bytes, known_languages=None):
             # reads as "is this right, or correct it", which is a perfectly good
             # thing to ask.
             entry["options"][language] = options
+            entry["models"][language] = option_models
 
     out = []
     for key in order:
         entry = items[key]
-        # An item belongs to one language only when that is all it ever appears
-        # as: one language, never marked `all`, and carrying no options, which is
-        # what a transcription or read-aloud task looks like.
+        # An item belongs to one language when that is all it ever appears as:
+        # one language, and never marked `all`.
+        #
+        # Options do not change that. A Twi sentence being translated into
+        # English is a Twi item whose options are English, and showing it to Ewe
+        # speakers would be asking them to read a language they may not know.
+        # An item that is genuinely shared - an English word awaiting eighty-
+        # eight translations - says so by appearing under several languages, or
+        # by being marked `all`, and either way lands here as None.
         item_language = None
-        if (not entry["any"] and not entry["options"]
-                and len(entry["langs"]) == 1):
+        if not entry["any"] and len(entry["langs"]) == 1:
             item_language = next(iter(entry["langs"]))
         out.append({"text": entry["text"], "item_language": item_language,
                     "options": entry["options"],
+                    "models": entry["models"],
                     "priority": entry["priority"] or 1})
 
     if not out and not problems:
@@ -278,11 +338,18 @@ def import_items(project, items, source="upload"):
                     tier=entry.get("priority") or 1)
         db.session.add(item)
         db.session.flush()
+        by_language = entry.get("models") or {}
         for language, options in entry["options"].items():
+            # `source` is what wrote the option: a model name from the file's
+            # model column, or `human`. It is what the scoreboard counts, so a
+            # file that named no model must not end up looking like one did.
+            written_by = by_language.get(language) or []
             for slot, option in enumerate(options, start=1):
+                model = (written_by[slot - 1] if slot <= len(written_by)
+                         else None) or source
                 db.session.add(Candidate(word_id=item.id, language=language,
                                          position=slot, text=option,
-                                         source=source))
+                                         source=model))
                 options_made += 1
         made += 1
         if made % 2000 == 0:
