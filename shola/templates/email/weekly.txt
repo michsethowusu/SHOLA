@@ -2,7 +2,7 @@ Would once a week suit you better, {{ first }}?
 
 The last few emails went unanswered, which usually means daily is the wrong
 shape for the week rather than anything else. Nothing is owed and nothing was
-lost - the words went back to other speakers.
+lost - they went back to other speakers.
 
 Switch to one email a week:
 {{ weekly_link }}
@@ -17,7 +17,7 @@ Start translating:
 {{ link }}
 {% endif %}
 --
-You get this because you signed up to check {{ language_name }} words for SHOLA.
+You get this because you signed up to check {{ language_name }} for SHOLA.
 
 Change your days, take a break, or stop:
 {{ settings_link }}

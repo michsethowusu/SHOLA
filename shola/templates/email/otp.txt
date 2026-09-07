@@ -2,7 +2,7 @@
 
 Hi {{ first }},
 
-Enter this code on the SHOLA page to confirm your email and start checking words:
+Enter this code on the SHOLA page to confirm your email and start:
 
     {{ code }}
 

@@ -7,8 +7,8 @@
     <p class="eyebrow">You are in</p>
     <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">Akwaaba, {{ volunteer.name.split()[0] }}.</h1>
     <p class="lede" style="margin:0 auto 8px">
-      {{ assigned | thousands }} {{ ALL_LANGUAGES[volunteer.language].name }} words are
-      waiting for you, and {{ WORDS_PER_DAY }} more arrive
+      {{ assigned | thousands }} {{ ALL_LANGUAGES[volunteer.language].name }}
+      {{ plural }} are waiting for you, and {{ WORDS_PER_DAY }} more arrive
       {% if volunteer.available_days %}
         on each of the
         {{ volunteer.day_numbers | length }}
@@ -25,9 +25,9 @@
         Your first email arrives tomorrow
         {% if volunteer.time_window != 'anytime' %}
           in the {{ TIME_WINDOWS[volunteer.time_window] | lower }}{% endif %},
-        with that day's words. If you miss a day, nothing is lost — those words
-        come back in your next email, and if you are away long enough they go
-        to another speaker so nothing stalls on you.
+        with that day's list. If you miss a day, nothing is lost — it comes
+        back in your next email, and if you are away long enough it goes to
+        another speaker so nothing stalls on you.
       </p>
       <p class="muted" style="margin:14px 0 0">
         Your days are not fixed. Change them, take a break, or stop from

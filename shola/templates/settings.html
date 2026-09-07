@@ -9,14 +9,14 @@
       {{ volunteer.name.split()[0] }}, this is yours to change
     </h1>
     <p class="lede">
-      There is no end date. You get {{ send_size }} words each time you are
+      There is no end date. You get {{ send_size }} items each time you are
       sent some, for as long as you want to keep going.
     </p>
 
     {% if not volunteer.active %}
       <div class="notice" style="margin-top:22px">
-        <strong>You are not receiving words.</strong> Start again whenever you
-        like — nothing was lost.
+        <strong>You are not receiving anything.</strong> Start again whenever
+        you like — nothing was lost.
         <form method="post" style="margin-top:14px">
           <input type="hidden" name="action" value="resume">
           <button class="btn" type="submit">Start again</button>
@@ -26,7 +26,7 @@
       <div class="notice" style="margin-top:22px">
         <strong>Paused until
           {{ volunteer.paused_until.strftime('%-d %B') }}.</strong>
-        Words start arriving again by themselves that morning.
+        Your list starts arriving again by itself that morning.
         <form method="post" style="margin-top:14px">
           <input type="hidden" name="action" value="resume">
           <button class="btn ghost" type="submit">Start again now</button>
@@ -38,9 +38,9 @@
       <input type="hidden" name="action" value="save">
 
       <div class="field">
-        <span class="label">Which days do you want words?</span>
+        <span class="label">Which days do you want your list?</span>
         <p class="hint">Change these whenever your week changes. Leave them all
-           unticked to receive words any day. If a few go unanswered we ease
+           unticked to get your list any day. If a few go unanswered we ease
            off and email less often, then pick up your schedule again the moment
            you answer one.</p>
         <div class="day-row">
@@ -74,8 +74,9 @@
     <div class="card" style="margin-top:34px; text-align:left">
       <h3>Need a break?</h3>
       <p class="muted">
-        Take one. Your words go back to other speakers while you are away, so
-        nothing sits waiting on you, and the emails restart on their own.
+        Take one. What you were holding goes back to other speakers while you
+        are away, so nothing sits waiting on you, and the emails restart on
+        their own.
       </p>
       <form method="post" style="margin-top:16px">
         <input type="hidden" name="action" value="pause">
@@ -105,9 +106,9 @@
         if you change your mind.
       </p>
       <form method="post" style="margin-top:14px"
-            onsubmit="return confirm('Stop receiving words? You can start again from this same link.')">
+            onsubmit="return confirm('Stop sending you anything? You can start again from this same link.')">
         <input type="hidden" name="action" value="stop">
-        <button class="btn ghost" type="submit">Stop sending me words</button>
+        <button class="btn ghost" type="submit">Stop sending me anything</button>
       </form>
     </div>
     {% endif %}
@@ -115,7 +116,7 @@
     {% if volunteer.active and not volunteer.paused %}
       <p class="hint" style="margin-top:30px">
         <a href="{{ url_for('main.evaluate', token=token) }}">Back to your
-        words</a>
+        list</a>
       </p>
     {% endif %}
   </div>

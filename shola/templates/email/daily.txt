@@ -18,7 +18,7 @@ TODAY'S LIST
 Start translating:
 {{ link }}
 
-No time today? Leave it. These words come back in your next email.
+No time today? Leave it. These come back in your next email.
 
 --
 You get this because you signed up to check {{ language_name }} items for SHOLA.

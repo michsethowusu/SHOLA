@@ -25,7 +25,7 @@
       <a href="{{ url_for('main.stats') }}" {% if request.endpoint == 'main.stats' %}class="here"{% endif %}>Progress</a>
       <a href="{{ url_for('main.api_docs') }}" {% if request.endpoint == 'main.api_docs' %}class="here"{% endif %}>API</a>
       {% if session.token %}
-        <a href="{{ url_for('main.evaluate', token=session.token) }}" class="btn small">My words</a>
+        <a href="{{ url_for('main.evaluate', token=session.token) }}" class="btn small">My list</a>
       {% else %}
         <a href="{{ url_for('main.join') }}" class="btn small">Join</a>
       {% endif %}

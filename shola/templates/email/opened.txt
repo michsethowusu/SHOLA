@@ -1,6 +1,6 @@
 {{ language_name }} is open, {{ first }}.
 
-You signed up to check {{ language_name }} words for SHOLA. We have now loaded
+You signed up to check {{ language_name }} for SHOLA. We have now loaded
 them, so your first list is ready.
 
 A handful of items a day, on the days you chose. Two minutes each time.

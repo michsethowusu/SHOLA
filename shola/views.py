@@ -423,8 +423,15 @@ def verify():
     session.pop("signup_email", None)
 
     given = top_up(volunteer)
+    # What to call the things just leased. `list_nouns` uses the project's own
+    # noun for a single-project list and "items" for a mixed one, which is what
+    # the daily email already says - the two must not disagree.
+    from .mailer import list_nouns
+
+    held = [a.word for a in volunteer.pending_today()]
+    _noun, plural = list_nouns(held)
     return render_template("joined.html", volunteer=volunteer, assigned=given,
-                           token=token,
+                           token=token, plural=plural,
                            projects=active_for(volunteer))
 
 

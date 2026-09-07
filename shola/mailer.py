@@ -138,11 +138,13 @@ def build_weekly_offer_email(volunteer, words):
     base = current_app.config["SITE_URL"].rstrip("/")
     token = make_token(volunteer)
     first = volunteer.name.split()[0] if volunteer.name else "there"
+    noun, plural = list_nouns(words)
     ctx = {
         "first": first,
         "words": words[:MAX_WORDS_IN_EMAIL],
         "more": max(0, len(words) - MAX_WORDS_IN_EMAIL),
         "total": len(words),
+        "noun": noun, "plural": plural,
         "link": f"{base}/w/{token}",
         "weekly_link": f"{base}/w/{token}/weekly",
         "settings_link": settings_link(volunteer),
