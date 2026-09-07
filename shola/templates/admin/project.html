@@ -79,11 +79,62 @@
       </div>
     </form>
 
+    {% if project.status == 'approved' %}
+      <div class="card" style="margin-top:26px; text-align:left">
+        <h3 style="margin-top:0">Exclusive run</h3>
+        {% if project.is_exclusive %}
+          <p class="muted">
+            Running exclusively until
+            <strong>{{ project.exclusive_until.strftime('%-d %B') }}</strong>
+            — {{ project.exclusive_days_left }}
+            day{{ '' if project.exclusive_days_left == 1 else 's' }} left.
+            Nothing else goes out in
+            {% for code in project.language_codes %}{{ ALL_LANGUAGES[code].name
+            }}{% if not loop.last %}, {% endif %}{% endfor %}.
+          </p>
+          <form method="post"
+                action="{{ url_for('admin.decide', project_id=project.id) }}"
+                style="margin-top:14px; display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end">
+            <label style="display:block">
+              <span class="label">Add days</span>
+              <input type="number" name="days" value="30" min="1" max="365"
+                     style="width:100px">
+            </label>
+            <button class="btn" name="action" value="extend" type="submit">
+              Extend</button>
+            <button class="btn ghost" name="action" value="end-exclusive"
+                    type="submit">End it now</button>
+          </form>
+          <p class="hint">Extending adds to what is left, so it never shortens
+            a run.</p>
+        {% else %}
+          <p class="muted">
+            Taking its turn with the other projects.
+            {% if project.exclusive_requested %}
+              The submitter asked for an exclusive run.
+            {% endif %}
+          </p>
+          <form method="post"
+                action="{{ url_for('admin.decide', project_id=project.id) }}"
+                style="margin-top:14px; display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end">
+            <label style="display:block">
+              <span class="label">Days</span>
+              <input type="number" name="days"
+                     value="{{ project.exclusive_days or 30 }}" min="1" max="365"
+                     style="width:100px">
+            </label>
+            <button class="btn" name="action" value="exclusive" type="submit">
+              Make it exclusive</button>
+          </form>
+          <p class="hint">While it runs, this is the only project sent to
+            speakers of its languages.</p>
+        {% endif %}
+      </div>
+    {% endif %}
+
     <p class="hint" style="margin-top:30px">
       <a href="{{ url_for('admin.dashboard') }}">Back to the dashboard</a>
-      {% if project.status in ('approved', 'paused') %}
-        · <a href="{{ url_for('main.project_page', slug=project.slug) }}">Public page</a>
-      {% endif %}
+      · <a href="{{ url_for('admin.projects') }}">All projects</a>
     </p>
   </div>
 </section>

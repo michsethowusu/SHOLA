@@ -1,20 +1,29 @@
 """Which projects a volunteer works on, and how a day's list is shared out.
 
-A volunteer opts in to one or more projects and receives one short list a day.
-That list is split across the projects they joined, as evenly as the numbers
-allow - five items across two projects is three and two, and nothing pretends
+A volunteer signs up to share their language. Nothing else is asked of them:
+every approved project collecting that language sends them work, and one short
+list a day arrives split across those projects as evenly as the numbers allow -
+five items across two projects is three and two, and nothing pretends
 otherwise.
 
+Volunteers used to choose projects and could opt in and out of them. That was a
+question nobody needed to answer. Someone who has agreed to check Twi has
+agreed to check Twi; asking them which body of work it belongs to makes them
+responsible for a decision that is ours, and a project nobody happened to tick
+would sit unanswered for reasons unrelated to whether it mattered.
+
 Two rules bend the split. A project whose queue is dry gives its share to the
-others rather than shortening the list. And someone who arrived through a
-project's own share link works only on that project until it is finished: the
-person who brought them here earned that, and it is the one promise the
-platform makes to whoever shares a link.
+others rather than shortening the list. And a project inside its exclusive
+window is the only one sent, in every language it covers, until the window
+closes - which is what an author with a deadline is given instead of a slice of
+everyone's attention.
 """
 
 from datetime import datetime
 
-from .models import Project, ProjectLanguage, VolunteerProject, Word, db
+from datetime import date
+
+from .models import Project, ProjectLanguage, Word, db
 
 
 def approved_projects(language=None):
@@ -31,70 +40,45 @@ def approved_projects(language=None):
     return q.order_by(Project.sort_order, Project.id).all()
 
 
-def joined(volunteer):
-    """The projects this volunteer opted in to, exclusive ones first."""
-    rows = (db.session.query(VolunteerProject, Project)
-            .join(Project, Project.id == VolunteerProject.project_id)
-            .filter(VolunteerProject.volunteer_id == volunteer.id,
-                    Project.status == "approved")
-            .order_by(VolunteerProject.exclusive.desc(),
-                      Project.sort_order, Project.id)
-            .all())
-    return [(vp, project) for vp, project in rows]
-
-
-def opt_in(volunteer, project_ids, exclusive_id=None):
-    """Join projects. Repeating an existing opt-in is not an error.
-
-    Only projects collecting the volunteer's language are accepted - anything
-    else would put items in front of someone who cannot answer them.
-    """
-    open_ids = {p.id for p in approved_projects(volunteer.language)}
-    added = []
-    have = {vp.project_id for vp, _ in joined(volunteer)}
-    for pid in project_ids:
-        pid = int(pid)
-        if pid not in open_ids or pid in have:
-            continue
-        db.session.add(VolunteerProject(volunteer_id=volunteer.id,
-                                       project_id=pid,
-                                       exclusive=(pid == exclusive_id)))
-        added.append(pid)
-    if added:
-        db.session.commit()
-    return added
-
-
-def opt_out(volunteer, project_id):
-    """Leave a project. Answers already given stay where they are."""
-    n = (VolunteerProject.query
-         .filter_by(volunteer_id=volunteer.id, project_id=int(project_id))
-         .delete())
-    if n:
-        db.session.commit()
-    return n
-
-
 def has_open_items(project, language):
     """Whether this project still has anything for a speaker of this language."""
     from .tiers import open_query
     return open_query(language, project_id=project.id).limit(1).count() > 0
 
 
-def active_for(volunteer):
-    """Projects to draw today's list from.
+def exclusive_project(language=None, today=None):
+    """The project currently holding an exclusive window, if any.
 
-    An unfinished exclusive project is the whole list. Once it runs out, the
-    rest open up - the promise was priority, not permanence.
+    Filtered by language, because a window only silences the other projects for
+    the speakers this one can actually use. An Ewe project running exclusively
+    should not leave Kasem speakers with nothing to do.
+
+    If two windows somehow overlap, the one ending soonest wins: it is the one
+    with least time left to make use of it.
     """
-    pairs = joined(volunteer)
-    if not pairs:
-        return []
-    exclusive = [p for vp, p in pairs
-                 if vp.exclusive and has_open_items(p, volunteer.language)]
-    if exclusive:
-        return exclusive
-    return [p for _vp, p in pairs]
+    today = today or date.today()
+    q = (Project.query
+         .filter(Project.status == "approved",
+                 Project.exclusive_until.isnot(None),
+                 Project.exclusive_until >= today))
+    if language:
+        q = (q.join(ProjectLanguage, ProjectLanguage.project_id == Project.id)
+             .filter(ProjectLanguage.language == language))
+    return q.order_by(Project.exclusive_until, Project.id).first()
+
+
+def active_for(volunteer):
+    """Projects to draw today's list from, for this volunteer's language.
+
+    A live exclusive window is the whole list, as long as it still has items
+    this speaker can answer - an exclusive project that has run dry in their
+    language would otherwise send them nothing at all, which serves nobody.
+    """
+    language = volunteer.language
+    pinned = exclusive_project(language)
+    if pinned is not None and has_open_items(pinned, language):
+        return [pinned]
+    return approved_projects(language)
 
 
 def shares(total, n):

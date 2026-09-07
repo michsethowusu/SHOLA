@@ -36,8 +36,8 @@ from .models import (Assignment, Candidate, Flag, PendingSignup, Project,
                      site_stats)
 from . import importer
 from . import scoreboard
-from .projects import (active_for, approved_projects, item_counts, joined,
-                       opt_in, opt_out)
+from .projects import (active_for, approved_projects, exclusive_project,
+                       item_counts)
 
 main = Blueprint("main", __name__)
 
@@ -295,24 +295,10 @@ def issue_code(pending):
     send(pending.email, subject, text, html)
 
 
-def exclusive_from_request():
-    """The project a share link arrived with, if any.
-
-    A project's author gets a link with `?project=<slug>`. Someone joining
-    through it works on that project first; that is the whole difference.
-    """
-    slug = (request.values.get("project") or "").strip()
-    if not slug:
-        return None
-    return Project.query.filter_by(slug=slug, status="approved").first()
-
-
 @main.route("/join", methods=["GET", "POST"])
 def join():
     if request.method == "GET":
-        pinned = exclusive_from_request()
-        return render_template("join.html", pinned=pinned,
-                               all_projects=approved_projects())
+        return render_template("join.html")
 
     name = (request.form.get("name") or "").strip()
     email = (request.form.get("email") or "").strip().lower()
@@ -336,17 +322,10 @@ def join():
         errors.append("That email is already signed up. Ask for your link "
                       "instead.")
 
-    # At least one project, and only ones that collect their language: a
-    # volunteer with no project would receive an empty list for ever.
-    pinned = exclusive_from_request()
-    open_ids = {p.id for p in approved_projects(language)} if language else set()
-    chosen = [int(p) for p in request.form.getlist("projects")
-              if p.isdigit() and int(p) in open_ids]
-    if pinned is not None and pinned.id in open_ids and pinned.id not in chosen:
-        chosen.append(pinned.id)
-    if not chosen:
-        errors.append("Choose at least one thing to work on." if open_ids
-                      else "Nothing is collecting in that language yet.")
+    # No project to choose. Signing up is an offer of a language, and every
+    # project collecting that language draws on it - which is why there is
+    # something to check even in a language nothing collects yet: the first
+    # speaker to arrive types the wording everyone after them votes on.
 
     photo_name = None
     if not errors:
@@ -358,9 +337,7 @@ def join():
     if errors:
         for e in errors:
             flash(e, "error")
-        return render_template("join.html", form=request.form,
-                               pinned=exclusive_from_request(),
-                               all_projects=approved_projects()), 400
+        return render_template("join.html", form=request.form), 400
 
     # Held, not created. The Volunteer only exists once the code comes back.
     pending = PendingSignup.query.filter_by(email=email).first()
@@ -375,8 +352,6 @@ def join():
                            else "anytime")
     pending.photo = photo_name or pending.photo
     pending.photo_consent = consent
-    pending.project_ids = ",".join(str(c) for c in chosen)
-    pending.exclusive_project_id = pinned.id if pinned is not None else None
     pending.sends = 1
     db.session.commit()
 
@@ -390,9 +365,7 @@ def join():
         # Deliberately not 502: Cloudflare replaces a 502 from the origin with
         # its own error page, so the volunteer saw a gateway error instead of
         # this message. 503 reaches them, and still reads as our fault.
-        return render_template("join.html", form=request.form,
-                               pinned=exclusive_from_request(),
-                               all_projects=approved_projects()), 503
+        return render_template("join.html", form=request.form), 503
 
     session["signup_email"] = email
     return redirect(url_for("main.verify"))
@@ -442,10 +415,6 @@ def verify():
     db.session.add(volunteer)
     db.session.flush()
 
-    # Opt-ins are created here, from the choices held on the pending signup:
-    # there was nothing to attach them to until the address proved real.
-    wanted = [int(p) for p in (pending.project_ids or "").split(",") if p]
-    opt_in(volunteer, wanted, exclusive_id=pending.exclusive_project_id)
     db.session.delete(pending)
     db.session.commit()
 
@@ -455,8 +424,8 @@ def verify():
 
     given = top_up(volunteer)
     return render_template("joined.html", volunteer=volunteer, assigned=given,
-                           token=token, projects=[p for _vp, p in
-                                                 joined(volunteer)])
+                           token=token,
+                           projects=active_for(volunteer))
 
 
 @main.route("/verify/resend", methods=["POST"])
@@ -744,9 +713,6 @@ def settings(token):
     return redirect(url_for("main.settings", token=token))
 
 
-PROJECTS_PER_PAGE = 12
-
-
 def page_window(page, pages, span=2):
     """Page numbers to show, with None where a gap is elided.
 
@@ -765,146 +731,6 @@ def page_window(page, pages, span=2):
         out.append(n)
         last = n
     return out
-
-PROJECT_SORTS = {
-    "recommended": "Recommended",
-    "newest": "Newest first",
-    "name": "A to Z",
-}
-
-
-@main.route("/projects")
-def projects_page():
-    """The index of work available: searchable, filterable, paged.
-
-    Built for a list that grows. Counts come from two grouped queries rather
-    than one per project, and only the page being shown is measured - the
-    previous version called item_count() and preview() for every project, which
-    was fine for three and would not have been for thirty.
-    """
-    q = (request.args.get("q") or "").strip()
-    language = canonical_language(request.args.get("language") or "")
-    kind = request.args.get("kind") or ""
-    sort = request.args.get("sort") or "recommended"
-    page = max(1, request.args.get("page", 1, type=int))
-
-    query = Project.query.filter(Project.status.in_(("approved", "paused")))
-    if q:
-        like = f"%{q}%"
-        query = query.filter(db.or_(Project.title.ilike(like),
-                                    Project.summary.ilike(like)))
-    if language:
-        query = (query.join(ProjectLanguage,
-                            ProjectLanguage.project_id == Project.id)
-                 .filter(ProjectLanguage.language == language))
-    if kind in ITEM_FORMATS:
-        query = query.filter(Project.item_format == kind)
-
-    if sort == "newest":
-        query = query.order_by(Project.created_at.desc(), Project.id.desc())
-    elif sort == "name":
-        query = query.order_by(Project.title.asc())
-    else:
-        query = query.order_by(Project.sort_order, Project.id)
-
-    total = query.count()
-    pages = max(1, -(-total // PROJECTS_PER_PAGE))
-    page = min(page, pages)
-    shown = (query.limit(PROJECTS_PER_PAGE)
-             .offset((page - 1) * PROJECTS_PER_PAGE).all())
-
-    ids = [p.id for p in shown]
-    items = dict(db.session.query(Word.project_id, db.func.count(Word.id))
-                 .filter(Word.project_id.in_(ids))
-                 .group_by(Word.project_id).all()) if ids else {}
-    langs = dict(db.session.query(ProjectLanguage.project_id,
-                                  db.func.count(ProjectLanguage.id))
-                 .filter(ProjectLanguage.project_id.in_(ids))
-                 .group_by(ProjectLanguage.project_id).all()) if ids else {}
-    done = dict(db.session.query(Word.project_id,
-                                 db.func.count(WordState.id))
-                .join(WordState, WordState.word_id == Word.id)
-                .filter(Word.project_id.in_(ids),
-                        WordState.done.is_(True))
-                .group_by(Word.project_id).all()) if ids else {}
-
-    # Languages worth offering as a filter: those some project collects.
-    filter_languages = sorted(
-        {code for (code,) in db.session.query(ProjectLanguage.language)
-         .distinct()},
-        key=lambda c: current_app.config["ALL_LANGUAGES"].get(
-            c, {}).get("name", c))
-
-    return render_template(
-        "projects.html", projects=shown, counts=items, langs=langs, done=done,
-        total=total, page=page, pages=pages, q=q, language=language,
-        kind=kind, sort=sort, sorts=PROJECT_SORTS, formats=ITEM_FORMATS,
-        filter_languages=filter_languages,
-        window=page_window(page, pages))
-
-
-@main.route("/projects/<slug>")
-def project_page(slug):
-    proj = Project.query.filter_by(slug=slug).first()
-    if not proj or proj.status not in ("approved", "paused"):
-        abort(404)
-    language = canonical_language(request.args.get("language") or "") or None
-    if language not in proj.language_codes:
-        language = proj.language_codes[0] if proj.language_codes else None
-    return render_template(
-        "project.html", project=proj, language=language,
-        preview=proj.preview(language, limit=6), counts=item_counts(proj),
-        progress=proj.progress(language),
-        verified=consensus.verified_counts(project_id=proj.id),
-        typed=consensus.typed_counts(project_id=proj.id),
-        share_link=(current_app.config["SITE_URL"].rstrip("/")
-                    + url_for("main.join", project=proj.slug)))
-
-
-@main.route("/w/<token>/projects", methods=["GET", "POST"])
-def my_projects(token):
-    """Opt in or out, from the volunteer's own link."""
-    volunteer = volunteer_from_token(token, require_active=False)
-    if not volunteer:
-        flash("That link is not valid any more. We can email you a new one.",
-              "error")
-        return redirect(url_for("main.resend"))
-
-    available = approved_projects(volunteer.language)
-    mine = {vp.project_id: vp for vp, _p in joined(volunteer)}
-
-    if request.method == "POST":
-        wanted = {int(p) for p in request.form.getlist("projects")
-                  if p.isdigit()}
-        if not wanted:
-            flash("Keep at least one — otherwise there is nothing to send you.",
-                  "error")
-            return redirect(url_for("main.my_projects", token=token))
-        opt_in(volunteer, wanted - set(mine))
-        for pid in set(mine) - wanted:
-            opt_out(volunteer, pid)
-        # Their current list may hold items from a project they just left; hand
-        # those back rather than asking for work they opted out of.
-        stale = (Assignment.query
-                 .join(Word, Word.id == Assignment.word_id)
-                 .filter(Assignment.volunteer_id == volunteer.id,
-                         Assignment.status == "pending",
-                         ~Word.project_id.in_(wanted))
-                 .all())
-        for item in stale:
-            item.status = "expired"
-        db.session.commit()
-        top_up(volunteer)
-        flash("Saved. Your next list comes from the projects you chose.", "ok")
-        return redirect(url_for("main.my_projects", token=token))
-
-    return render_template("my_projects.html", volunteer=volunteer, token=token,
-                           projects=available, mine=mine,
-                           counts={p.id: p.item_count(volunteer.language)
-                                   for p in available},
-                           previews={p.id: p.preview(volunteer.language,
-                                                     limit=3)
-                                     for p in available})
 
 
 FLAG_REASONS = {
@@ -1004,6 +830,9 @@ def languages_csv():
                          "shola-language-codes")
 
 
+
+
+
 @main.route("/submit", methods=["GET", "POST"])
 def submit_project():
     """Anyone can propose a body of work. An admin decides whether it runs."""
@@ -1065,6 +894,8 @@ def submit_project():
         slug=unique_slug(title), title=title, summary=summary,
         item_format=item_format, votes_to_settle=threshold,
         has_options=has_options, status="pending",
+        # Asked for, not granted. The window opens on approval, if we agree.
+        exclusive_requested=bool(request.form.get("exclusive")),
         submitter_name=name, submitter_email=email, submitter_org=org,
         sort_order=100)
     db.session.add(project)

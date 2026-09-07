@@ -5,15 +5,16 @@ Something new to work on, {{ first }}
 {{ summary }}
 
 {{ item_count }} {{ item_plural }} in {{ language_name }}.
-{% if has_options %}You would choose between options, as you do now.{% else %}You would type the answer yourself.{% endif %}
+{% if has_options %}You choose between options, as you do now.{% else %}You type the answer yourself.{% endif %}
 
-Opting in means your list is shared between this and what you already do -
-still {{ send_size }} items each time, not more.
+It is already in your list - still {{ send_size }} items each time, not more,
+shared between this and what you already do.
 
-Have a look and decide:
-{{ opt_in_link }}
+Have a look:
+{{ words_link }}
 
-Not interested? Ignore this. Nothing changes.
+Nothing to do if you would rather not - your next list arrives as usual
+either way.
 
 --
 You get this because you check {{ language_name }} items for SHOLA.

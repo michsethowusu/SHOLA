@@ -22,7 +22,6 @@
     </a>
     <nav class="topnav">
       <a href="{{ url_for('main.champions') }}" {% if request.endpoint == 'main.champions' %}class="here"{% endif %}>Champions</a>
-      <a href="{{ url_for('main.projects_page') }}" {% if request.endpoint in ('main.projects_page', 'main.project_page') %}class="here"{% endif %}>Projects</a>
       <a href="{{ url_for('main.stats') }}" {% if request.endpoint == 'main.stats' %}class="here"{% endif %}>Progress</a>
       <a href="{{ url_for('main.api_docs') }}" {% if request.endpoint == 'main.api_docs' %}class="here"{% endif %}>API</a>
       {% if session.token %}
@@ -53,8 +52,6 @@
     <span>SHOLA: Share Your Language</span>
     <span class="faint">·</span>
     <a href="{{ url_for('main.champions') }}">Champions</a>
-    <span class="faint">·</span>
-    <a href="{{ url_for('main.projects_page') }}">Projects</a>
     <span class="faint">·</span>
     <a href="{{ url_for('main.submit_project') }}">Submit a project</a>
     <span class="faint">·</span>

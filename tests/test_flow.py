@@ -71,17 +71,15 @@ def seed(n_words=30, project=None):
 def add_volunteer(email, language="twi", days="", projects=None):
     """A volunteer, opted in to the core project unless told otherwise.
 
-    Nothing is sent to a volunteer with no project, so a fixture that forgot to
-    opt them in would test an empty queue rather than the queue.
+    A volunteer is a language and nothing more: every approved project
+    collecting that language sends them work, so there is nothing to opt in to.
+    The `projects` argument is accepted and ignored, so callers written before
+    that change still read sensibly.
     """
-    from shola.projects import opt_in
     v = Volunteer(name=f"Test {email[0].upper()}", email=email,
                   language=language, available_days=days)
     db.session.add(v)
     db.session.commit()
-    ids = projects if projects is not None else [core_project().id]
-    if ids:
-        opt_in(v, ids)
     return v
 
 

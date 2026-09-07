@@ -29,8 +29,9 @@
     <div style="margin-top:44px">
       <h2>By project</h2>
       <p class="muted">
-        Each project is a separate body of work. Volunteers opt in to the ones
-        they want and each list is shared between them.
+        Each project is a separate body of work. Every speaker of a language a
+        project collects is sent items from it, and a day's list is shared
+        between the projects covering their language.
       </p>
       <div class="scroll-x" style="margin-top:14px">
         <table class="plain">
@@ -44,8 +45,7 @@
             {% for row in per_project %}
               <tr>
                 <td>
-                  <a href="{{ url_for('main.project_page', slug=row.project.slug) }}">
-                    <strong>{{ row.project.title }}</strong></a>
+                  <strong>{{ row.project.title }}</strong>
                   <div class="muted" style="font-size:.82rem">
                     {{ row.project.item_plural }} ·
                     {{ row.project.languages.count() }}

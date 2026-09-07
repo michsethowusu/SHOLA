@@ -23,7 +23,7 @@
         {% else %}
           {% for code in languages %}{{ ALL_LANGUAGES[code].name }}{% if not loop.last %}, {% endif %}{% endfor %}
         {% endif %}
-        are emailed and can opt in. From then on you can watch it fill up on the
+        start receiving items from it. From then on you can watch it fill up on the
         <a href="{{ url_for('main.stats') }}">progress page</a> and download the
         answers from the <a href="{{ url_for('main.api_docs') }}">API</a> at any
         time — you do not need to ask us for the data.

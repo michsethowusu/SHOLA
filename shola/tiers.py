@@ -397,6 +397,25 @@ def lease_words(volunteer, count, today=None):
             got = lease_from_project(volunteer, project, short, today=today)
             given += got
             short -= got
+
+    # An exclusive run narrows the list to one project. If that project turns
+    # out to have nothing this volunteer can be given - every remaining item
+    # already leased to somebody else, which a small project reaches quickly -
+    # then the promise of priority has been kept and there is nothing left to
+    # honour. Sending an empty list instead would serve nobody, so the rest of
+    # the projects are offered after all.
+    if given == 0 and len(projects) == 1:
+        from .projects import approved_projects
+
+        others = [p for p in approved_projects(volunteer.language)
+                  if p.id != projects[0].id]
+        short = count
+        for project in rotate(others, volunteer.done_count()):
+            if short <= 0:
+                break
+            got = lease_from_project(volunteer, project, short, today=today)
+            given += got
+            short -= got
     return given
 
 

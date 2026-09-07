@@ -19,7 +19,7 @@ from shola.assignment import record_verdict                     # noqa: E402
 from shola.models import (CORE_PROJECT, Assignment, Candidate,     # noqa: E402
                           Evaluation, Flag, Project, ProjectLanguage,
                           Volunteer, Word, WordState, db)
-from shola.projects import (active_for, joined, opt_in, opt_out,  # noqa: E402
+from shola.projects import (active_for, exclusive_project,  # noqa: E402
                             shares)
 from shola.consensus import tally                               # noqa: E402
 from shola.tiers import (answers_target, daily_quota, open_query,  # noqa: E402
@@ -82,10 +82,14 @@ def make_project(slug, title, langs, options=True, n=40, fmt="sentence",
 
 
 def volunteer(email, language="twi", project_ids=(), exclusive_id=None):
+    """A volunteer is a language. `project_ids` is accepted and ignored.
+
+    There is nothing to opt in to: every approved project collecting their
+    language draws on them.
+    """
     v = Volunteer(name="Test Person", email=email, language=language)
     db.session.add(v)
     db.session.commit()
-    opt_in(v, list(project_ids), exclusive_id=exclusive_id)
     return v
 
 
@@ -130,21 +134,21 @@ def main():
 
     print("\nitems only reach speakers of the language they were filed under")
     with app.app_context():
-        ga_speaker = volunteer("ga@example.com", "ga",
-                               [core().id, Project.query.filter_by(
-                                   slug="read-sentences").first().id])
-        # read-sentences collects Twi and Ewe only, so opting in is refused.
-        ok &= check("a project is not joinable in a language it ignores",
-                    len(joined(ga_speaker)) == 1,
-                    str([p.slug for _v, p in joined(ga_speaker)]))
+        ga_speaker = volunteer("ga@example.com", "ga")
+        # read-sentences collects Twi and Ewe only, so a Ga speaker is never
+        # drawn into it however many projects exist.
+        slugs = [p.slug for p in active_for(ga_speaker)]
+        ok &= check("a project is not used in a language it ignores",
+                    "read-sentences" not in slugs, str(slugs))
+        ok &= check("but the projects covering their language are",
+                    "everyday-words" in slugs, str(slugs))
 
-    print("\none list, shared between the projects someone joined")
+    print("\none list, shared between every project in their language")
     with app.app_context():
         from shola.models import CORE_PROJECT as CP
         seed_core(30)
         sentences = Project.query.filter_by(slug="read-sentences").first()
-        both = volunteer("both@example.com", "twi",
-                         [core().id, sentences.id])
+        both = volunteer("both@example.com", "twi")
         n = top_up(both)
         ok &= check("the list is the configured length",
                     n == app.config["WORDS_PER_DAY"], f"leased {n}")
@@ -169,7 +173,7 @@ def main():
     with app.app_context():
         tiny = make_project("tiny-job", "Check a handful of names", ["twi"],
                             n=2, threshold=1)
-        mixed = volunteer("mixed@example.com", "twi", [core().id, tiny.id])
+        mixed = volunteer("mixed@example.com", "twi")
         n = top_up(mixed)
         ok &= check("the list is still full length",
                     n == app.config["WORDS_PER_DAY"], f"leased {n}")
@@ -178,29 +182,93 @@ def main():
         ok &= check("taking everything the small project had",
                     from_tiny == 2, str(from_tiny))
 
-    print("\na share link puts one project first until it is finished")
+    print("\nan exclusive run is the only project sent, then it is not")
     with app.app_context():
         small = make_project("one-off", "Name these market goods", ["twi"],
                              n=3, threshold=1)
-        guest = volunteer("guest@example.com", "twi",
-                          [core().id, small.id], exclusive_id=small.id)
+        speaker = volunteer("guest@example.com", "twi")
+        ok &= check("before the window, everything in their language is used",
+                    len(active_for(speaker)) > 1,
+                    str([p.slug for p in active_for(speaker)]))
+
+        small.start_exclusive(30)
+        db.session.commit()
+        ok &= check("the window is live", small.is_exclusive)
+        ok &= check("it is found for the language it covers",
+                    exclusive_project("twi") is not None
+                    and exclusive_project("twi").slug == "one-off")
         ok &= check("only the exclusive project is active",
-                    [p.slug for p in active_for(guest)] == ["one-off"],
-                    str([p.slug for p in active_for(guest)]))
-        n = top_up(guest)
+                    [p.slug for p in active_for(speaker)] == ["one-off"],
+                    str([p.slug for p in active_for(speaker)]))
+        n = top_up(speaker)
         ok &= check("so the whole list comes from it",
                     all(a.word.project_id == small.id
-                        for a in guest.assignments) and n == 3, f"{n} leased")
+                        for a in speaker.assignments) and n == 3, f"{n} leased")
+
+        # Nobody outside its languages is affected: an Ewe speaker carries on.
+        ewe = volunteer("ewe-during@example.com", "ewe")
+        ok &= check("speakers of other languages are untouched",
+                    exclusive_project("ewe") is None
+                    and len(active_for(ewe)) >= 1,
+                    str([p.slug for p in active_for(ewe)]))
+
         # Answer all three by tapping an option: typing would add options
         # without closing anything, so the project would never run out.
-        for a in list(guest.assignments):
+        for a in list(speaker.assignments):
             opt = [c for c in a.word.candidates if c.language == "twi"][0]
-            record_verdict(guest, a.word_id, candidate_id=opt.id)
-        ok &= check("once it runs out the rest open up",
-                    len(active_for(guest)) == 2,
-                    str([p.slug for p in active_for(guest)]))
-        n = top_up(guest)
-        ok &= check("and the next list is drawn from them", n > 0, f"{n}")
+            record_verdict(speaker, a.word_id, candidate_id=opt.id)
+        ok &= check("an exclusive project that has run dry does not "
+                    "starve them",
+                    len(active_for(speaker)) > 1,
+                    str([p.slug for p in active_for(speaker)]))
+        n = top_up(speaker)
+        ok &= check("and the next list is drawn from the others", n > 0, f"{n}")
+        # Leave no window behind: a live one would silence every project for
+        # Twi in the sections that follow.
+        small.exclusive_until = None
+        db.session.commit()
+
+    print("\nthe window ends by itself, and extending never shortens it")
+    with app.app_context():
+        from datetime import date, timedelta
+        job = make_project("timed-job", "Check these place names", ["twi"],
+                           n=4, threshold=1)
+        job.start_exclusive(30)
+        db.session.commit()
+        ok &= check("thirty days out", job.exclusive_days_left == 30,
+                    str(job.exclusive_days_left))
+
+        # Extending adds to what is left rather than restarting.
+        job.start_exclusive(10, extend=True)
+        db.session.commit()
+        ok &= check("extending adds to the remainder",
+                    job.exclusive_days_left == 40,
+                    str(job.exclusive_days_left))
+
+        # A window that has passed is simply not exclusive any more - nothing
+        # has to remember to switch it off.
+        job.exclusive_until = date.today() - timedelta(days=1)
+        db.session.commit()
+        ok &= check("yesterday's window is over", not job.is_exclusive)
+        ok &= check("and it is no longer found",
+                    exclusive_project("twi") is None)
+        ok &= check("so the list goes back to every project",
+                    len(active_for(volunteer("after@example.com", "twi"))) > 1)
+
+        # Starting one fresh does not inherit the stale date.
+        job.start_exclusive(7)
+        db.session.commit()
+        ok &= check("a fresh run counts from today",
+                    job.exclusive_days_left == 7, str(job.exclusive_days_left))
+
+        # A paused project holds no window, whatever its date says.
+        job.status = "paused"
+        db.session.commit()
+        ok &= check("a paused project does not hold the pool",
+                    exclusive_project("twi") is None)
+        job.status = "approved"
+        job.exclusive_until = None
+        db.session.commit()
 
     print("\na project with no options collects answers all the same")
     with app.app_context():
@@ -331,10 +399,15 @@ def main():
     with app.app_context():
         even = make_project("even-spread", "Answer these evenly", ["twi"],
                             options=True, n=6, threshold=4)
+        # An exclusive run is how a single project becomes the only source now
+        # that nobody opts in, and it is what this check needs: the question is
+        # how one project spreads its own items.
+        even.start_exclusive(30)
+        db.session.commit()
         # Ten volunteers, five items each: with 6 items and a target of 4 there
         # is room for 24 answers, so nothing should get 4 while another gets 0.
         for i in range(10):
-            v = volunteer(f"even{i}@example.com", "twi", [even.id])
+            v = volunteer(f"even{i}@example.com", "twi")
             top_up(v)
         counts = {}
         for a in Assignment.query.join(Word, Word.id == Assignment.word_id) \
@@ -346,12 +419,16 @@ def main():
         ok &= check("and no item got far more attention than another",
                     spread and spread[-1] - spread[0] <= 1,
                     f"per-item counts {spread}")
+        even.exclusive_until = None
+        db.session.commit()
 
     print("\na skipped item goes back to the pool, but never to the same person")
     with app.app_context():
         skipping = make_project("skip-test", "Skip what you cannot answer",
                                 ["twi"], options=True, n=3, threshold=2)
-        skipper = volunteer("skipper@example.com", "twi", [skipping.id])
+        skipping.start_exclusive(30)     # the only source, so the skip is seen
+        db.session.commit()
+        skipper = volunteer("skipper@example.com", "twi")
         top_up(skipper)
         first = skipper.assignments.first()
         skipped_id = first.word_id
@@ -379,6 +456,10 @@ def main():
         ok &= check("but it does reach somebody else",
                     skipped_id in {a.word_id for a in other.assignments},
                     "a skipped item never reached another volunteer")
+        # Put the pool back: a window left open silences every other Twi
+        # project for the rest of the run.
+        skipping.exclusive_until = None
+        db.session.commit()
 
     print("\nenough skips makes it a problem, not everybody's problem")
     with app.app_context():
@@ -462,9 +543,19 @@ def main():
 
     print("\nreporting an item takes it out of everyone's queue")
     with app.app_context():
-        reporter = volunteer("reporter@example.com", "twi", [core().id])
+        # The check is about one specific item leaving everyone's queue, so
+        # the item has to be predictable: an exclusive run on the project it
+        # belongs to is how a single project becomes the only source now.
+        flagged_project = make_project("flag-test", "Report what is broken",
+                                       ["twi"], options=True, n=4, threshold=2)
+        flagged_project.start_exclusive(30)
+        db.session.commit()
+        reporter = volunteer("reporter@example.com", "twi")
         top_up(reporter)
-        target = reporter.assignments.first().word_id
+        first = reporter.assignments.first()
+        ok &= check("the reporter was given something to report",
+                    first is not None)
+        target = first.word_id
         tok = token_for(app, reporter)
     client = app.test_client()
     r = client.post(f"/w/{tok}/{target}/flag",
@@ -486,6 +577,10 @@ def main():
                     target not in {a.word_id for a in other.assignments})
         ok &= check("no verdict was recorded for it",
                     Evaluation.query.filter_by(word_id=target).count() == 0)
+        # Re-queried, not reused: the object from the earlier app context is
+        # detached here, so assigning to it would change nothing.
+        Project.query.filter_by(slug="flag-test").first().exclusive_until = None
+        db.session.commit()
 
     print("\nsubmitting a project, then approving it")
     with app.app_context():
@@ -514,10 +609,10 @@ def main():
         ok &= check("and its own threshold", proposed.votes_to_settle == 3)
         pid = proposed.id
         # Nobody is offered a pending project.
-        waiting = volunteer("waiting@example.com", "twi", [pid])
-        ok &= check("nobody can opt in before approval",
-                    len(joined(waiting)) == 0,
-                    str([p.slug for _v, p in joined(waiting)]))
+        waiting = volunteer("waiting@example.com", "twi")
+        ok &= check("a pending project is not used",
+                    pid not in {p.id for p in active_for(waiting)},
+                    str([p.slug for p in active_for(waiting)]))
 
     print("\none file, many languages, one item each")
     r = fresh.post("/submit", data={
@@ -695,7 +790,7 @@ def main():
     ok &= check("a link for anyone else does not",
                 b"Waiting for you" not in r.data)
 
-    print("\napproving a project lets volunteers opt in")
+    print("\napproving a project puts it in front of speakers")
     r = anon.post(f"/admin/project/{pid}/decide",
                   data={"action": "approve", "note": "looks fine"},
                   follow_redirects=True)
@@ -703,12 +798,13 @@ def main():
         proj = db.session.get(Project, pid)
         ok &= check("it is approved", proj.status == "approved", proj.status)
         joiner = Volunteer.query.filter_by(email="waiting@example.com").first()
-        ok &= check("and now it can be joined",
-                    len(opt_in(joiner, [pid])) == 1)
-        tok = token_for(app, joiner)
-    r = app.test_client().get(f"/w/{tok}/projects")
-    ok &= check("it shows on the volunteer's own page",
-                b"Check these greetings in Twi" in r.data)
+        # Nothing to join: approving is what puts it in front of speakers of
+        # its languages.
+        ok &= check("and it now draws on speakers of its languages",
+                    pid in {p.id for p in active_for(joiner)},
+                    str([p.slug for p in active_for(joiner)]))
+        ok &= check("it was not used while it was pending",
+                    proj.approved_at is not None)
 
     print("\nempty projects cannot be approved")
     with app.app_context():
@@ -726,28 +822,53 @@ def main():
                     db.session.get(Project, hid).status == "pending"
                     and b"no items loaded" in r.data)
 
-    print("\nopting out hands back work from the project you left")
+    print("\nthe admin projects directory finds any project, in any state")
     with app.app_context():
-        leaver = Volunteer.query.filter_by(email="both@example.com").first()
-        sentences = Project.query.filter_by(slug="read-sentences").first()
-        tok = token_for(app, leaver)
-        held_before = {a.word.project_id for a in leaver.pending_today()}
-        ok &= check("they hold work from both", len(held_before) == 2,
-                    str(held_before))
-    r = app.test_client().post(f"/w/{tok}/projects",
-                               data={"projects": [str(core_id(app))]},
-                               follow_redirects=True)
+        for i in range(24):
+            make_project(f"bulk-admin-{i:02d}",
+                         f"Bulk admin project {i:02d}", ["twi"], n=2,
+                         status="pending" if i % 2 else "approved")
+    d = anon.get("/admin/projects")
+    ok &= check("the directory renders", d.status_code == 200,
+                str(d.status_code))
+    ok &= check("with a pager", b"Next" in d.data)
+    ok &= check("search narrows it",
+                b"Bulk admin project 07" in
+                anon.get("/admin/projects?q=project+07").data)
+    ok &= check("and filtering by status works",
+                b"pending" in anon.get("/admin/projects?status=pending").data)
+    ok &= check("a rejected project is still findable, unlike before",
+                anon.get("/admin/projects?status=rejected").status_code == 200)
+    ok &= check("it is behind the admin check",
+                app.test_client().get("/admin/projects").status_code in (302, 403),
+                str(app.test_client().get("/admin/projects").status_code))
+
+    print("\nan exclusive run can be started and ended from the admin page")
     with app.app_context():
-        leaver = Volunteer.query.filter_by(email="both@example.com").first()
-        held_after = {a.word.project_id for a in leaver.pending_today()}
-        ok &= check("afterwards only the one they kept",
-                    held_after == {core_id(app)}, str(held_after))
-    r = app.test_client().post(f"/w/{tok}/projects", data={},
-                               follow_redirects=True)
+        target = make_project("admin-excl", "Check these proverbs", ["twi"],
+                              n=3, status="approved")
+        tid = target.id
+    anon.post(f"/admin/project/{tid}/decide",
+              data={"action": "exclusive", "days": "14"},
+              follow_redirects=True)
     with app.app_context():
-        leaver = Volunteer.query.filter_by(email="both@example.com").first()
-        ok &= check("and leaving everything is refused",
-                    len(joined(leaver)) >= 1)
+        target = db.session.get(Project, tid)
+        ok &= check("it is exclusive for the days given",
+                    target.is_exclusive and target.exclusive_days_left == 14,
+                    str(target.exclusive_days_left))
+    anon.post(f"/admin/project/{tid}/decide",
+              data={"action": "extend", "days": "7"}, follow_redirects=True)
+    with app.app_context():
+        ok &= check("extending adds to it",
+                    db.session.get(Project, tid).exclusive_days_left == 21,
+                    str(db.session.get(Project, tid).exclusive_days_left))
+    anon.post(f"/admin/project/{tid}/decide",
+              data={"action": "end-exclusive"}, follow_redirects=True)
+    with app.app_context():
+        target = db.session.get(Project, tid)
+        ok &= check("and it can be ended", not target.is_exclusive)
+        ok &= check("which clears the request too",
+                    not target.exclusive_requested)
 
     print("\nthe API reports every answer with its votes")
     api = app.test_client()
@@ -803,58 +924,7 @@ def main():
     r = api.get("/api/words/twi")
     ok &= check("the old words endpoint still answers", r.status_code == 200)
 
-    print("\nthe projects index searches, filters and pages")
-    with app.app_context():
-        # Enough to need more than one page.
-        for i in range(16):
-            make_project(f"bulk-{i}", f"Bulk project {i:02d} about markets",
-                         ["twi"] if i % 2 else ["ewe"], options=True, n=2,
-                         fmt="sentence" if i % 3 else "word", threshold=2)
-        from shola.models import Project as P
-        live = P.query.filter(P.status == "approved").count()
-
-    idx = app.test_client()
-    r = idx.get("/projects")
-    ok &= check("the index renders", r.status_code == 200)
-    body = r.data.decode()
-    rows = body.count('class="project-row"')
-    ok &= check("it pages rather than listing everything", rows <= 12,
-                f"{rows} rows on one page")
-    ok &= check("and says how many there are and where you are",
-                "page 1 of" in body, "expected a page indicator")
-    ok &= check("with pager links", 'class="pager"' in body)
-
-    r2 = idx.get("/projects?page=2")
-    b2 = r2.data.decode()
-    ok &= check("page 2 shows different projects",
-                b2.count('class="project-row"') > 0
-                and b2 != body, "page 2 looked identical")
-
-    r = idx.get("/projects?q=Bulk+project+03")
-    found = r.data.decode().count('class="project-row"')
-    ok &= check("search narrows it", found == 1, f"{found} matches")
-    r = idx.get("/projects?q=nothing-like-this-exists")
-    ok &= check("and says so when nothing matches",
-                b"Nothing matches that" in r.data)
-
-    r = idx.get("/projects?language=ewe")
-    ok &= check("filtering by language works",
-                r.status_code == 200
-                and b"Bulk project 00" in r.data, "expected an Ewe project")
-    ok &= check("and excludes the others",
-                b"Bulk project 01" not in r.data, "a Twi project leaked in")
-
-    r = idx.get("/projects?kind=word")
-    ok &= check("filtering by kind of item works", r.status_code == 200)
-    r = idx.get("/projects?sort=name")
-    ok &= check("sorting by name works", r.status_code == 200)
-    r = idx.get("/projects?sort=newest")
-    ok &= check("sorting by newest works", r.status_code == 200)
-
-    r = idx.get("/projects?page=999")
-    ok &= check("a page past the end lands on the last one, not an error",
-                r.status_code == 200 and b"project-row" in r.data)
-
+    print("\nthe pager helper elides sensibly")
     from shola.views import page_window
     ok &= check("a short pager lists every page",
                 page_window(1, 5) == [1, 2, 3, 4, 5], str(page_window(1, 5)))
@@ -865,11 +935,15 @@ def main():
                 page_window(10, 40)[0] == 1 and page_window(10, 40)[-1] == 40)
 
     print("\nthe public pages hold together")
-    for path in ("/", "/projects", "/projects/everyday-words", "/stats",
-                 "/api", "/submit", "/join"):
+    for path in ("/", "/stats", "/api", "/submit", "/join"):
         r = api.get(path)
         ok &= check(f"{path} renders", r.status_code == 200,
                     f"HTTP {r.status_code}")
+    # The public project directory is gone: volunteers do not choose projects,
+    # so an index of them was a page with nothing to decide on it.
+    for path in ("/projects", "/projects/everyday-words"):
+        ok &= check(f"{path} is gone", api.get(path).status_code == 404,
+                    f"HTTP {api.get(path).status_code}")
 
     print("\n" + ("ALL CHECKS PASSED" if ok else "SOME CHECKS FAILED"))
     print(f"{sum(PASSED)}/{len(PASSED)} checks passed")

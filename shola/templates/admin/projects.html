@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}All projects{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap">
+    <p class="eyebrow">Admin</p>
+    <h1 style="font-size:clamp(1.7rem,5vw,2.2rem)">All projects</h1>
+    <p class="muted">
+      {{ total }} project{{ '' if total == 1 else 's' }}{% if pages > 1 %},
+      page {{ page }} of {{ pages }}{% endif %}.
+    </p>
+
+    <form class="filters" method="get"
+          action="{{ url_for('admin.projects') }}" style="margin-top:18px">
+      <input type="search" name="q" value="{{ q }}"
+             placeholder="Title, slug, submitter" aria-label="Search projects">
+      <select name="status" aria-label="Status">
+        <option value="">Any status</option>
+        {% for code in statuses %}
+          <option value="{{ code }}" {% if status == code %}selected{% endif %}>
+            {{ code }} ({{ by_status.get(code, 0) }})
+          </option>
+        {% endfor %}
+      </select>
+      <button class="btn small" type="submit">Filter</button>
+      {% if q or status %}
+        <a class="linkish" href="{{ url_for('admin.projects') }}">Clear</a>
+      {% endif %}
+    </form>
+
+    <div class="scroll-x" style="margin-top:18px">
+      <table class="plain">
+        <thead>
+          <tr>
+            <th>Project</th><th>Status</th><th>Items</th>
+            <th>Languages</th><th>Submitted</th><th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for project in projects %}
+            <tr>
+              <td>
+                <strong>{{ project.title }}</strong>
+                <div class="muted" style="font-size:.82rem">
+                  <code>{{ project.slug }}</code>
+                  {% if project.submitter_org or project.submitter_name %}
+                    · {{ project.submitter_org or project.submitter_name }}
+                  {% endif %}
+                </div>
+              </td>
+              <td>
+                {{ project.status }}
+                {% if project.is_exclusive %}
+                  <div class="muted" style="font-size:.82rem">
+                    exclusive, {{ project.exclusive_days_left }}d left
+                  </div>
+                {% elif project.exclusive_requested %}
+                  <div class="muted" style="font-size:.82rem">
+                    exclusive requested
+                  </div>
+                {% endif %}
+              </td>
+              <td>{{ project.item_count() | thousands }}</td>
+              <td>{{ project.languages.count() }}</td>
+              <td>{{ project.created_at.strftime('%-d %b %Y') }}</td>
+              <td>
+                <a href="{{ url_for('admin.project', project_id=project.id) }}">
+                  Open</a>
+              </td>
+            </tr>
+          {% else %}
+            <tr><td colspan="6" class="muted">Nothing matches that.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    {% if pages > 1 %}
+      <nav class="pager" aria-label="Pages">
+        {% set args = {'q': q, 'status': status} %}
+        {% if page > 1 %}
+          <a href="{{ url_for('admin.projects', page=page-1, **args) }}">← Back</a>
+        {% else %}
+          <span class="off">← Back</span>
+        {% endif %}
+        {% for n in window %}
+          {% if n is none %}
+            <span class="off">…</span>
+          {% elif n == page %}
+            <span class="here">{{ n }}</span>
+          {% else %}
+            <a href="{{ url_for('admin.projects', page=n, **args) }}">{{ n }}</a>
+          {% endif %}
+        {% endfor %}
+        {% if page < pages %}
+          <a href="{{ url_for('admin.projects', page=page+1, **args) }}">Next →</a>
+        {% else %}
+          <span class="off">Next →</span>
+        {% endif %}
+      </nav>
+    {% endif %}
+
+    <p class="hint" style="margin-top:26px">
+      <a href="{{ url_for('admin.dashboard') }}">Back to the dashboard</a>
+    </p>
+  </div>
+</section>
+{% endblock %}

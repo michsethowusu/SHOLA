@@ -139,6 +139,23 @@ How much is this?,all,2,,,,,</code></pre>
       </div>
 
       <div class="field">
+        <span class="label">Do you need it done quickly?</span>
+        <label class="opt-in" style="margin-top:8px">
+          <input type="checkbox" name="exclusive" value="1"
+                 {% if form and form.exclusive %}checked{% endif %}>
+          <span class="body">
+            <span class="t">Ask for an exclusive run</span>
+            <span class="s">
+              For 30 days after approval this would be the only project sent to
+              speakers of its languages, instead of sharing each day's list
+              with everything else. Then it takes its turn like the rest. We
+              decide whether to grant it.
+            </span>
+          </span>
+        </label>
+      </div>
+
+      <div class="field">
         <label for="file">The CSV</label>
         <p class="hint">One file for the whole project.</p>
         <input type="file" id="file" name="file" accept=".csv,text/csv" required>

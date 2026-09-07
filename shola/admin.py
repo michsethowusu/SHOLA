@@ -143,6 +143,54 @@ def dashboard():
                            admin_email=current_admin())
 
 
+PER_PAGE = 20
+
+STATUS_ORDER = ["pending", "approved", "paused", "rejected"]
+
+
+@admin.route("/projects")
+@require_admin
+def projects():
+    """Every project, whatever its state - searchable and paged.
+
+    The dashboard shows what needs attention. This is the list you come to when
+    you know a project exists and want to find it, which is a different job and
+    was the reason the public index existed at all.
+    """
+    from .views import page_window
+
+    q = (request.args.get("q") or "").strip()
+    status = request.args.get("status") or ""
+    page = max(1, request.args.get("page", 1, type=int))
+
+    query = Project.query
+    if q:
+        like = f"%{q}%"
+        query = query.filter(db.or_(Project.title.ilike(like),
+                                    Project.slug.ilike(like),
+                                    Project.summary.ilike(like),
+                                    Project.submitter_email.ilike(like),
+                                    Project.submitter_org.ilike(like)))
+    if status in STATUS_ORDER:
+        query = query.filter(Project.status == status)
+
+    total = query.count()
+    pages = max(1, -(-total // PER_PAGE))
+    page = min(page, pages)
+    shown = (query.order_by(Project.created_at.desc(), Project.id.desc())
+             .limit(PER_PAGE).offset((page - 1) * PER_PAGE).all())
+
+    by_status = dict(db.session.query(Project.status,
+                                      db.func.count(Project.id))
+                     .group_by(Project.status).all())
+    return render_template(
+        "admin/projects.html", projects=shown, counts={
+            p.id: item_counts(p) for p in shown},
+        q=q, status=status, statuses=STATUS_ORDER, by_status=by_status,
+        total=total, page=page, pages=pages,
+        window=page_window(page, pages), admin_email=current_admin())
+
+
 @admin.route("/project/<int:project_id>")
 @require_admin
 def project(project_id):
@@ -176,9 +224,19 @@ def decide(project_id):
         proj.status = "approved"
         proj.approved_at = datetime.utcnow()
         proj.review_note = note
-        db.session.commit()
-        flash(f"Approved. Announce it when you are ready and volunteers can "
-              f"opt in.", "ok")
+        # An exclusive run is asked for at submission and starts when the
+        # project does, not when it was uploaded: a window that began while the
+        # project sat in the queue would be half spent before anyone saw it.
+        if proj.exclusive_requested and proj.exclusive_until is None:
+            proj.start_exclusive(proj.exclusive_days)
+            db.session.commit()
+            flash(f"Approved, and exclusive until "
+                  f"{proj.exclusive_until:%-d %B} - it is the only project "
+                  f"going out in its languages until then.", "ok")
+        else:
+            db.session.commit()
+            flash("Approved. It goes out with the other projects; announce it "
+                  "when you are ready.", "ok")
     elif action == "reject":
         proj.status = "rejected"
         proj.review_note = note
@@ -197,6 +255,27 @@ def decide(project_id):
         proj.status = "approved"
         db.session.commit()
         flash("Live again.", "ok")
+    elif action in ("exclusive", "extend"):
+        if proj.status != "approved":
+            flash("Only a live project can run exclusively.", "error")
+            return redirect(url_for("admin.project", project_id=proj.id))
+        try:
+            days = int(request.form.get("days") or proj.exclusive_days or 30)
+        except ValueError:
+            days = 30
+        days = max(1, min(days, 365))
+        # Extending adds to whatever is left rather than restarting, so a nudge
+        # part-way through a run does not quietly shorten it.
+        proj.start_exclusive(days, extend=(action == "extend"))
+        db.session.commit()
+        flash(f"Exclusive until {proj.exclusive_until:%-d %B}. It is the only "
+              f"project going out in its languages until then.", "ok")
+    elif action == "end-exclusive":
+        proj.exclusive_until = None
+        proj.exclusive_requested = False
+        db.session.commit()
+        flash("Exclusive run ended. It now takes its turn with the others.",
+              "ok")
     else:
         flash("Unknown action.", "error")
     return redirect(url_for("admin.project", project_id=proj.id))

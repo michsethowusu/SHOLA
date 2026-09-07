@@ -176,7 +176,9 @@ def build_project_email(volunteer, project):
             volunteer.language]["name"],
         "preview": project.preview(volunteer.language, limit=3),
         "send_size": current_app.config["WORDS_PER_DAY"],
-        "opt_in_link": f"{base}/w/{token}/projects",
+        # No opting in to do: it is already in their list. The link goes
+        # where the work is.
+        "words_link": f"{base}/w/{token}",
         "settings_link": settings_link(volunteer),
     }
     return (f"New on SHOLA: {project.title}",

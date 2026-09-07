@@ -12,7 +12,7 @@ throughout. The table keeps its old name because renaming it would mean
 rewriting every foreign key on a live database for no behavioural gain.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
@@ -190,6 +190,17 @@ class Project(db.Model):
                        index=True)
     review_note = db.Column(db.String(600), default="", nullable=False)
 
+    # An exclusive run: while `exclusive_until` is in the future this project is
+    # the only one anybody is sent, in every language it covers. Somebody with a
+    # deadline can have the whole pool for a month rather than a slice of it,
+    # and when the window closes the project takes its turn with the rest.
+    #
+    # A date rather than a flag, so it ends by itself. A flag would depend on
+    # something remembering to clear it, and the thing that forgets is us.
+    exclusive_requested = db.Column(db.Boolean, default=False, nullable=False)
+    exclusive_days = db.Column(db.Integer, default=30, nullable=False)
+    exclusive_until = db.Column(db.Date)
+
     submitter_name = db.Column(db.String(120), default="", nullable=False)
     submitter_email = db.Column(db.String(255), default="", nullable=False)
     submitter_org = db.Column(db.String(160), default="", nullable=False)
@@ -220,6 +231,33 @@ class Project(db.Model):
     @property
     def approved(self):
         return self.status == "approved"
+
+    @property
+    def is_exclusive(self):
+        """Whether an exclusive run is live right now."""
+        return bool(self.exclusive_until
+                    and self.exclusive_until >= date.today())
+
+    @property
+    def exclusive_days_left(self):
+        if not self.is_exclusive:
+            return 0
+        return (self.exclusive_until - date.today()).days
+
+    def start_exclusive(self, days=None, extend=False, today=None):
+        """Begin or lengthen an exclusive run, returning the end date.
+
+        Extending adds to what is left rather than starting again, so nudging a
+        run along part-way through cannot accidentally shorten it.
+        """
+        today = today or date.today()
+        days = int(days or self.exclusive_days or 30)
+        base = (self.exclusive_until
+                if extend and self.exclusive_until
+                and self.exclusive_until > today else today)
+        self.exclusive_until = base + timedelta(days=days)
+        self.exclusive_days = days
+        return self.exclusive_until
 
     def item_count(self, language=None):
         q = Word.query.filter(Word.project_id == self.id)
@@ -308,10 +346,12 @@ class ProjectLanguage(db.Model):
 class VolunteerProject(db.Model):
     """A volunteer opting in to a project.
 
-    `exclusive` marks someone who arrived through a project's own share link.
-    They may join others, but nothing else is sent to them until the project
-    that brought them here is finished - the person who shared the link earned
-    that.
+    There used to be an `exclusive` column here, marking someone who arrived
+    through a project's own share link so that nothing else was sent to them.
+    Exclusivity is a property of a project now, not of how a volunteer was
+    recruited: an author uses the pool we have rather than bringing their own
+    people under special rules. The column is left in the database because
+    dropping one in SQLite means rebuilding the table, and nothing reads it.
     """
 
     __tablename__ = "volunteer_projects"
@@ -326,7 +366,6 @@ class VolunteerProject(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey("projects.id",
                                                      ondelete="CASCADE"),
                            nullable=False, index=True)
-    exclusive = db.Column(db.Boolean, default=False, nullable=False)
     joined_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     project = db.relationship("Project")
@@ -563,6 +602,9 @@ def ensure_columns():
                        "problem": "BOOLEAN NOT NULL DEFAULT 0"},
         "pending_signups": {"project_ids": "VARCHAR(200) NOT NULL DEFAULT ''",
                             "exclusive_project_id": "INTEGER"},
+        "projects": {"exclusive_requested": "BOOLEAN NOT NULL DEFAULT 0",
+                     "exclusive_days": "INTEGER NOT NULL DEFAULT 30",
+                     "exclusive_until": "DATE"},
         "words": {"project_id": "INTEGER",
                   "language": "VARCHAR(20)",
                   "position": "INTEGER NOT NULL DEFAULT 0"},
