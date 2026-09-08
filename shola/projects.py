@@ -1,10 +1,16 @@
-"""Which projects a volunteer works on, and how a day's list is shared out.
+"""Which projects a volunteer works on, and where a day's list comes from.
 
 A volunteer signs up to share their language. Nothing else is asked of them:
-every approved project collecting that language sends them work, and one short
-list a day arrives split across those projects as evenly as the numbers allow -
-five items across two projects is three and two, and nothing pretends
-otherwise.
+every approved project collecting that language draws on them, and one short
+list arrives on the days they chose.
+
+Each list comes from a **single** project. Five items split between two asks
+somebody to change task mid-list for no reason - translating a word and
+translating a sentence are different jobs, and five of one is easier than two
+of one and three of the other. Spreading happens across days instead: the
+choice rotates on the date, so tomorrow's list comes from somewhere else, and
+it is offset per volunteer so that on any one day the pool is spread across
+projects rather than everybody landing on the same one.
 
 Volunteers used to choose projects and could opt in and out of them. That was a
 question nobody needed to answer. Someone who has agreed to check Twi has
@@ -12,14 +18,11 @@ agreed to check Twi; asking them which body of work it belongs to makes them
 responsible for a decision that is ours, and a project nobody happened to tick
 would sit unanswered for reasons unrelated to whether it mattered.
 
-Two rules bend the split. A project whose queue is dry gives its share to the
-others rather than shortening the list. And a project inside its exclusive
-window is the only one sent, in every language it covers, until the window
-closes - which is what an author with a deadline is given instead of a slice of
-everyone's attention.
+One rule overrides the rotation: a project inside its exclusive window is the
+only one sent, in every language it covers, until the window closes - which is
+what an author with a deadline is given instead of a slice of everyone's
+attention.
 """
-
-from datetime import datetime
 
 from datetime import date
 
@@ -81,24 +84,11 @@ def active_for(volunteer):
     return approved_projects(language)
 
 
-def shares(total, n):
-    """Split `total` items across `n` projects, remainder to the first.
-
-    Five across two is [3, 2]. Perfectly even is impossible for most numbers
-    and pretending otherwise would mean sending a different amount than the
-    volunteer was told.
-    """
-    if n <= 0 or total <= 0:
-        return []
-    base, extra = divmod(total, n)
-    return [base + (1 if i < extra else 0) for i in range(n)]
-
-
 def rotate(projects, offset):
-    """Rotate the project order so the same project is not always short-changed.
+    """Rotate the project order so the same one is not always first.
 
-    With five items across two projects one gets three and one gets two. Fixed
-    order means the same project is always the one that gets two.
+    A day's list comes from a single project, so whichever project sorts first
+    would get every list for ever without this.
     """
     if not projects:
         return projects

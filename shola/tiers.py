@@ -362,61 +362,64 @@ def lease_from_project(volunteer, project, count, today=None):
     return given
 
 
-def lease_words(volunteer, count, today=None):
-    """Hand a volunteer up to `count` items, mixed across their projects.
+def project_for_today(volunteer, projects, today):
+    """The one project this volunteer's list comes from today.
 
-    The mix cannot be exact - five items across two projects is three and two -
-    so the order is rotated by how much the volunteer has already done, and a
-    project whose queue is dry passes its share to the others rather than
-    shortening the day's list.
+    A day's list comes from a single project. Five items split between two
+    projects asks somebody to change language task mid-list for no reason, and
+    it is the kind of variety nobody asked for: translating a word and
+    translating a sentence are different jobs, and doing five of one is easier
+    than doing two of one and three of the other.
+
+    Spreading happens across days instead. The choice is keyed on the date, so
+    it moves on tomorrow, and offset by the volunteer's id, so on any one day
+    the pool is spread across projects rather than everybody piling onto the
+    same one.
+
+    Keyed on the date rather than on work done, which is what it used to use:
+    that changed the moment somebody answered an item, so a second top-up the
+    same day could pick a different project and produce exactly the mixed list
+    this avoids.
+    """
+    from .projects import rotate
+
+    order = rotate(projects, today.toordinal() + volunteer.id)
+
+    # If today already started with a project, stay with it whatever the
+    # rotation says. Anything else would mix the list on a second top-up - the
+    # volunteer opening the site after reading the email, say.
+    started = {a.word.project_id for a in volunteer.pending_today(today)}
+    if started:
+        for project in order:
+            if project.id in started:
+                return [project]
+    return order
+
+
+def lease_words(volunteer, count, today=None):
+    """Hand a volunteer up to `count` items, all from one project.
+
+    Returns how many were leased. A project too dry to fill the list makes for
+    a short list rather than a mixed one; the next day's rotation moves on to
+    another project regardless.
     """
     if count <= 0:
         return 0
-    from .projects import active_for, rotate, shares
+    from .projects import active_for
 
+    today = today or date.today()
     projects = active_for(volunteer)
     if not projects:
         return 0
 
-    # Rotate so the project that gets the smaller share is not always the same
-    # one. Keyed on work done rather than a random number, so it is stable
-    # within a day and testable.
-    projects = rotate(projects, volunteer.done_count())
-
-    given = 0
-    for want, project in zip(shares(count, len(projects)), projects):
-        given += lease_from_project(volunteer, project, want, today=today)
-
-    # Whatever a dry project could not supply, offer to the others rather than
-    # sending a short list.
-    short = count - given
-    if short > 0:
-        for project in projects:
-            if short <= 0:
-                break
-            got = lease_from_project(volunteer, project, short, today=today)
-            given += got
-            short -= got
-
-    # An exclusive run narrows the list to one project. If that project turns
-    # out to have nothing this volunteer can be given - every remaining item
-    # already leased to somebody else, which a small project reaches quickly -
-    # then the promise of priority has been kept and there is nothing left to
-    # honour. Sending an empty list instead would serve nobody, so the rest of
-    # the projects are offered after all.
-    if given == 0 and len(projects) == 1:
-        from .projects import approved_projects
-
-        others = [p for p in approved_projects(volunteer.language)
-                  if p.id != projects[0].id]
-        short = count
-        for project in rotate(others, volunteer.done_count()):
-            if short <= 0:
-                break
-            got = lease_from_project(volunteer, project, short, today=today)
-            given += got
-            short -= got
-    return given
+    for project in project_for_today(volunteer, projects, today):
+        given = lease_from_project(volunteer, project, count, today=today)
+        if given:
+            return given
+        # Nothing there for this speaker - every item done, or leased to
+        # somebody else. Try the next project rather than send an empty list;
+        # the list is still drawn from one project, just not the first choice.
+    return 0
 
 
 def daily_quota(volunteer=None):

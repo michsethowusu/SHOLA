@@ -19,11 +19,11 @@ from shola.assignment import record_verdict                     # noqa: E402
 from shola.models import (CORE_PROJECT, Assignment, Candidate,     # noqa: E402
                           Evaluation, Flag, Project, ProjectLanguage,
                           Volunteer, Word, WordState, db)
-from shola.projects import (active_for, exclusive_project,  # noqa: E402
-                            shares)
+from shola.projects import active_for, exclusive_project  # noqa: E402
 from shola.consensus import tally                               # noqa: E402
 from shola.tiers import (answers_target, daily_quota, open_query,  # noqa: E402
-                         refresh_word, release_stale, state_for, top_up)
+                         project_for_today, refresh_word, release_stale,
+                         state_for, top_up)
 
 PASSED = []
 
@@ -143,44 +143,66 @@ def main():
         ok &= check("but the projects covering their language are",
                     "everyday-words" in slugs, str(slugs))
 
-    print("\none list, shared between every project in their language")
+    print("\na day's list comes from one project, not several")
     with app.app_context():
-        from shola.models import CORE_PROJECT as CP
+        from datetime import date, timedelta
         seed_core(30)
-        sentences = Project.query.filter_by(slug="read-sentences").first()
+        make_project("read-sentences-2", "Read these too", ["twi"], n=30)
         both = volunteer("both@example.com", "twi")
         n = top_up(both)
         ok &= check("the list is the configured length",
                     n == app.config["WORDS_PER_DAY"], f"leased {n}")
-        by_project = {}
-        for a in both.assignments:
-            by_project[a.word.project_id] = by_project.get(a.word.project_id,
-                                                           0) + 1
-        ok &= check("drawn from both projects", len(by_project) == 2,
-                    str(by_project))
-        ok &= check("split as evenly as six across two allows",
-                    sorted(by_project.values()) == [3, 3], str(by_project))
+        by_project = {a.word.project_id for a in both.assignments}
+        ok &= check("and every item came from the same project",
+                    len(by_project) == 1, str(by_project))
 
-    print("\nan odd number cannot split evenly, and does not pretend to")
-    ok &= check("five across two is three and two",
-                shares(5, 2) == [3, 2], str(shares(5, 2)))
-    ok &= check("seven across three is 3/2/2",
-                shares(7, 3) == [3, 2, 2], str(shares(7, 3)))
-    ok &= check("nothing is lost in the split",
-                sum(shares(7, 3)) == 7 and sum(shares(5, 2)) == 5)
+        # A second top-up the same day must not switch projects. This is what
+        # broke before: the rotation was keyed on work done, so answering an
+        # item moved the key and the next top-up drew from somewhere else.
+        first = next(iter(by_project))
+        for a in list(both.assignments)[:2]:
+            opt = [c for c in a.word.candidates if c.language == "twi"]
+            if opt:
+                record_verdict(both, a.word_id, candidate_id=opt[0].id)
+        top_up(both)
+        after = {a.word.project_id for a in both.pending_today()}
+        ok &= check("a top-up later the same day stays with it",
+                    after in ({first}, set()), str(after))
 
-    print("\na dry project gives its share to the others")
+        # Tomorrow it moves on, so no project is starved. Asked of somebody
+        # holding nothing: a volunteer part-way through today's list stays on
+        # today's project by design, which would hide the rotation.
+        fresh = volunteer("rotates@example.com", "twi")
+        seen = set()
+        for offset in range(6):
+            when = date.today() + timedelta(days=offset)
+            chosen = project_for_today(fresh, active_for(fresh), when)
+            seen.add(chosen[0].slug)
+        ok &= check("across days the rotation covers more than one project",
+                    len(seen) > 1, str(seen))
+
+        # Two volunteers on the same day should not all pile onto one project.
+        day = date.today()
+        picks = set()
+        for i in range(6):
+            v = volunteer(f"spread{i}@example.com", "twi")
+            picks.add(project_for_today(v, active_for(v), day)[0].slug)
+        ok &= check("and on one day the pool is spread across projects",
+                    len(picks) > 1, str(picks))
+
+    print("\na project too dry to fill the list makes a short list, not a mixed one")
     with app.app_context():
         tiny = make_project("tiny-job", "Check a handful of names", ["twi"],
                             n=2, threshold=1)
-        mixed = volunteer("mixed@example.com", "twi")
-        n = top_up(mixed)
-        ok &= check("the list is still full length",
-                    n == app.config["WORDS_PER_DAY"], f"leased {n}")
-        from_tiny = sum(1 for a in mixed.assignments
-                        if a.word.project_id == tiny.id)
-        ok &= check("taking everything the small project had",
-                    from_tiny == 2, str(from_tiny))
+        tiny.start_exclusive(30)      # force today's list to come from it
+        db.session.commit()
+        short = volunteer("short@example.com", "twi")
+        n = top_up(short)
+        ok &= check("only what it had", n == 2, f"leased {n}")
+        ok &= check("all of it from that project",
+                    {a.word.project_id for a in short.assignments} == {tiny.id})
+        tiny.exclusive_until = None
+        db.session.commit()
 
     print("\nan exclusive run is the only project sent, then it is not")
     with app.app_context():
