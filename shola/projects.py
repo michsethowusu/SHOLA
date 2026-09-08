@@ -7,10 +7,13 @@ list arrives on the days they chose.
 Each list comes from a **single** project. Five items split between two asks
 somebody to change task mid-list for no reason - translating a word and
 translating a sentence are different jobs, and five of one is easier than two
-of one and three of the other. Spreading happens across days instead: the
-choice rotates on the date, so tomorrow's list comes from somewhere else, and
-it is offset per volunteer so that on any one day the pool is spread across
-projects rather than everybody landing on the same one.
+of one and three of the other.
+
+The next list comes from a different project. Not the next day: the next list.
+Somebody who answers their five on the site and asks for more straight away
+gets the other project, the same as if they had waited for the next email. The
+cursor counts lists rather than days for exactly that reason, and is offset per
+volunteer so two people starting out are not both handed the same project.
 
 Volunteers used to choose projects and could opt in and out of them. That was a
 question nobody needed to answer. Someone who has agreed to check Twi has

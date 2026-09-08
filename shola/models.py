@@ -58,6 +58,14 @@ class Volunteer(db.Model):
     backoff_days = db.Column(db.Integer, default=0, nullable=False)
     next_send_on = db.Column(db.Date)
 
+    # How many lists this volunteer has been handed. It is the rotation cursor:
+    # each list comes from one project, and this advances when a new list
+    # starts so the next one comes from a different project - whether that is
+    # the next scheduled email or a second list pulled from the site minutes
+    # later. Counting lists rather than days is the point: somebody working
+    # through several in one sitting should still see each project in turn.
+    lists_taken = db.Column(db.Integer, default=0, nullable=False)
+
     @property
     def paused(self):
         """True while a pause is running."""
@@ -607,7 +615,8 @@ def ensure_columns():
                        "missed_in_a_row": "INTEGER NOT NULL DEFAULT 0",
                        "nudged_on": "DATE",
                        "backoff_days": "INTEGER NOT NULL DEFAULT 0",
-                       "next_send_on": "DATE"},
+                       "next_send_on": "DATE",
+                       "lists_taken": "INTEGER NOT NULL DEFAULT 0"},
         "word_state": {"skips": "INTEGER NOT NULL DEFAULT 0",
                        "problem": "BOOLEAN NOT NULL DEFAULT 0"},
         "pending_signups": {"project_ids": "VARCHAR(200) NOT NULL DEFAULT ''",

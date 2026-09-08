@@ -22,7 +22,7 @@ from shola.models import (CORE_PROJECT, Assignment, Candidate,     # noqa: E402
 from shola.projects import active_for, exclusive_project  # noqa: E402
 from shola.consensus import tally                               # noqa: E402
 from shola.tiers import (answers_target, daily_quota, open_query,  # noqa: E402
-                         project_for_today, refresh_word, release_stale,
+                         project_order, refresh_word, release_stale,
                          state_for, top_up)
 
 PASSED = []
@@ -143,52 +143,80 @@ def main():
         ok &= check("but the projects covering their language are",
                     "everyday-words" in slugs, str(slugs))
 
-    print("\na day's list comes from one project, not several")
-    with app.app_context():
-        from datetime import date, timedelta
-        seed_core(30)
-        make_project("read-sentences-2", "Read these too", ["twi"], n=30)
+    # Its own app: this section answers a lot of items to walk the rotation
+    # forward, and doing that in the shared database would move the numbers
+    # other sections assert on.
+    print("\none list, one project - and the next list is a different one")
+    rot = make_app()
+    with rot.app_context():
+        seed_core(60)
+        make_project("rot-a", "Rotation A", ["twi"], n=60)
+        make_project("rot-b", "Rotation B", ["twi"], n=60)
         both = volunteer("both@example.com", "twi")
+
         n = top_up(both)
         ok &= check("the list is the configured length",
                     n == app.config["WORDS_PER_DAY"], f"leased {n}")
-        by_project = {a.word.project_id for a in both.assignments}
+        started_with = {a.word.project_id for a in both.pending_today()}
         ok &= check("and every item came from the same project",
-                    len(by_project) == 1, str(by_project))
+                    len(started_with) == 1, str(started_with))
 
-        # A second top-up the same day must not switch projects. This is what
-        # broke before: the rotation was keyed on work done, so answering an
-        # item moved the key and the next top-up drew from somewhere else.
-        first = next(iter(by_project))
-        for a in list(both.assignments)[:2]:
+        # A top-up part-way through a list must not switch projects. This is
+        # what broke before: the rotation moved when an item was answered, so
+        # the next top-up drew from somewhere else and mixed the list.
+        first = next(iter(started_with))
+        for a in list(both.pending_today())[:2]:
             opt = [c for c in a.word.candidates if c.language == "twi"]
             if opt:
                 record_verdict(both, a.word_id, candidate_id=opt[0].id)
         top_up(both)
-        after = {a.word.project_id for a in both.pending_today()}
-        ok &= check("a top-up later the same day stays with it",
-                    after in ({first}, set()), str(after))
+        ok &= check("a top-up mid-list stays with the same project",
+                    {a.word.project_id for a in both.pending_today()} == {first},
+                    str({a.word.project_id for a in both.pending_today()}))
 
-        # Tomorrow it moves on, so no project is starved. Asked of somebody
-        # holding nothing: a volunteer part-way through today's list stays on
-        # today's project by design, which would hide the rotation.
-        fresh = volunteer("rotates@example.com", "twi")
-        seen = set()
-        for offset in range(6):
-            when = date.today() + timedelta(days=offset)
-            chosen = project_for_today(fresh, active_for(fresh), when)
-            seen.add(chosen[0].slug)
-        ok &= check("across days the rotation covers more than one project",
-                    len(seen) > 1, str(seen))
+        # Finish the list and ask again, the same day, the way somebody
+        # clicking through on the site does. The next list is the other
+        # project - the rotation counts lists, not days.
+        def finish(v):
+            for a in list(v.pending_today()):
+                opt = [c for c in a.word.candidates if c.language == "twi"]
+                record_verdict(v, a.word_id,
+                               candidate_id=opt[0].id if opt else None,
+                               custom_text=None if opt else "typed")
+        finish(both)
+        top_up(both)
+        second = {a.word.project_id for a in both.pending_today()}
+        ok &= check("the next list is one project too", len(second) == 1,
+                    str(second))
+        ok &= check("and it is a different project, on the same day",
+                    second != {first}, f"{first} then {second}")
 
-        # Two volunteers on the same day should not all pile onto one project.
-        day = date.today()
+        # And it keeps alternating rather than sticking on the second one.
+        run = [first, next(iter(second))]
+        for _ in range(4):
+            finish(both)
+            top_up(both)
+            run.append(next(iter({a.word.project_id
+                                  for a in both.pending_today()})))
+        ok &= check("consecutive lists never repeat the same project",
+                    all(a != b for a, b in zip(run, run[1:])), str(run))
+        ok &= check("so every project gets worked on in one sitting",
+                    len(set(run)) == len(active_for(both)), str(run))
+
+        # Two volunteers starting out should not both be sent the same project.
         picks = set()
         for i in range(6):
             v = volunteer(f"spread{i}@example.com", "twi")
-            picks.add(project_for_today(v, active_for(v), day)[0].slug)
-        ok &= check("and on one day the pool is spread across projects",
+            picks.add(project_order(v, active_for(v), date.today())[0][0].slug)
+        ok &= check("new volunteers do not all start on the same project",
                     len(picks) > 1, str(picks))
+
+        # The cursor only moves when a list was actually handed over.
+        idle = volunteer("idle@example.com", "twi")
+        before = idle.lists_taken
+        _order, fresh = project_order(idle, active_for(idle), date.today())
+        ok &= check("asking which project does not itself advance the rotation",
+                    idle.lists_taken == before and fresh is True)
 
     print("\na project too dry to fill the list makes a short list, not a mixed one")
     with app.app_context():
@@ -252,7 +280,7 @@ def main():
 
     print("\nthe window ends by itself, and extending never shortens it")
     with app.app_context():
-        from datetime import date, timedelta
+        from datetime import timedelta
         job = make_project("timed-job", "Check these place names", ["twi"],
                            n=4, threshold=1)
         job.start_exclusive(30)

@@ -362,46 +362,51 @@ def lease_from_project(volunteer, project, count, today=None):
     return given
 
 
-def project_for_today(volunteer, projects, today):
-    """The one project this volunteer's list comes from today.
+def project_order(volunteer, projects, today):
+    """Which project this list comes from, and whether it is a new list.
 
-    A day's list comes from a single project. Five items split between two
-    projects asks somebody to change language task mid-list for no reason, and
-    it is the kind of variety nobody asked for: translating a word and
-    translating a sentence are different jobs, and doing five of one is easier
-    than doing two of one and three of the other.
+    Returns `(order, fresh)`. `order` is the projects to try, best first;
+    `fresh` says whether this is the start of a new list, which is when the
+    rotation cursor should advance.
 
-    Spreading happens across days instead. The choice is keyed on the date, so
-    it moves on tomorrow, and offset by the volunteer's id, so on any one day
-    the pool is spread across projects rather than everybody piling onto the
-    same one.
+    One list, one project. Five items arriving as three nouns and two sentences
+    asks somebody to change task mid-list for no reason - translating a word
+    and translating a sentence are different jobs, and five of one is easier
+    than two of one and three of the other.
 
-    Keyed on the date rather than on work done, which is what it used to use:
-    that changed the moment somebody answered an item, so a second top-up the
-    same day could pick a different project and produce exactly the mixed list
-    this avoids.
+    The next list comes from a different project. Not the next day: the next
+    *list*. Somebody who answers their five and asks for more straight away
+    should get the other project, the same as if they had waited for tomorrow's
+    email. That is why the cursor counts lists rather than reading the date -
+    keying it on the date meant a volunteer working through four lists in one
+    sitting saw the same project four times.
+
+    A list already in progress is not a new list. Where items are still
+    outstanding, the top-up that fills the list stays with the project those
+    items came from, otherwise a list would end up mixed after all - which is
+    what happens when somebody opens the site having answered two of the five
+    in their email.
     """
     from .projects import rotate
 
-    order = rotate(projects, today.toordinal() + volunteer.id)
+    outstanding = {a.word.project_id for a in volunteer.pending_today(today)}
+    if outstanding:
+        held = [p for p in projects if p.id in outstanding]
+        if held:
+            return held, False
 
-    # If today already started with a project, stay with it whatever the
-    # rotation says. Anything else would mix the list on a second top-up - the
-    # volunteer opening the site after reading the email, say.
-    started = {a.word.project_id for a in volunteer.pending_today(today)}
-    if started:
-        for project in order:
-            if project.id in started:
-                return [project]
-    return order
+    # Offset by id as well as by count, so two volunteers starting out are not
+    # both sent the same project on their first list.
+    cursor = (volunteer.lists_taken or 0) + volunteer.id
+    return rotate(projects, cursor), True
 
 
 def lease_words(volunteer, count, today=None):
     """Hand a volunteer up to `count` items, all from one project.
 
     Returns how many were leased. A project too dry to fill the list makes for
-    a short list rather than a mixed one; the next day's rotation moves on to
-    another project regardless.
+    a short list rather than a mixed one; the next list moves on to another
+    project regardless.
     """
     if count <= 0:
         return 0
@@ -412,9 +417,16 @@ def lease_words(volunteer, count, today=None):
     if not projects:
         return 0
 
-    for project in project_for_today(volunteer, projects, today):
+    order, fresh = project_order(volunteer, projects, today)
+    for project in order:
         given = lease_from_project(volunteer, project, count, today=today)
         if given:
+            if fresh:
+                # Advanced only once a list has actually been handed over, so a
+                # request that could be filled from nowhere does not silently
+                # skip a project's turn.
+                volunteer.lists_taken = (volunteer.lists_taken or 0) + 1
+                db.session.commit()
             return given
         # Nothing there for this speaker - every item done, or leased to
         # somebody else. Try the next project rather than send an empty list;
