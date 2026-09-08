@@ -443,20 +443,31 @@ def languages_cmd():
 @click.option("--status", default="pending",
               type=click.Choice(["pending", "approved", "paused"]),
               help="`pending` waits for the admin dashboard, as an upload does.")
+@click.option("--answer-language", "answer_language", default="",
+              help="Language answers are written in, e.g. 'en' for a project "
+                   "that sends Ghanaian text out and wants English back. "
+                   "Blank means the speaker's own language.")
 @click.option("--check", is_flag=True,
               help="Validate the file and report, writing nothing.")
 def import_project_cmd(csv_path, title, slug, summary, item_format, threshold,
-                       status, check):
+                       status, answer_language, check):
     """Load a project from a CSV, for files too large to upload in a browser.
 
     The same parser and the same rules as the web form - this exists because a
     45,000 row file does not survive a browser upload, not to skip validation.
     Nothing is written unless the whole file parses.
     """
+    from .config import ANSWER_LANGUAGES
     from .importer import import_items, parse
     from .models import Project, ProjectLanguage
     from .tiers import ANSWERS_PER_ITEM
     from .views import unique_slug
+
+    answer_language = (answer_language or "").strip()
+    if answer_language and answer_language not in ANSWER_LANGUAGES:
+        raise click.ClickException(
+            f"--answer-language {answer_language!r} is not one of: "
+            f"{', '.join(ANSWER_LANGUAGES)}.")
 
     all_languages = current_app.config["ALL_LANGUAGES"]
     with open(csv_path, "rb") as fh:
@@ -477,6 +488,9 @@ def import_project_cmd(csv_path, title, slug, summary, item_format, threshold,
 
     click.echo(f"{len(items):,} items, {options:,} options, "
                f"{len(languages)} language(s): {', '.join(languages)}")
+    click.echo("answers in " + (ANSWER_LANGUAGES[answer_language]
+                                if answer_language
+                                else "the speaker's own language"))
     if check:
         click.echo("--check given; nothing written.")
         return
@@ -484,6 +498,7 @@ def import_project_cmd(csv_path, title, slug, summary, item_format, threshold,
     project = Project(
         slug=slug or unique_slug(title), title=title, summary=summary,
         item_format=item_format, has_options=bool(options), status=status,
+        answer_language=answer_language or None,
         votes_to_settle=threshold or ANSWERS_PER_ITEM,
         sort_order=50)
     db.session.add(project)
