@@ -500,6 +500,35 @@ def import_project_cmd(csv_path, title, slug, summary, item_format, threshold,
                    "joins the queue.")
 
 
+@shola_cli.command("answer-language")
+@click.option("--project", "slug", required=True)
+@click.option("--code", default="",
+              help="Language answers are written in, e.g. 'en'. Blank means "
+                   "the speaker's own language.")
+def answer_language_cmd(slug, code):
+    """Set which way a project's translation runs.
+
+    Blank is the usual direction: an English item goes out and answers come
+    back in the speaker's language. A code means answers are always in that
+    language - a Twi sentence goes out and English comes back.
+    """
+    from .config import ANSWER_LANGUAGES
+    from .models import Project
+
+    project = Project.query.filter_by(slug=slug).first()
+    if project is None:
+        raise click.ClickException(f"No project with slug {slug!r}.")
+    code = (code or "").strip()
+    if code and code not in ANSWER_LANGUAGES:
+        raise click.ClickException(
+            f"{code!r} is not one of: {', '.join(ANSWER_LANGUAGES)}.")
+    project.answer_language = code or None
+    db.session.commit()
+    click.echo(f"{project.title}: answers in "
+               + (ANSWER_LANGUAGES[code] if code
+                  else "the speaker's own language"))
+
+
 @shola_cli.command("name-model")
 @click.option("--project", "slug", required=True,
               help="Project slug whose options are being attributed.")

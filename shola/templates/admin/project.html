@@ -16,6 +16,13 @@
               {% if project.submitter_org %}({{ project.submitter_org }}){% endif %}
               · {{ project.submitter_email }}</td></tr>
           <tr><td>Items are</td><td>{{ project.item_plural }}</td></tr>
+          <tr><td>Answers in</td>
+            <td>{% if project.answer_language %}
+                  {{ ANSWER_LANGUAGES.get(project.answer_language,
+                                          project.answer_language) }}
+                {% else %}
+                  the speaker's own language
+                {% endif %}</td></tr>
           <tr><td>Answers</td><td>
             {% if project.has_options %}
               chosen from options · {{ project.votes_to_settle }} matching

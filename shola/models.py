@@ -207,6 +207,17 @@ class Project(db.Model):
     #
     # A date rather than a flag, so it ends by itself. A flag would depend on
     # something remembering to clear it, and the thing that forgets is us.
+    # Which way the translation goes. Blank - the usual case - means answers
+    # are written in the volunteer's own language: an English word goes out and
+    # Twi speakers say it in Twi. A code here means answers are always in that
+    # one language whoever writes them, which is the other direction: a Twi
+    # sentence goes out and the answer wanted is English.
+    #
+    # Without this the interface guessed, and guessed wrong for the second
+    # kind - it asked a Twi speaker "What should this be in Asante Twi?" about
+    # a sentence already in Asante Twi.
+    answer_language = db.Column(db.String(20))
+
     exclusive_requested = db.Column(db.Boolean, default=False, nullable=False)
     exclusive_days = db.Column(db.Integer, default=30, nullable=False)
     exclusive_until = db.Column(db.Date)
@@ -245,6 +256,24 @@ class Project(db.Model):
     @property
     def approved(self):
         return self.status == "approved"
+
+    def answers_in(self, speaker_language=None):
+        """(code, name) of the language answers are written in.
+
+        Falls back to the speaker's own language, which is what most projects
+        want and what every project did before this column existed.
+        """
+        from flask import current_app
+
+        from .config import ANSWER_LANGUAGES
+
+        code = self.answer_language or speaker_language
+        if not code:
+            return None, None
+        if code in ANSWER_LANGUAGES:
+            return code, ANSWER_LANGUAGES[code]
+        info = current_app.config["ALL_LANGUAGES"].get(code)
+        return code, info["name"] if info else code
 
     @property
     def is_exclusive(self):
@@ -621,7 +650,8 @@ def ensure_columns():
                        "problem": "BOOLEAN NOT NULL DEFAULT 0"},
         "pending_signups": {"project_ids": "VARCHAR(200) NOT NULL DEFAULT ''",
                             "exclusive_project_id": "INTEGER"},
-        "projects": {"exclusive_requested": "BOOLEAN NOT NULL DEFAULT 0",
+        "projects": {"answer_language": "VARCHAR(20)",
+                     "exclusive_requested": "BOOLEAN NOT NULL DEFAULT 0",
                      "exclusive_days": "INTEGER NOT NULL DEFAULT 30",
                      "exclusive_until": "DATE"},
         "words": {"project_id": "INTEGER",

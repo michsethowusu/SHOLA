@@ -97,6 +97,15 @@ ISO_CODES = {
 }
 
 
+# Languages a project can collect answers in that are not one of the Ghanaian
+# languages a volunteer signs up with. English is here because a project can
+# run the other way round: Ghanaian text out, English translation back.
+ANSWER_LANGUAGES = {
+    "en": "English",
+    "fr": "French",
+}
+
+
 def canonical_language(code):
     """The code we store, given whatever somebody wrote."""
     code = (code or "").strip().lower()

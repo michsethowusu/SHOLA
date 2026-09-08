@@ -4,7 +4,8 @@ import os
 
 from flask import Flask
 
-from .config import (ALL_LANGUAGES, DAY_NAMES, INSTANCE_DIR, ISO_CODES,
+from .config import (ALL_LANGUAGES, ANSWER_LANGUAGES, DAY_NAMES,
+                     INSTANCE_DIR, ISO_CODES,
                      LANGUAGES, OTHER_LANGUAGES, TIME_WINDOWS, Config)
 from .models import (adopt_orphan_items, db, ensure_columns,
                      ensure_indexes)
@@ -104,7 +105,8 @@ def create_app(config_object=Config):
                 "LANGUAGE_COUNT": len(ALL_LANGUAGES),
                 "VOTES_TO_SETTLE": VOTES_TO_SETTLE,
                 "WORDS_PER_DAY": app.config["WORDS_PER_DAY"],
-                "ISO_CODES": ISO_CODES}
+                "ISO_CODES": ISO_CODES,
+                "ANSWER_LANGUAGES": ANSWER_LANGUAGES}
 
     @app.url_defaults
     def version_static(endpoint, values):

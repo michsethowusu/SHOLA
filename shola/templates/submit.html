@@ -120,6 +120,30 @@ How much is this?,all,2,,,,,</code></pre>
       </div>
 
       <div class="field">
+        <span class="label">Which way does the translation go?</span>
+        <p class="hint">Your file decides which speakers see an item. This
+           decides what they write back.</p>
+        <div class="choice-grid">
+          <label class="choice">
+            <input type="radio" name="answer_language" value=""
+                   {% if not (form and form.answer_language) %}checked{% endif %}>
+            <span class="t">Into the speaker's language</span>
+            <span class="s">You supply English; Twi speakers answer in Twi,
+              Ewe speakers in Ewe.</span>
+          </label>
+          {% for code, name in ANSWER_LANGUAGES.items() %}
+            <label class="choice">
+              <input type="radio" name="answer_language" value="{{ code }}"
+                     {% if form and form.answer_language == code %}checked{% endif %}>
+              <span class="t">Into {{ name }}</span>
+              <span class="s">You supply text in a Ghanaian language; speakers
+                of it answer in {{ name }}.</span>
+            </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="field">
         <label for="votes_to_settle">How many times should each item be
           answered?</label>
         <p class="hint">

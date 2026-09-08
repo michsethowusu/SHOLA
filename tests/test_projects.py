@@ -1008,6 +1008,105 @@ def main():
                         volunteer("quiet@example.com", "twi"))},
                     "an approved project must reach its speakers")
 
+    print("\nthe question matches which way the translation runs")
+    dirs = make_app()
+    with dirs.app_context():
+        # Assignment, Project, ProjectLanguage, Word and Candidate are
+        # imported at module level; importing them here again would make them
+        # local to the whole of main() and break the sections above.
+        from shola.mailer import build_daily_email
+        from shola.views import as_cards
+
+        # The usual direction: English out, the speaker's language back.
+        out = make_project("into-twi", "Translate these into Twi", ["twi"],
+                           n=2, status="approved")
+        # The other direction: Twi out, English back.
+        back = Project(slug="into-english", title="Translate Twi to English",
+                       item_format="sentence", has_options=True,
+                       votes_to_settle=3, status="approved", sort_order=60,
+                       answer_language="en")
+        db.session.add(back)
+        db.session.flush()
+        db.session.add(ProjectLanguage(project_id=back.id, language="twi"))
+        source = Word(phrase="Wo ho te sen?", project_id=back.id,
+                      language="twi", position=1, occurrences=0,
+                      frequency=0.0, tier=1)
+        db.session.add(source)
+        db.session.flush()
+        db.session.add(Candidate(word_id=source.id, language="twi",
+                                 position=1, text="How are you?",
+                                 source="gemini-3.6-flash"))
+        v = volunteer("direction@example.com", "twi")
+        shared = Word.query.filter_by(project_id=out.id).first()
+        for word in (shared, source):
+            db.session.add(Assignment(volunteer_id=v.id, word_id=word.id,
+                                      due_date=date.today()))
+        db.session.commit()
+
+        asks = {c["phrase"]: c["ask"] for c in as_cards(v.assignments.all(),
+                                                        "twi")}
+        labels = {c["phrase"]: c["label"] for c in as_cards(v.assignments.all(),
+                                                            "twi")}
+        ok &= check("an English prompt asks for the speaker's language",
+                    "in Asante Twi?" in asks[shared.phrase],
+                    asks[shared.phrase])
+        ok &= check("a Twi sentence asks what it says in English",
+                    asks[source.phrase] == "What does this say in English?",
+                    asks[source.phrase])
+        ok &= check("and is never introduced as needing Twi",
+                    "Asante Twi?" not in asks[source.phrase],
+                    asks[source.phrase])
+        ok &= check("the label names the language the item is in",
+                    labels[source.phrase] == "Asante Twi sentence",
+                    labels[source.phrase])
+
+        # The mail has to agree with the page.
+        _s, text, html = build_daily_email(v, [source])
+        ok &= check("the email says translate to English",
+                    "translating them to English" in text
+                    and "translating them to English" in html)
+        _s, text2, _h = build_daily_email(v, [shared])
+        ok &= check("and to Asante Twi for the other direction",
+                    "translating them to Asante Twi" in text2)
+
+        ok &= check("answers_in falls back to the speaker's language",
+                    out.answers_in("twi") == ("twi", "Asante Twi"),
+                    str(out.answers_in("twi")))
+        ok &= check("and is fixed where the project says so",
+                    back.answers_in("twi") == ("en", "English"),
+                    str(back.answers_in("twi")))
+
+    print("\na submitted project can say which way it runs")
+    d = dirs.test_client()
+    r = d.post("/submit", data={
+        "title": "Twi sentences into English please",
+        "item_format": "sentence", "email": "kofi@example.com",
+        "answer_language": "en",
+        "file": (io_bytes("text,language,option1\n"
+                          "Wo ho te sen?,twi,How are you?\n".encode()),
+                 "s.csv"),
+    }, follow_redirects=True, content_type="multipart/form-data")
+    ok &= check("it submits", r.status_code == 200, str(r.status_code))
+    with dirs.app_context():
+        made = Project.query.filter_by(
+            slug="twi-sentences-into-english-please").first()
+        ok &= check("and the direction is stored",
+                    made is not None and made.answer_language == "en",
+                    str(made.answer_language if made else None))
+    r = d.post("/submit", data={
+        "title": "Words into the speakers language",
+        "item_format": "word", "email": "kofi@example.com",
+        "answer_language": "nonsense",
+        "file": (io_bytes("text,language,option1\n"
+                          "water,twi,nsuo\n".encode()), "w.csv"),
+    }, follow_redirects=True, content_type="multipart/form-data")
+    with dirs.app_context():
+        made = Project.query.filter_by(
+            slug="words-into-the-speakers-language").first()
+        ok &= check("an unknown answer language falls back to the speaker's",
+                    made is not None and not made.answer_language,
+                    str(made.answer_language if made else None))
+
     print("\nthe pager helper elides sensibly")
     from shola.views import page_window
     ok &= check("a short pager lists every page",

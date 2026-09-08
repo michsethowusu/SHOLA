@@ -23,7 +23,7 @@ from flask import (Blueprint, Response, abort, current_app, flash, jsonify,
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from .config import canonical_language
+from .config import ANSWER_LANGUAGES, canonical_language
 from . import consensus
 from .assignment import leaderboard, record_verdict
 from .tiers import (VOTES_TO_SETTLE, active_tier, answers_needed, daily_quota,
@@ -511,25 +511,38 @@ def leave():
 def as_cards(assignments, language):
     """Turn assignments into the card payload the evaluate page renders.
 
-    Each card carries its own wording, because one list can mix projects: a
-    sentence to read and a word to translate should not both be introduced as
-    "English word".
+    Each card carries its own wording, because a project decides both what its
+    items are and which way its translation runs. A word going out in English
+    for a Twi answer and a Twi sentence going out for an English answer are
+    opposite questions, and asking the second one the first way - "What should
+    this be in Asante Twi?" about a sentence already in Asante Twi - is how
+    this read before projects could say.
     """
-    lang_name = language_label(language)
+    speaker_name = language_label(language)
     items = []
     for assignment in assignments:
         word = assignment.word
         project = word.project
         noun = project.item_noun if project else "word"
+        # The language the answer is written in, which is the speaker's own
+        # unless the project says otherwise.
+        _code, answer_name = (project.answers_in(language) if project
+                              else (language, speaker_name))
+        answer_name = answer_name or speaker_name
+
+        # What the item itself is in. Filed under a language means it is
+        # written in it; filed under none means it is the English prompt every
+        # language answers.
+        source_name = language_label(word.language) if word.language else "English"
+
         items.append({
             "word_id": word.id,
             "phrase": word.phrase,
             "project": project.title if project else "",
-            "label": ("English " + noun) if word.language is None
-                     else noun.capitalize(),
-            "ask": (f"How would you say this in {lang_name}?"
+            "label": f"{source_name} {noun}",
+            "ask": (f"How would you say this in {answer_name}?"
                     if word.language is None
-                    else f"What should this be in {lang_name}?"),
+                    else f"What does this say in {answer_name}?"),
             "long": bool(project and project.item_format == "paragraph"),
             "options": [{"id": c.id, "text": c.text}
                         for c in sorted(word.options(language),
@@ -848,6 +861,7 @@ def submit_project():
     """Anyone can propose a body of work. An admin decides whether it runs."""
     if request.method == "GET":
         return render_template("submit.html", formats=ITEM_FORMATS,
+                               ANSWER_LANGUAGES=ANSWER_LANGUAGES,
                                languages=current_app.config["ALL_LANGUAGES"])
 
     title = (request.form.get("title") or "").strip()[:160]
@@ -861,6 +875,12 @@ def submit_project():
         threshold = int(request.form.get("votes_to_settle") or VOTES_TO_SETTLE)
     except ValueError:
         threshold = VOTES_TO_SETTLE
+
+    # Blank means answers come in the speaker's own language, which is the
+    # usual direction and the default.
+    answer_language = (request.form.get("answer_language") or "").strip()
+    if answer_language and answer_language not in ANSWER_LANGUAGES:
+        answer_language = ""
 
     errors = []
     if len(title) < 8:
@@ -895,6 +915,7 @@ def submit_project():
         for e in errors + problems[:20]:
             flash(e, "error")
         return render_template("submit.html", formats=ITEM_FORMATS,
+                               ANSWER_LANGUAGES=ANSWER_LANGUAGES,
                                languages=all_languages,
                                form=request.form), 400
 
@@ -906,6 +927,7 @@ def submit_project():
         has_options=has_options, status="pending",
         # Asked for, not granted. The window opens on approval, if we agree.
         exclusive_requested=bool(request.form.get("exclusive")),
+        answer_language=answer_language,
         submitter_name=name, submitter_email=email, submitter_org=org,
         sort_order=100)
     db.session.add(project)

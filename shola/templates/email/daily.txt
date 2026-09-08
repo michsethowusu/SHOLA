@@ -9,7 +9,7 @@ These have been waiting since your last few days - nothing was lost.
 {% elif overdue_count -%}
 Includes {{ overdue_count }} from days you missed.
 {% endif -%}
-Tap the link to start translating them to {{ language_name }}. It takes about two minutes.
+Tap the link to start translating them to {{ answer_language }}. It takes about two minutes.
 
 TODAY'S LIST
 {% for word in words %}  - {{ word.phrase }}
