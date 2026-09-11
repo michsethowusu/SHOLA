@@ -514,7 +514,7 @@ The backup prints how much is left on disk and warns below 5 GB free.
 | Server | gunicorn, 3 gthread workers, port 8000 in the container |
 | Public address | Cloudflare proxied A record → the VPS; Coolify terminates and routes by hostname |
 | Database | SQLite on a persistent volume at `instance/shola.db`, all 478,822 words loaded |
-| Email | Brevo transactional API, sending as `shola@ghanaopenai.org` |
+| Email | Brevo transactional API, sending as `michseth@sholaproject.org` |
 | Schedule | Coolify scheduled tasks: `send-daily` at 07:00 / 13:00 / 18:00, `release-leases` 04:00, `backup` 01:15 |
 
 Deploy with `COOLIFY_TOKEN=... ./deploy.sh`: it pushes to GitHub, triggers the

@@ -254,7 +254,8 @@ class Config:
 
     # The address volunteers see. Must be a sender verified in Brevo, or every
     # send is refused.
-    MAIL_FROM = os.environ.get("SHOLA_MAIL_FROM", "shola@ghanaopenai.org")
+    MAIL_FROM = os.environ.get("SHOLA_MAIL_FROM",
+                               "michseth@sholaproject.org")
     # Where a reply goes. The sender address is send-only, so leaving this
     # empty would point volunteers at a mailbox nobody reads.
     MAIL_REPLY_TO = os.environ.get("SHOLA_MAIL_REPLY_TO",
