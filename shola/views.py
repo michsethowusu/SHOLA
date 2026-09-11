@@ -572,8 +572,18 @@ def evaluate(token):
     # Remembered only so the nav bar can offer a way back; never trusted.
     session["token"] = token
 
+    # Which list the mail they followed was about. Absent for a link that
+    # predates the stamp, or for somebody arriving from the nav.
+    came_from = request.args.get("list", type=int)
+
     # Lease whatever the project needs right now, up to today's quota.
     top_up(volunteer)
+
+    # A newer list has replaced the one that mail described. Say so: the items
+    # on screen are not the ones it listed, and finding that out silently is
+    # what makes it feel broken.
+    from_old_email = (came_from is not None
+                      and came_from != (volunteer.lists_taken or 0))
 
     queue, working_ahead = queue_payload(volunteer)
     remaining = (volunteer.upcoming().count() if working_ahead
@@ -582,6 +592,7 @@ def evaluate(token):
     return render_template("evaluate.html", volunteer=volunteer, queue=queue,
                            remaining=remaining, lang=lang, token=token,
                            working_ahead=working_ahead,
+                           from_old_email=from_old_email,
                            flag_reasons=FLAG_REASONS,
                            done_total=volunteer.done_count())
 

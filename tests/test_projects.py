@@ -1151,6 +1151,42 @@ def main():
         ok &= check("and leases a full one", len(after) == daily_quota(v),
                     str(len(after)))
 
+    print("\nan older email link says so instead of quietly showing something else")
+    aged = make_app()
+    with aged.app_context():
+        from datetime import timedelta
+
+        from shola.mailer import daily_link
+        seed_core(40)
+        make_project("other-thing", "Something else", ["twi"], n=40)
+        v = volunteer("aged@example.com", "twi")
+
+        yesterday = date.today() - timedelta(days=1)
+        top_up(v, today=yesterday, new_list=True)
+        old_stamp = v.lists_taken
+        with aged.test_request_context():
+            link = daily_link(v)
+        ok &= check("the mail link says which list it is about",
+                    f"list={old_stamp}" in link, link)
+
+        # A newer send replaces it.
+        top_up(v, today=date.today(), new_list=True)
+        new_stamp = v.lists_taken
+        ok &= check("a later send moves the stamp on", new_stamp != old_stamp,
+                    f"{old_stamp} then {new_stamp}")
+        token = link.split("/w/")[1].split("?")[0]
+
+    c = aged.test_client()
+    older = c.get(f"/w/{token}?list={old_stamp}").data
+    ok &= check("following the older one explains the swap",
+                b"That was an older email" in older)
+    current = c.get(f"/w/{token}?list={new_stamp}").data
+    ok &= check("the current one says nothing",
+                b"That was an older email" not in current)
+    plain = c.get(f"/w/{token}").data
+    ok &= check("and a link with no stamp says nothing either",
+                b"That was an older email" not in plain)
+
     print("\nthe pager helper elides sensibly")
     from shola.views import page_window
     ok &= check("a short pager lists every page",

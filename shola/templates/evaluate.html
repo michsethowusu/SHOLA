@@ -39,6 +39,13 @@
     <span class="pill" id="count-left">{{ remaining }} left</span>
   </div>
 
+  {% if from_old_email %}
+    <p class="notice" style="margin-bottom:16px">
+      👋 That was an older email — here is your latest list instead. The items
+      it listed went back for other speakers. Nothing lost, carry on!
+    </p>
+  {% endif %}
+
   {% if working_ahead %}
     <p class="notice" style="margin-bottom:16px">
       You are ahead of schedule. These are not due yet, so carry on only if you

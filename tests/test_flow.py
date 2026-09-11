@@ -987,7 +987,11 @@ def main():
         ok &= check("html lists the words", words[0].phrase in html)
         ok &= check("html carries the personalised link", "/w/" in html)
         link = daily_link(vol)
-        token = link.rsplit("/", 1)[-1]
+        # The link carries ?list=<n> so the page can tell an older mail from
+        # the current one, so the token is not simply the last path segment.
+        token = link.rsplit("/", 1)[-1].split("?")[0]
+        ok &= check("the link says which list it is about", "?list=" in link,
+                    link)
         ok &= check("token round-trips to the volunteer", read_token(token) == vol.id)
         ok &= check("tampered token is refused", read_token(token + "x") is None)
 

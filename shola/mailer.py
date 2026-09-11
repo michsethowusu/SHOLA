@@ -69,14 +69,20 @@ def build_link_email(volunteer, link, note, name=None):
 
 
 def daily_link(volunteer):
-    """Absolute link to today's list.
+    """Absolute link to the list this mail is about.
+
+    Every mail points at the same personal link, so on its own it cannot say
+    which send it came from. `?list=` carries that: the page compares it with
+    the list the volunteer is actually holding and, where an older mail has
+    been opened after a newer list replaced it, says so rather than quietly
+    showing different items than the mail listed.
 
     Built by hand rather than with url_for: the daily send runs from the CLI
     with no request context, where url_for needs SERVER_NAME and otherwise
     raises. SITE_URL is the single source of truth for the public address.
     """
     base = current_app.config["SITE_URL"].rstrip("/")
-    return f"{base}/w/{make_token(volunteer)}"
+    return f"{base}/w/{make_token(volunteer)}?list={volunteer.lists_taken or 0}"
 
 
 def settings_link(volunteer):
