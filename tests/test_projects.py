@@ -1179,13 +1179,13 @@ def main():
     c = aged.test_client()
     older = c.get(f"/w/{token}?list={old_stamp}").data
     ok &= check("following the older one explains the swap",
-                b"That was an older email" in older)
+                b"a link from an older email" in older)
     current = c.get(f"/w/{token}?list={new_stamp}").data
     ok &= check("the current one says nothing",
-                b"That was an older email" not in current)
+                b"a link from an older email" not in current)
     plain = c.get(f"/w/{token}").data
     ok &= check("and a link with no stamp says nothing either",
-                b"That was an older email" not in plain)
+                b"a link from an older email" not in plain)
 
     print("\nthe pager helper elides sensibly")
     from shola.views import page_window
