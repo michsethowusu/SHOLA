@@ -462,10 +462,23 @@ def release_stale(volunteer, today=None):
     return n
 
 
-def top_up(volunteer, today=None):
-    """Give this volunteer a fresh list for today, up to their quota."""
+def top_up(volunteer, today=None, new_list=False):
+    """Fill this volunteer's list up to their quota, and return what was added.
+
+    `new_list` is for a send: it hands back whatever was offered on an earlier
+    day first, so the email that goes out is a fresh list of what the project
+    needs now.
+
+    Opening a link is not a send, and must not release anything. It used to:
+    `release_stale` ran on every call, so following yesterday's email after
+    midnight threw that list away and leased a new one - from the next project
+    in the rotation, because the cursor had already moved. The email named five
+    sentences and the page showed five words, which is not a refresh, it is the
+    email being wrong. A list stays put until the next send replaces it.
+    """
     today = today or date.today()
-    release_stale(volunteer, today)
+    if new_list:
+        release_stale(volunteer, today)
     quota = daily_quota(volunteer)
     pending = volunteer.pending_today(today).count()
     return lease_words(volunteer, quota - pending, today=today)

@@ -1107,6 +1107,50 @@ def main():
                     made is not None and not made.answer_language,
                     str(made.answer_language if made else None))
 
+    print("\nthe link shows what the email said it would")
+    stale = make_app()
+    with stale.app_context():
+        from datetime import timedelta
+
+        from shola.mailer import build_daily_email
+        seed_core(40)
+        make_project("other-work", "Something else entirely", ["twi"], n=40)
+        v = volunteer("clicker@example.com", "twi")
+
+        day1 = date.today()
+        day2 = day1 + timedelta(days=1)
+        day3 = day2 + timedelta(days=1)
+
+        # The nightly send builds a list and emails it.
+        top_up(v, today=day1, new_list=True)
+        emailed = [a.word for a in
+                   v.pending_today(day1).limit(daily_quota(v)).all()]
+        listed = {w.phrase for w in emailed}
+        ok &= check("the send leases a list", len(listed) > 0, str(listed))
+        _s, text, _h = build_daily_email(v, emailed)
+        ok &= check("and the mail names those items",
+                    all(w.phrase in text for w in emailed))
+
+        # Following that link the next day must show the same items. It used
+        # to release them and lease a fresh list from the next project, so the
+        # mail named five sentences and the page showed five words.
+        top_up(v, today=day2)
+        shown = {a.word.phrase for a in v.pending_today(day2)}
+        ok &= check("a day-old link still shows what was emailed",
+                    shown == listed, f"emailed {sorted(listed)} "
+                                     f"showed {sorted(shown)}")
+        ok &= check("and does not switch project underneath them",
+                    len({a.word.project_id for a in v.pending_today(day2)}) == 1,
+                    str({a.word.project_id for a in v.pending_today(day2)}))
+
+        # The next send is what replaces it - nothing carries over past that.
+        top_up(v, today=day3, new_list=True)
+        after = {a.word.phrase for a in v.pending_today(day3)}
+        ok &= check("the next send hands the old list back", after != listed,
+                    str(sorted(after)))
+        ok &= check("and leases a full one", len(after) == daily_quota(v),
+                    str(len(after)))
+
     print("\nthe pager helper elides sensibly")
     from shola.views import page_window
     ok &= check("a short pager lists every page",

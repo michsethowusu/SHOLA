@@ -247,7 +247,8 @@ def send_daily(window, dry_run, force):
 
         # A fresh list. Anything from an earlier day goes back to the queue, so
         # missing days never builds a backlog to work through.
-        top_up(volunteer, today=today)
+        # A send is where a stale list is handed back and a new one built.
+        top_up(volunteer, today=today, new_list=True)
         due = volunteer.pending_today(today).limit(daily_quota(volunteer)).all()
         if not due and not nudge:
             skipped += 1
