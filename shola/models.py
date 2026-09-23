@@ -14,6 +14,8 @@ rewriting every foreign key on a live database for no behavioural gain.
 
 from datetime import date, datetime, timedelta
 
+from sqlalchemy import text
+
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
 
@@ -673,24 +675,26 @@ def adopt_orphan_items():
         db.session.add(core)
         db.session.flush()
 
+    db.session.commit()
+
+    # Every gunicorn worker runs this, so the backfill has to survive losing
+    # the race to another one. It used to be a handful of rows and the race was
+    # invisible; going from 88 languages to 2,206 made it two thousand inserts
+    # against a unique constraint, three workers at once, and the losers
+    # crashed on boot until nothing was left serving.
+    #
+    # INSERT OR IGNORE rather than checking first: the check and the insert are
+    # not one operation, so checking first does not help.
     have = {pl.language for pl in core.languages}
-    for code in ALL_LANGUAGES:
-        if code not in have:
-            db.session.add(ProjectLanguage(project_id=core.id, language=code))
+    missing = [code for code in ALL_LANGUAGES if code not in have]
+    if missing:
+        db.session.execute(
+            text("INSERT OR IGNORE INTO project_languages (project_id, language)"
+                 " VALUES (:pid, :code)"),
+            [{"pid": core.id, "code": code} for code in missing])
+        db.session.commit()
 
     adopted = (Word.query.filter(Word.project_id.is_(None))
                .update({"project_id": core.id}, synchronize_session=False))
-
-    # And the volunteers. Nothing is sent to someone with no project, so
-    # without this every existing volunteer would receive an empty list the
-    # morning this deploys - they signed up for this work and are still doing
-    # it, so they are opted in to it.
-    opted = db.session.query(VolunteerProject.volunteer_id).subquery()
-    orphans = (Volunteer.query
-               .filter(~Volunteer.id.in_(db.session.query(opted.c.volunteer_id)))
-               .all())
-    for volunteer in orphans:
-        db.session.add(VolunteerProject(volunteer_id=volunteer.id,
-                                       project_id=core.id))
     db.session.commit()
-    return core, adopted, len(orphans)
+    return core, adopted, len(missing)
