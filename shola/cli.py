@@ -13,6 +13,7 @@ import gzip
 import json
 import os
 import sys
+from pathlib import Path
 from datetime import date, datetime, time, timedelta
 
 import click
@@ -283,6 +284,18 @@ def send_daily(window, dry_run, force):
 
     click.echo(f"sent {sent}, skipped {skipped}, "
                f"backing off {backing_off}, failed {failed}")
+
+    # A dated marker, the same idea as the backup one, for the same reason.
+    # Every scheduled task on this deployment failed silently for a week - the
+    # send included - because each one crashes at boot if the app does, and
+    # nothing anybody looks at said so. /healthz reads this.
+    if not dry_run:
+        try:
+            marker = Path(current_app.config["UPLOAD_DIR"]).parent / "last-send.txt"
+            marker.write_text(datetime.utcnow().isoformat(), encoding="utf-8")
+        except OSError as exc:      # noqa: BLE001 - never fail a send over this
+            click.echo(f"could not write the send marker: {exc}", err=True)
+
     if failed:
         sys.exit(1)
 

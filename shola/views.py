@@ -1153,15 +1153,25 @@ def healthz():
     try:
         from pathlib import Path
 
-        marker = Path(current_app.config["UPLOAD_DIR"]).parent / "last-backup.txt"
-        if marker.exists():
+        instance = Path(current_app.config["UPLOAD_DIR"]).parent
+
+        def freshness(filename, allowed_days, missing_note):
+            marker = instance / filename
+            if not marker.exists():
+                return {"last": None, "stale": True, "note": missing_note}
             when = datetime.fromisoformat(marker.read_text().strip())
             days = (datetime.utcnow() - when).days
-            out["backup"] = {"last": when.date().isoformat(), "days_ago": days,
-                             "stale": days > 2}
-        else:
-            out["backup"] = {"last": None, "stale": True,
-                             "note": "no successful backup recorded"}
+            return {"last": when.date().isoformat(), "days_ago": days,
+                    "stale": days > allowed_days}
+
+        out["backup"] = freshness("last-backup.txt", 2,
+                                  "no successful backup recorded")
+        # Every scheduled task on this deployment failed silently for a week,
+        # the send among them, because they all boot the app and the app would
+        # not boot. Nothing anybody looks at said so. Two days' grace: a
+        # volunteer on a weekly schedule can make a quiet Tuesday legitimate.
+        out["send"] = freshness("last-send.txt", 2,
+                                "no send recorded")
     except Exception as exc:      # noqa: BLE001
         out["backup"] = {"error": exc.__class__.__name__}
     return out
