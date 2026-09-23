@@ -1174,4 +1174,20 @@ def healthz():
                                 "no send recorded")
     except Exception as exc:      # noqa: BLE001
         out["backup"] = {"error": exc.__class__.__name__}
-    return out
+
+    # Can we actually reach the database? Everything above this answered 200
+    # whatever was wrong, which made /healthz a test of whether gunicorn was
+    # listening rather than whether the app worked. Docker reads the status
+    # code, so this is what lets a container report itself unhealthy.
+    #
+    # Deliberately not folded in with the staleness above: a backup that has
+    # not run is a real problem and not one restarting the container fixes.
+    try:
+        db.session.execute(db.text("SELECT 1"))
+        out["db"] = True
+    except Exception as exc:      # noqa: BLE001
+        out["db"] = False
+        out["ok"] = False
+        out["error"] = exc.__class__.__name__
+
+    return (out, 200) if out["ok"] else (out, 503)

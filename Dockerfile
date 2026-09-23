@@ -31,6 +31,17 @@ ENV SHOLA_BUILD=$SOURCE_COMMIT
 ENV SHOLA_DATABASE_URL=sqlite:////app/instance/shola.db
 EXPOSE 8000
 
+# So a container that cannot serve says so, instead of sitting in Coolify as
+# "running:unknown" while it crash-loops. /healthz answers 503 when it cannot
+# reach the database, and curl -f turns that into a non-zero exit.
+#
+# start-period is generous because boot is not instant: the schema check, the
+# index check and the language backfill all run before the first request, over
+# a 660 MB database. Failing a container for being slow to start is how you
+# turn a slow boot into an outage.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+  CMD curl -fsS http://127.0.0.1:8000/healthz > /dev/null || exit 1
+
 RUN chmod +x docker-entrypoint.sh
 ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["gunicorn", "--workers", "3", "--threads", "4", "--timeout", "60", \
