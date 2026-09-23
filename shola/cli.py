@@ -576,6 +576,43 @@ def add_options_cmd(path, source, yes):
     click.echo(f"Added {added:,} options as {source!r}.")
 
 
+@shola_cli.command("send-test")
+@click.option("--to", "to_email", required=True, help="Where to send it.")
+def send_test_cmd(to_email):
+    """Send one message down the real path, to check the mail set-up.
+
+    Uses the same sender, reply-to and transport as a volunteer's daily list,
+    so it proves the thing that matters: that mail configured here arrives, and
+    that a reply to it lands somewhere a person reads. Configuration has moved
+    three times in a day - sender, reply-to, domain - and each time the only
+    way to know was to wait for the next send.
+    """
+    from .mailer import can_send, send
+
+    cfg = current_app.config
+    via = can_send()
+    if not via:
+        raise click.ClickException(
+            "Nothing is configured to send: no Brevo key and no SMTP password.")
+
+    click.echo(f"  via        {via}")
+    click.echo(f"  from       {cfg['MAIL_FROM_NAME']} <{cfg['MAIL_FROM']}>")
+    click.echo(f"  reply-to   {cfg.get('MAIL_REPLY_TO') or '(none)'}")
+    click.echo(f"  to         {to_email}")
+
+    when = datetime.utcnow().isoformat(timespec="seconds")
+    text = (f"This is a test from SHOLA, sent {when} UTC.\n\n"
+            f"It went out as {cfg['MAIL_FROM']} and a reply to it should reach "
+            f"{cfg.get('MAIL_REPLY_TO') or 'nobody - reply-to is unset'}.\n\n"
+            f"If you are reading this, that path works.\n")
+    try:
+        send(to_email, f"SHOLA test, {when}", text,
+             f"<p>{text.replace(chr(10) + chr(10), '</p><p>')}</p>")
+    except Exception as exc:      # noqa: BLE001 - the whole point is the error
+        raise click.ClickException(f"Send failed: {exc}")
+    click.echo("\nSent. Check the inbox, and reply to it to test the routing.")
+
+
 @shola_cli.command("drop-project")
 @click.option("--slug", required=True)
 @click.option("--yes", is_flag=True, help="Do it, rather than counting first.")
