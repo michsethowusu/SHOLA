@@ -7,7 +7,7 @@ regenerated whenever the brand changes.
 
     python3 brand/build.py
 
-Sizes are chosen for how people actually share things in Ghana: WhatsApp Status
+Sizes are chosen for how people actually share things: WhatsApp Status
 first, then TikTok and Instagram, then X, Facebook and YouTube.
 """
 
@@ -25,12 +25,18 @@ HERE = Path(__file__).resolve().parent
 OUT = HERE.parent / "shola" / "static" / "brand"
 SITE = os.environ.get("SHOLA_SITE_HOST", "sholaproject.org")
 
-# Every Ghanaian language is open, so the artwork counts them rather than
+# Every African language is open, so the artwork counts them rather than
 # naming a few — naming four read as a promise that the rest were shut out.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from shola.config import ALL_LANGUAGES  # noqa: E402
 
 N_LANG = len(ALL_LANGUAGES)
+
+# Letters a phone keyboard hides, one from each of the writing systems SHOLA
+# now covers: Latin with West African extensions, Ge'ez, Tifinagh, Arabic and
+# Ethiopic. A row of only ɛ ɔ ŋ said West Africa, which the language list
+# stopped meaning.
+GLYPHS = "ɛ ɔ ŋ ɖ ƒ ʋ ግ ⵣ ع"
 
 RED = "#c0392b"
 INK = "#1a1815"
@@ -81,7 +87,7 @@ def story(headline, sub, kicker="Share Your Language"):
   </div>
   <div>
     <div class="glyphs" style="font-size:66px;margin-bottom:30px">
-      ɛ ɔ ŋ ɖ ƒ ɣ ʋ ʒ</div>
+      {GLYPHS}</div>
     <div class="tag" style="font-size:44px;padding:26px 46px">{SITE}</div>
   </div>
 </div>"""
@@ -98,7 +104,7 @@ def square(headline, sub):
       {sub}</div>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between">
-    <div class="glyphs" style="font-size:52px">ɛ ɔ ŋ ɖ ƒ ɣ ʋ ʒ</div>
+    <div class="glyphs" style="font-size:52px">{GLYPHS}</div>
     <div class="url" style="font-size:38px">{SITE}</div>
   </div>
 </div>"""
@@ -116,7 +122,7 @@ def wide(headline, sub, big=False):
                 margin-top:{int(24*scale)}px;max-width:44ch">{sub}</div>
   </div>
   <div style="display:flex;align-items:center;justify-content:space-between">
-    <div class="glyphs" style="font-size:{int(44*scale)}px">ɛ ɔ ŋ ɖ ƒ ɣ ʋ ʒ</div>
+    <div class="glyphs" style="font-size:{int(44*scale)}px">{GLYPHS}</div>
     <div class="url" style="font-size:{int(34*scale)}px">{SITE}</div>
   </div>
 </div>"""
@@ -133,7 +139,7 @@ def thumbnail():
                 letter-spacing:.02em">DO YOU SPEAK</div>
     <div style="font-size:88px;font-weight:800;line-height:1.02;
                 letter-spacing:-.04em;margin-top:6px">
-      A GHANAIAN<br>LANGUAGE?</div>
+      AN AFRICAN<br>LANGUAGE?</div>
     <div style="font-size:36px;color:{GOLD};margin-top:20px;font-weight:700">
       Your language needs you — 2 minutes a day</div>
   </div>
@@ -166,7 +172,7 @@ def lower_third():
       Check translations in your language</div>
     <div style="display:flex;align-items:center;justify-content:space-between;
                 margin-top:18px">
-      <div class="glyphs" style="font-size:34px">ɛ ɔ ŋ ɖ ƒ ɣ ʋ ʒ</div>
+      <div class="glyphs" style="font-size:34px">{GLYPHS}</div>
       <div class="url" style="font-size:32px">{SITE}</div>
     </div>
   </div>
@@ -196,7 +202,7 @@ def side_panel():
                   letter-spacing:-.03em;color:{INK}">
         Your language,<br>checked by<br>you.</div>
       <div style="font-size:29px;color:#57514a;margin-top:24px;line-height:1.4">
-        {N_LANG} Ghanaian languages.<br>Two minutes a day.</div>
+        {N_LANG:,} African languages.<br>Two minutes a day.</div>
     </div>
     <div>
       <div class="glyphs" style="font-size:42px;margin-bottom:22px">
@@ -228,29 +234,29 @@ def wordmark(colour, bg):
 ASSETS = [
     ("story-why", 1080, 1920, False,
      story("Keep your<br>language<br>alive.",
-           f"{N_LANG} Ghanaian languages.<br>A few words a day, by email.")),
+           f"{N_LANG:,} African languages.<br>A few words a day, by email.")),
     ("story-how", 1080, 1920, False,
      story("2 minutes<br>a day.",
            "Tap the right translation. Skip what you<br>are unsure of. "
            "That is the whole job.")),
     ("story-ask", 1080, 1920, False,
-     story("Do you speak<br>a Ghanaian<br>language?",
+     story("Do you speak<br>an African<br>language?",
            f"All {N_LANG} of them are open.<br>Nobody has added yours yet? "
            "Then<br>you go first.")),
     ("square-why", 1080, 1080, False,
      square("Keep your language alive.",
-            f"Help confirm translations in {N_LANG} Ghanaian languages. "
+            f"Help confirm translations in {N_LANG:,} African languages. "
             "A few words a day.")),
     ("square-ask", 1080, 1080, False,
-     square("Speak a Ghanaian language?",
+     square("Speak an African language?",
             "Two minutes a day keeps your language alive.")),
     ("x-post", 1600, 900, False,
      wide("Your language, checked by the people who speak it.",
-          f"Confirm translations in {N_LANG} Ghanaian languages. "
+          f"Confirm translations in {N_LANG:,} African languages. "
           "A few words a day, by email.")),
     ("facebook-link", 1200, 630, True,
      wide("Keep your language alive.",
-          f"A few words a day, in any of {N_LANG} Ghanaian languages.")),
+          f"A few words a day, in any of {N_LANG:,} African languages.")),
     ("youtube-thumbnail", 1280, 720, False, thumbnail()),
     ("youtube-lowerthird", 1920, 1080, False, lower_third()),
     ("youtube-sidepanel", 1920, 1080, False, side_panel()),

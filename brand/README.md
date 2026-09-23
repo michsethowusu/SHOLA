@@ -11,8 +11,8 @@ Regenerate the artwork with `python3 brand/build.py`.
 
 ## What SHOLA is, in one line
 
-A place where Ghanaians confirm translations of everyday words in their own
-language — all 88 of them — a handful of words a day, by email, on the phone
+A place where Africans confirm translations of everyday words in their own
+language — all 2,206 of them — a handful of words a day, by email, on the phone
 or the laptop.
 
 Two minutes a day. No app to install, no account, no password.
@@ -77,17 +77,17 @@ Short, for WhatsApp Status and TikTok:
 > Your language, checked by the people who speak it. Two minutes a day.
 > sholaproject.org
 
-> 88 Ghanaian languages, and yours is one of them. A few words a day helps
+> 2,206 African languages, and yours is one of them. A few words a day helps
 > build accurate translations everyone can use. sholaproject.org
 
-Ghanaian Pidgin, for a more casual audience:
+Pidgin, for a more casual audience:
 
-> You fit speak any Ghanaian language? Give am 2 minutes every day make we keep
+> You fit speak any African language? Give am 2 minutes every day make we keep
 > your language alive. sholaproject.org
 
 Longer, for Instagram, Facebook or a YouTube description:
 
-> Ghanaian languages are missing from the tools we use every day — not because
+> African languages are missing from the tools we use every day — not because
 > nobody speaks them, but because too little of them has been written down.
 >
 > SHOLA sends you a few English words a day with three possible translations in
@@ -105,15 +105,14 @@ For a language nobody has started yet:
 > Whatever you type becomes the option others vote on. sholaproject.org
 
 **Local-language captions:** we have deliberately not written these. Copy in a
-Ghanaian language should be written by a speaker, not translated by us —
+African language should be written by a speaker, not translated by us —
 getting it slightly wrong in a campaign about language accuracy would undercut
 the whole point. If you write one, send it to ghanaopenai@gmail.com and we will add
 it here with credit.
 
 ## Hashtags
 
-`#SHOLA` `#ShareYourLanguage` `#GhanaOpenData` `#GhanaianLanguages`
-`#AIforGhana`
+`#SHOLA` `#ShareYourLanguage` `#AfricanLanguages` `#AIforAfrica`
 
 Add the tag for the language you are posting in — `#Twi`, `#Ewe`, `#Ga`,
 `#Dagbani`, `#Nzema`, whichever it is.
@@ -124,13 +123,13 @@ Add the tag for the language you are posting in — `#Twi`, `#Ewe`, `#Ga`,
 - **No app, no password.** A link arrives by email and it opens straight into
   the words.
 - **The result is free for anyone to build on.** That is how a language earns
-  its place in the apps, services and businesses Ghanaians use every day.
+  its place in the apps, services and businesses people use every day.
 
 ## Please do not
 
 - **Say it pays.** It is volunteer work. Nobody is paid, and implying otherwise
   brings people who leave immediately.
-- **Say a language is missing.** All 88 are open. Four have translations
+- **Say a language is missing.** All 2,206 are open. Four have translations
   loaded to check; for the rest, the first speaker to arrive types the wording
   and everyone after votes on it.
 - **Recolour or stretch the logo,** or set the wordmark in another typeface.
