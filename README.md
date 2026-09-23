@@ -4,9 +4,9 @@
 up](https://sholaproject.org/join) · [champions](https://sholaproject.org/champions)
 · [progress](https://sholaproject.org/stats) · [API](https://sholaproject.org/api)
 
-A volunteer app for collecting human answers about **88 Ghanaian languages** —
-translations, transcriptions, or whatever a project needs — a few items a day,
-by email.
+A volunteer app for translating everyday English words into **African
+languages** — a few words a day, by email. 2,206 languages, one question:
+how do you say this in yours?
 
 Machine translation produced three candidate translations for each word. Much of
 it is good, some is word-for-word and no speaker would say it, and some is
@@ -34,91 +34,18 @@ deployment.
    the next speaker can agree with, so a language with no loaded translations
    still builds up choices.
 
-### Everything is a project
+### One body of work
 
-A project is a body of work: some items, in some languages, needing answers.
-The translation of everyday words is one of these, not a special case — a
-migration on first boot creates it and adopts every item collected before
-projects existed, so no code downstream needs an exception for "the original
-words".
+SHOLA collects words, and only words. It briefly had a platform for hosting
+other people's datasets - submission, approval, exclusive runs, sentences and
+paragraphs - and every part of it was a question somebody had to answer before
+anyone could check a word. It is gone. A `Project` row survives as the thing
+words hang off, because `Word.project_id` is on 478,822 rows and rebuilding
+that table in SQLite to drop a column nobody sees is not worth it.
 
-| | |
-|---|---|
-| Submitted at | `/submit` — one CSV per language, no account needed |
-| Approved at | `/admin` — signed link to an address in `SHOLA_ADMINS` |
-| Chosen at | `/join` (at least one) and `/w/<token>/projects` afterwards |
-| Shared as | `/join?project=<slug>` |
-
-An **item** may be a word, a sentence or a paragraph; the project says which and
-the interface follows. `Word` and `word_id` are historical names for the item
-table — renaming them would mean rewriting every foreign key on a live database
-for no behavioural gain, so the code says word and the interface says item.
-
-**One list, shared between projects.** A volunteer opts in to as many as they
-like and still gets one short list. `projects.shares()` splits it as evenly as
-the numbers allow — five items across two projects is three and two, and the
-order rotates by work done so the same project is not always the one that gets
-two. A project whose queue is dry passes its share to the others rather than
-shortening the list.
-
-**We report, we do not rule.** `votes_to_settle` is a target: how many answers
-an item wants in each language before it stops being handed out, and a project is
-finished when every item has them. Nothing decides which answer is *correct* —
-every answer is published with the number of volunteers who chose it, ties are
-reported as ties, and the judgement belongs to whoever builds on the data. An
-earlier version of this settled items by agreement and threw the rest away, which
-discarded the only evidence a consumer could have used.
-
-**Answers spread evenly.** The item with the fewest answers goes out next, so a
-tier approaches completion together instead of piling attention on whatever is
-nearest its target and leaving a tail nobody ever saw.
-
-**A skip is not an answer, but it is counted.** It returns the item to the pool
-and never goes back to that volunteer. When as many speakers have skipped an item
-as the project wants answers, it is marked a **problem** and stops being offered
-at all — the people who would know have collectively shrugged, and asking the
-remaining speakers adds nothing. An answer alongside does not cancel the skips;
-the two counts run independently.
-
-**Three lists come out of the API**, so a consumer never has to decide what a
-vote count means: `/verified` (target reached, one wording ahead), `/problem`
-(skipped past the target, reported, or tied), and the base endpoint for
-everything with counts.
-
-**One CSV describes any project.** `text,language,priority,option1…` — rows
-sharing the same text are the *same item*, so an item exists once however many
-languages answer it. The language column is required and holds a code, with `all`
-for a row that applies to every language; blank is refused rather than assumed,
-because a project addressed to all 88 languages should not come from an empty
-cell. `priority` is optional and becomes the tier: band 1 is finished before band
-2 starts. Options are optional *per language* — the translation project has
-machine translations in four languages and nothing in the other eighty-four, and
-a submitted project is allowed to be just as uneven.
-
-The submit page lists every code with its name, and serves `/template.csv` and
-`/languages.csv` so nobody has to retype a header from a screenshot. The
-template's example rows are generated from the config, because the hand-written
-version shipped with `gaa` in it while the stored code was `ga` — a template our
-own validator would have rejected.
-
-**Language codes are ISO 639-3.** Two of the four languages SHOLA started with
-were seeded by hand with codes that were not: `ga` for Ga, which is `gaa`, and
-`dagbani` for Dagbani, which is `dag`. The other 84 always used ISO codes, so
-anyone who looked up the correct code had their file refused.
-`normalise_language_codes()` moves the stored codes on boot — all eight columns
-that hold one, listed in `LANGUAGE_COLUMNS` because a migration that misses one
-leaves a volunteer whose language nothing recognises. The old codes are accepted
-on input for ever, along with the two-letter forms, via
-`config.canonical_language()`: correcting our own mistake must not break a link
-or a file somebody already wrote.
-
-**A share link buys priority, not permanence.** Someone who joins through
-`/join?project=<slug>` works only on that project until its queue is empty for
-their language; then everything they joined opens up.
-
-**Volunteers can report an item.** They are the only people who see these in
-bulk, so a broken item is reportable mid-task from the evaluate screen. A
-flagged item leaves every queue until an admin keeps or withdraws it.
+Machine translation seeded four languages with candidate translations. The
+other 2,202 start empty: the first speaker to arrive types the wording, and it
+becomes the option everyone after them votes on.
 
 ### It is open-ended
 
@@ -227,7 +154,7 @@ is closed as contested, every variant is kept, and the group can finish.
 
 ### Languages not open yet
 
-Anyone can sign up for one of 84 other Ghanaian languages. They confirm their
+Anyone can sign up for any of the 2,202 languages with nothing in them yet. They confirm their
 email as usual, then land on a page telling them they are on the list. No words
 are leased to them and the daily mail skips them, so nobody ever opens a link to
 an empty queue. `shola waitlist` shows who is waiting and for what.
@@ -356,7 +283,7 @@ and the page copy.
 ```
 shola/
 ├── config.py        # settings + the four seeded languages and their characters
-├── languages.py     # the other 84 Ghanaian languages
+├── languages.py     # the other 2,201 African languages, generated
 ├── models.py        # Project, Word (an item), Candidate, WordState, Volunteer,
 │                    #   VolunteerProject, Assignment, Evaluation, Flag
 │                    #   + ensure_columns / ensure_indexes / adopt_orphan_items
