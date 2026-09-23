@@ -443,8 +443,9 @@ def main():
     wl = app.test_client()
     r = wl.post("/join", data={
         "name": "Kwesi Mensah", "email": "kwesi@example.com",
-        "language": "other", "other_language": "nzi",
-        "time_window": "anytime", "projects": [str(core_id)]},
+        # The sign-up form is a search box now: one field carrying the code,
+        # with no "other" sentinel and no project to choose.
+        "language": "nzi", "time_window": "anytime"},
         follow_redirects=True)
     ok &= check("signup asks for the code too", r.status_code == 200
                 and b"Enter the code" in r.data)

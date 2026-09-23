@@ -18,6 +18,15 @@ from pathlib import Path
 # predate our using ISO ones. Left out here so they are not listed twice.
 SEEDED_ISO = {"twi", "ewe", "gaa", "dag"}
 
+# The source language. afriso lists English because it is spoken in Liberia,
+# South Africa and St Helena, which is true and beside the point: every item
+# SHOLA collects is an English word, so signing up to translate English into
+# English is a dead end with a sign-up form in front of it.
+#
+# Afrikaans and Arabic stay. Both are spoken across the continent and neither
+# is what the corpus is written in.
+NOT_A_TARGET = {"eng"}
+
 # Three names carry a technical annotation from the ISO tables rather than
 # anything a speaker would recognise. Country parentheticals are left alone -
 # "Aja (Benin)" and "Aja (South Sudan)" are two different languages and the
@@ -60,7 +69,9 @@ COUNTRY_NAMES = {
 def main(src, countries_src=None, dest=Path("shola/languages.py")):
     rows = list(csv.DictReader(open(src, encoding="utf-8")))
     keep = [r for r in rows
-            if r["type"] == "living" and r["iso639_3"] not in SEEDED_ISO]
+            if r["type"] == "living"
+            and r["iso639_3"] not in SEEDED_ISO
+            and r["iso639_3"] not in NOT_A_TARGET]
     keep.sort(key=lambda r: r["name"].casefold())
 
     countries = {c for r in keep for c in r["countries"].split(";") if c}
