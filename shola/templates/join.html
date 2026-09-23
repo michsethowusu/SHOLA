@@ -25,41 +25,21 @@
       </div>
 
       <div class="field">
-        <span class="label">Which language do you speak best?</span>
-        <p class="hint">You will only be asked about this language.</p>
-        <div class="choice-grid">
-          {% set chosen = (form.language if form else request.args.get('language')) %}
-          {% for code, lang in LANGUAGES.items() %}
-            <label class="choice">
-              <input type="radio" name="language" value="{{ code }}" required
-                     {% if chosen == code %}checked{% endif %}>
-              <span class="t">{{ lang.name }}</span>
-              <span class="s">{{ lang.special | join(' ') }}</span>
-            </label>
-          {% endfor %}
-          <label class="choice" id="other-choice">
-            <input type="radio" name="language" value="other"
-                   {% if chosen == 'other' %}checked{% endif %}>
-            <span class="t">Another language</span>
-            <span class="s">{{ LANGUAGE_COUNT - LANGUAGES|length }} more</span>
-          </label>
-        </div>
-
-        <div id="other-picker" hidden style="margin-top:12px">
-          <label for="lang-search">Which one?</label>
-          <p class="hint">
-            Type its name, another name it goes by, or your country. Most of
-            these have nothing in them yet — you would be the first speaker,
-            and what you write becomes what everyone after you votes on.
-          </p>
-          <input type="search" id="lang-search" autocomplete="off"
-                 placeholder="Yoruba, Bamanankan, Nigeria…"
-                 value="{{ form.other_language if form else '' }}">
-          <input type="hidden" id="other_language" name="other_language"
-                 value="{{ form.other_language if form else '' }}">
-          <div id="lang-hits" class="stack" style="margin-top:10px"></div>
+        <label for="lang-search">Which language do you speak best?</label>
+        <p class="hint">
+          Type its name, another name it goes by, or your country. All
+          {{ LANGUAGE_COUNT | thousands }} are open. You will only ever be
+          asked about this one.
+        </p>
+        {% set chosen = (form.language if form else request.args.get('language')) %}
+        <input type="search" id="lang-search" autocomplete="off" required
+               placeholder="Hausa, Kiswahili, Bamanankan, Nigeria…"
+               value="{{ (ALL_LANGUAGES[chosen].name
+                          if chosen in ALL_LANGUAGES else chosen) or '' }}">
+        <input type="hidden" id="other_language" name="language"
+               value="{{ chosen or '' }}">
+        <div id="lang-hits" class="stack" style="margin-top:10px"></div>
           <p class="hint" id="lang-chosen" hidden></p>
-        </div>
       </div>
 
       <div class="field">
@@ -110,35 +90,31 @@
       <button class="btn wide" type="submit">Join SHOLA</button>
 
       <script>
-        // Reveal the search only when it is wanted, so the common case stays
-        // four taps, and ask the server for matches rather than shipping two
-        // thousand languages into the page.
+        // Two thousand languages will not fit in a <select>, so the page asks
+        // the server for the handful that match what somebody typed.
         (function () {
-          var picker = document.getElementById("other-picker");
           var search = document.getElementById("lang-search");
           var field = document.getElementById("other_language");
           var hits = document.getElementById("lang-hits");
           var chosen = document.getElementById("lang-chosen");
-
-          function sync() {
-            var other = document.querySelector('input[name=language][value=other]');
-            picker.hidden = !(other && other.checked);
-          }
-          document.querySelectorAll('input[name=language]').forEach(function (r) {
-            r.addEventListener("change", sync);
-          });
-          sync();
 
           function pick(lang) {
             field.value = lang.code;
             search.value = lang.name;
             hits.innerHTML = "";
             chosen.hidden = false;
-            chosen.textContent = "Chosen: " + lang.name;
+            chosen.textContent = "Chosen: " + lang.name
+              + (lang.where.length ? " · " + lang.where.join(", ") : "");
           }
 
           function show(list) {
             hits.innerHTML = "";
+            if (!list.length) {
+              chosen.hidden = false;
+              chosen.textContent = "Nothing matches that yet — try another "
+                + "spelling, or your country.";
+              return;
+            }
             list.forEach(function (lang) {
               var b = document.createElement("button");
               b.type = "button";
@@ -153,7 +129,7 @@
 
           var timer = null;
           search.addEventListener("input", function () {
-            // The typed text is no longer a chosen language until they pick.
+            // Typed text is not a chosen language until they pick one.
             field.value = "";
             chosen.hidden = true;
             clearTimeout(timer);

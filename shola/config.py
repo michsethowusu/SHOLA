@@ -174,7 +174,12 @@ ALL_LANGUAGES = dict(LANGUAGES)
 for _code, _name, _alt, _countries in OTHER_LANGUAGES:
     ALL_LANGUAGES[_code] = {
         "name": _name,
-        "note": _alt[0] if _alt else "",
+        # No note. It used to be the first alternative name, which reads fine
+        # for some languages and is a racial slur for others - afriso records
+        # every name a language has been called, including the ones colonial
+        # sources used, and "Caffre" was being served for Xhosa. Alternative
+        # names are for matching a search, never for showing to anybody.
+        "note": "",
         # Every name this language goes by, and where it is spoken. Both are
         # search terms: at two thousand languages a speaker will not scroll to
         # find theirs, and many will look for a name a standards body did not
@@ -204,6 +209,32 @@ ALL_LANGUAGES["twi-akuapem"] = {
     "longpress": {k: list(v) for k, v in LANGUAGES["twi"]["longpress"].items()},
     "seeded": False,
 }
+
+# A spread across the continent for the front page, so "which one do you
+# speak?" does not answer itself with four Ghanaian languages.
+#
+# The endonyms are written here by hand rather than taken from the dataset's
+# alternative names, which are a record of every name a language has been
+# called - archaic, colonial and occasionally worse - and are for matching a
+# search, not for showing to a speaker.
+FEATURED_LANGUAGES = [
+    ("hau", "Harshen Hausa"),
+    ("swa", "Kiswahili"),
+    ("yor", "Èdè Yorùbá"),
+    ("amh", "አማርኛ"),
+    ("ibo", "Asụsụ Igbo"),
+    ("zul", "isiZulu"),
+    ("orm", "Afaan Oromoo"),
+    ("twi", "Twi"),
+    ("som", "Af-Soomaali"),
+    ("xho", "isiXhosa"),
+    ("kin", "Ikinyarwanda"),
+    ("lin", "Lingála"),
+    ("sna", "chiShona"),
+    ("zgh", "ⵜⴰⵎⴰⵣⵉⵖⵜ"),
+    ("wol", "Wolof"),
+    ("mlg", "Malagasy"),
+]
 
 DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday",
              "Saturday", "Sunday"]

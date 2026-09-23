@@ -65,19 +65,20 @@
     <p class="eyebrow">{{ LANGUAGE_COUNT | thousands }} African languages</p>
     <h2>Which one do you speak?</h2>
     <div class="cards" style="margin-top:22px">
-      {% for code, lang in LANGUAGES.items() %}
-        <a class="lang-card" href="{{ url_for('main.join') }}?language={{ code }}">
-          <div class="name">{{ lang.name }}</div>
-          <div class="native">{{ lang.note }}</div>
-          <div class="lang-letters">{{ lang.special | join(' ') }}</div>
-        </a>
+      {% for code, endonym in FEATURED_LANGUAGES %}
+        {% if code in ALL_LANGUAGES %}
+          <a class="lang-card" href="{{ url_for('main.join') }}?language={{ code }}">
+            <div class="name">{{ ALL_LANGUAGES[code].name }}</div>
+            <div class="native">{{ endonym }}</div>
+          </a>
+        {% endif %}
       {% endfor %}
     </div>
     <p class="hint" style="margin-top:16px">
-      These four already have translations to check. Speak any of the other
-      {{ (LANGUAGE_COUNT - 4) | thousands }}?
-      <a href="{{ url_for('main.join') }}">Sign up</a> and you start it off —
-      what you type becomes the first option others vote on.
+      A few of the {{ LANGUAGE_COUNT | thousands }}. Yours is in there —
+      <a href="{{ url_for('main.join') }}">sign up</a> and search for it. If
+      nobody has started it, you do: what you type becomes the first option
+      others vote on.
     </p>
   </div>
 </section>

@@ -266,13 +266,11 @@ def join():
 
     name = (request.form.get("name") or "").strip()
     email = (request.form.get("email") or "").strip().lower()
-    language = request.form.get("language") or ""
-    if language == "other":
-        # A code from the search box, or whatever was typed if the search never
-        # ran - so the form still works with JavaScript off.
-        language = resolve_language(request.form.get("other_language") or "")
-    # An old code in a bookmarked link or a shared form still resolves.
-    language = canonical_language(language)
+    # The search box sets a code; whatever was typed is used instead if the
+    # search never ran, so the form still works with JavaScript off. An old
+    # code in a bookmarked link or a shared form resolves the same way.
+    language = canonical_language(
+        resolve_language(request.form.get("language") or ""))
     days = request.form.getlist("days")
     window = request.form.get("time_window") or "anytime"
     consent = bool(request.form.get("photo_consent"))
@@ -771,7 +769,8 @@ def languages_json():
     return jsonify([{
         "code": code,
         "name": info["name"],
-        "note": info.get("note", ""),
+        # Deliberately not the alternative names: they are search terms, and
+        # some of them are slurs.
         "where": [COUNTRY_NAMES.get(c, c) for c in info.get("countries", ())][:3],
     } for code, info in hits])
 
