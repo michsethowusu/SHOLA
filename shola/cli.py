@@ -16,6 +16,9 @@ import sys
 from pathlib import Path
 from datetime import date, datetime, time, timedelta
 
+# A word shows at most this many options; more is a wall, not a choice.
+MAX_OPTIONS = 5
+
 import click
 from flask import current_app
 from flask.cli import AppGroup
@@ -480,6 +483,97 @@ def reset_backoff_cmd(email, yes):
             v.last_emailed_on = None
     db.session.commit()
     click.echo(f"\nCleared for {len(affected)} volunteer(s).")
+
+
+@shola_cli.command("add-options")
+@click.option("--jsonl", "path", type=click.Path(exists=True), required=True,
+              help='One object per line: {"phrase","language","text"}.')
+@click.option("--source", required=True,
+              help="What wrote them, e.g. 'google-translate'. The scoreboard "
+                   "reads this.")
+@click.option("--yes", is_flag=True, help="Do it, rather than counting first.")
+def add_options_cmd(path, source, yes):
+    """Attach machine translations to words that already exist.
+
+    `import-words` builds the corpus and only knows the languages seeded at the
+    start. This is for giving a language options later: a speaker of it then
+    has something to agree with or correct, instead of typing every wording
+    from nothing.
+
+    Skips anything already there - same word, same language, same wording - so
+    re-running after an interrupted pass costs nothing.
+    """
+    from .config import canonical_language
+    from .models import CORE_PROJECT, Candidate, Project, Word
+
+    core = Project.query.filter_by(slug=CORE_PROJECT["slug"]).first()
+    if core is None:
+        raise click.ClickException("No words project to attach to.")
+
+    known = current_app.config["ALL_LANGUAGES"]
+    words = {phrase.casefold(): wid for wid, phrase in
+             db.session.query(Word.id, Word.phrase)
+             .filter(Word.project_id == core.id)}
+    click.echo(f"{len(words):,} words in the project")
+
+    # What each word/language already has, so positions continue rather than
+    # collide and duplicates are not written twice.
+    taken = {}
+    for wid, lang, pos, text in db.session.query(
+            Candidate.word_id, Candidate.language,
+            Candidate.position, Candidate.text):
+        slot = taken.setdefault((wid, lang), {"max": 0, "texts": set()})
+        slot["max"] = max(slot["max"], pos or 0)
+        slot["texts"].add((text or "").strip().casefold())
+
+    added = skipped = unknown_word = unknown_lang = 0
+    pending = []
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            text = (row.get("text") or "").strip()
+            lang = canonical_language(row.get("language") or "")
+            wid = words.get((row.get("phrase") or "").strip().casefold())
+            if not text or wid is None:
+                unknown_word += 1 if wid is None else 0
+                continue
+            if lang not in known:
+                unknown_lang += 1
+                continue
+            slot = taken.setdefault((wid, lang), {"max": 0, "texts": set()})
+            if text.casefold() in slot["texts"] or slot["max"] >= MAX_OPTIONS:
+                skipped += 1
+                continue
+            slot["max"] += 1
+            slot["texts"].add(text.casefold())
+            pending.append({"word_id": wid, "language": lang,
+                            "position": slot["max"], "text": text[:400],
+                            "source": source})
+            added += 1
+
+    click.echo(f"  to add       {added:,}")
+    click.echo(f"  already there{skipped:>9,}")
+    if unknown_word:
+        click.echo(f"  no such word {unknown_word:,}")
+    if unknown_lang:
+        click.echo(f"  unknown lang {unknown_lang:,}")
+    if not yes:
+        click.echo("\nRe-run with --yes to write them.")
+        return
+
+    # Chunked: this runs to hundreds of thousands of rows, and one statement
+    # that size is what filled the disk the last time.
+    for start in range(0, len(pending), 5000):
+        db.session.bulk_insert_mappings(Candidate, pending[start:start + 5000])
+        db.session.commit()
+        click.echo(f"  written {min(start + 5000, len(pending)):,} / {len(pending):,}")
+    click.echo(f"Added {added:,} options as {source!r}.")
 
 
 @shola_cli.command("drop-project")
