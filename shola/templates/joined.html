@@ -7,7 +7,7 @@
     <p class="eyebrow">You are in</p>
     <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">Akwaaba, {{ volunteer.name.split()[0] }}.</h1>
     <p class="lede" style="margin:0 auto 8px">
-      {{ assigned | thousands }} {{ ALL_LANGUAGES[volunteer.language].name }}
+      {{ assigned | thousands }} {{ (ALL_LANGUAGES.get(volunteer.language) or {}).get("name", volunteer.language) }}
       {{ plural }} are ready for you now.
       {{ WORDS_PER_DAY }} more arrive
       {%- if volunteer.available_days %}

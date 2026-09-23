@@ -1,9 +1,12 @@
-"""Checks for model attribution: the CSV column, and the scoreboard it feeds.
+"""Checks for the model scoreboard.
 
-The point being tested is that the numbers are earned. A file that names no
-model must not put anything on the board, an option a volunteer typed must
-never be scored as a machine's, and a model whose wording a speaker types out
-by hand must get the credit anyway.
+The point being tested is that the numbers are earned. An option a volunteer
+typed must never be scored as a machine's, and a model whose wording a speaker
+types out by hand must get the credit anyway.
+
+The CSV `model` column that used to feed this is gone with the upload path.
+`Candidate.source` is set by `import-words` and by `shola name-model`, and that
+is what the board reads.
 """
 
 import io
@@ -14,7 +17,7 @@ import tempfile
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from shola import create_app                                    # noqa: E402
-from shola import importer, scoreboard                          # noqa: E402
+from shola import scoreboard                                    # noqa: E402
 from shola.assignment import record_verdict                     # noqa: E402
 from shola.config import Config                                 # noqa: E402
 from shola.models import (Candidate, Project, ProjectLanguage,   # noqa: E402
@@ -44,22 +47,27 @@ def make_app():
     return create_app(T)
 
 
-def parse(text, langs=("twi", "ewe")):
-    return importer.parse(text.encode("utf-8"), set(langs))
+def build(app, rows, slug="scored"):
+    """A project holding `rows`, each (text, [(option, model), ...]).
 
-
-def build(app, csv_text, slug="scored"):
-    """Import a file into a fresh project and return it."""
-    items, problems, _ = parse(csv_text)
-    assert not problems, problems
-    project = Project(slug=slug, title=slug, item_format="sentence",
+    Built directly rather than through a file: options carry the name of
+    whatever wrote them, and that is all the board needs.
+    """
+    project = Project(slug=slug, title=slug, item_format="word",
                       has_options=True, votes_to_settle=3, status="approved",
                       sort_order=50)
     db.session.add(project)
     db.session.flush()
     for code in ("twi", "ewe"):
         db.session.add(ProjectLanguage(project_id=project.id, language=code))
-    importer.import_items(project, items)
+    for text, options in rows:
+        word = Word(phrase=text, project_id=project.id, position=1,
+                    occurrences=0, frequency=0.0, tier=1)
+        db.session.add(word)
+        db.session.flush()
+        for slot, (option, model) in enumerate(options, start=1):
+            db.session.add(Candidate(word_id=word.id, language="twi",
+                                     position=slot, text=option, source=model))
     db.session.commit()
     return project
 
@@ -78,70 +86,12 @@ def option(project, text, language="twi"):
                     Candidate.text == text).first())
 
 
-# --------------------------------------------------------------- the column
-
-def test_column(app):
-    print("\nThe model column")
-    with app.app_context():
-        items, problems, _ = parse(
-            "text,language,option1,option2,model1,model2\n"
-            "hello,twi,agoo,mema wo akye,model-a,model-b\n")
-        check("file with per-option models parses", not problems, str(problems))
-        check("models recorded per option",
-              items[0]["models"]["twi"] == ["model-a", "model-b"],
-              str(items[0].get("models")))
-
-        items, _, _ = parse(
-            "text,language,option1,option2,model\n"
-            "hello,twi,agoo,mema wo akye,one-model\n")
-        check("a single model column covers the row",
-              items[0]["models"]["twi"] == ["one-model", "one-model"],
-              str(items[0]["models"]["twi"]))
-
-        items, _, _ = parse("text,language,option1,option2\n"
-                            "hello,twi,agoo,mema wo akye\n")
-        check("no model column means human",
-              items[0]["models"]["twi"] == ["human", "human"],
-              str(items[0]["models"]["twi"]))
-
-        # A model named for slot 2 must land on the option written under
-        # option2, not on whatever happened to be the second non-empty cell.
-        items, _, _ = parse(
-            "text,language,option1,option2,model2\n"
-            "hello,twi,,mema wo akye,model-b\n")
-        check("slot numbers survive a blank earlier option",
-              items[0]["models"]["twi"] == ["model-b"],
-              str(items[0]["models"]["twi"]))
-
-        # priority sits between the language and the options, and must not be
-        # mistaken for one of them.
-        items, _, _ = parse(
-            "text,language,priority,option1,option2,model1,model2\n"
-            "hello,twi,2,agoo,mema wo akye,model-a,model-b\n")
-        check("priority column is not read as an option",
-              items[0]["options"]["twi"] == ["agoo", "mema wo akye"]
-              and items[0]["models"]["twi"] == ["model-a", "model-b"],
-              f"{items[0]['options']['twi']} / {items[0]['models']['twi']}")
-
-        project = build(app, "text,language,option1,option2,model1,model2\n"
-                             "hello,twi,agoo,mema wo akye,model-a,model-b\n",
-                        slug="imported")
-        sources = sorted(c.source for c in Candidate.query.join(
-            Word, Candidate.word_id == Word.id).filter(
-            Word.project_id == project.id).all())
-        check("import writes the model onto each option",
-              sources == ["model-a", "model-b"], str(sources))
-
-
-# ------------------------------------------------------------ the scoreboard
-
 def test_scores(app):
     print("\nScoring what speakers picked")
     with app.app_context():
-        csv_text = ("text,language,option1,option2,model1,model2\n"
-                    + "".join(f"item {i},twi,a-{i},b-{i},model-a,model-b\n"
-                              for i in range(4)))
-        project = build(app, csv_text)
+        project = build(app, [(f"item {i}", [(f"a-{i}", "model-a"),
+                                            (f"b-{i}", "model-b")])
+                              for i in range(4)])
 
         check("nothing is scored before anyone answers",
               scoreboard.scores(project.id) == [])
@@ -186,8 +136,8 @@ def test_scores(app):
 def test_credit_and_baseline(app):
     print("\nCredit where it is due")
     with app.app_context():
-        project = build(app, "text,language,option1,option2,model1,model2\n"
-                             "greeting,twi,agoo,mema wo akye,model-a,model-b\n",
+        project = build(app, [("greeting", [("agoo", "model-a"),
+                                           ("mema wo akye", "model-b")])],
                         slug="credit")
         v = speaker("typer@example.com")
         opt = option(project, "agoo")
@@ -214,8 +164,8 @@ def test_credit_and_baseline(app):
               and rows["model-b"]["picked"] == 0, str(rows))
 
         # An unattributed project is the human baseline, not a nameless model.
-        human = build(app, "text,language,option1,option2\n"
-                           "water,twi,nsuo,nsu\n", slug="unattributed")
+        human = build(app, [("water", [("nsuo", "human"), ("nsu", "human")])],
+                      slug="unattributed")
         v3 = speaker("third@example.com")
         h_opt = option(human, "nsuo")
         record_verdict(v3, h_opt.word_id, candidate_id=h_opt.id)
@@ -242,9 +192,8 @@ def test_shared_wording(app):
     with app.app_context():
         # One option, both names on it - which is how a file records two
         # systems that agreed, rather than showing the same option twice.
-        project = build(app, "text,language,option1,option2,model1,model2\n"
-                             "greeting,twi,agoo,mema wo akye,"
-                             "model-a;model-b,model-c\n",
+        project = build(app, [("greeting", [("agoo", "model-a;model-b"),
+                                           ("mema wo akye", "model-c")])],
                         slug="agreed")
         v = speaker("shared@example.com")
         opt = option(project, "agoo")
@@ -267,48 +216,11 @@ def test_shared_wording(app):
               str(scoreboard.named_models(project.id)))
 
 
-def test_language_scoping(app):
-    print("\nWho sees which item")
-    with app.app_context():
-        # A Twi sentence whose options are English is a Twi item. Ewe speakers
-        # must not be handed it.
-        items, problems, _ = parse(
-            "text,language,option1,model1\n"
-            "Wo ho te sen?,twi,How are you?,model-a\n"
-            "Efoa?,ewe,How are you?,model-a\n")
-        check("a one-language item with options is filed under it",
-              not problems and items[0]["item_language"] == "twi",
-              str(items[0].get("item_language")))
-        check("and so is the next one, under its own",
-              items[1]["item_language"] == "ewe",
-              str(items[1].get("item_language")))
-
-        # A shared prompt still reaches everyone.
-        items, _, _ = parse("text,language,option1\n"
-                            "water,twi,nsuo\n"
-                            "water,ewe,tsi\n")
-        check("an item under several languages stays open to all",
-              items[0]["item_language"] is None,
-              str(items[0].get("item_language")))
-        items, _, _ = parse("text,language\nwater,all\n")
-        check("and so does one marked all", items[0]["item_language"] is None,
-              str(items[0].get("item_language")))
-
-        project = build(app, "text,language,option1,model1\n"
-                             "Wo ho te sen?,twi,How are you?,model-a\n",
-                        slug="scoped")
-        from shola.tiers import open_query
-        check("Twi speakers are offered it",
-              open_query("twi", project.id).count() == 1)
-        check("Ewe speakers are not",
-              open_query("ewe", project.id).count() == 0)
-
-
 def test_api(app):
     print("\nThe endpoint")
     with app.app_context():
-        project = build(app, "text,language,option1,option2,model1,model2\n"
-                             "greeting,twi,agoo,mema wo akye,model-a,model-b\n",
+        project = build(app, [("greeting", [("agoo", "model-a"),
+                                           ("mema wo akye", "model-b")])],
                         slug="served")
         v = speaker("api@example.com")
         opt = option(project, "agoo")
@@ -350,11 +262,9 @@ def test_api(app):
 def main():
     app = make_app()
     print("Model attribution and the scoreboard")
-    test_column(app)
     test_scores(make_app())
     test_credit_and_baseline(make_app())
     test_shared_wording(make_app())
-    test_language_scoping(make_app())
     test_api(make_app())
     failed = PASSED.count(False)
     print(f"\n{len(PASSED)} checks, {failed} failed")

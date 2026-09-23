@@ -16,8 +16,7 @@ from flask import (Blueprint, current_app, flash, redirect, render_template,
                    request, session, url_for)
 from itsdangerous import URLSafeTimedSerializer
 
-from .models import Flag, Project, Volunteer, Word, db
-from .projects import item_counts
+from .models import Flag, Volunteer, Word, db
 
 admin = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -129,151 +128,15 @@ def sign_out():
 @admin.route("/dashboard")
 @require_admin
 def dashboard():
-    pending = (Project.query.filter(Project.status == "pending")
-               .order_by(Project.created_at).all())
-    live = (Project.query.filter(Project.status == "approved")
-            .order_by(Project.sort_order, Project.id).all())
-    rejected = (Project.query.filter(Project.status == "rejected")
-                .order_by(Project.created_at.desc()).limit(10).all())
+    """What needs a person. Which is reported items, and nothing else.
+
+    It used to list projects waiting for approval as well. Nobody submits a
+    project now - SHOLA collects words, and that is the whole of it.
+    """
     flags = (Flag.query.filter(Flag.resolved.is_(False))
              .order_by(Flag.created_at.desc()).limit(100).all())
-    return render_template("admin/dashboard.html", pending=pending, live=live,
-                           rejected=rejected, flags=flags,
-                           counts={p.id: item_counts(p) for p in pending + live},
+    return render_template("admin/dashboard.html", flags=flags,
                            admin_email=current_admin())
-
-
-PER_PAGE = 20
-
-STATUS_ORDER = ["pending", "approved", "paused", "rejected"]
-
-
-@admin.route("/projects")
-@require_admin
-def projects():
-    """Every project, whatever its state - searchable and paged.
-
-    The dashboard shows what needs attention. This is the list you come to when
-    you know a project exists and want to find it, which is a different job and
-    was the reason the public index existed at all.
-    """
-    from .views import page_window
-
-    q = (request.args.get("q") or "").strip()
-    status = request.args.get("status") or ""
-    page = max(1, request.args.get("page", 1, type=int))
-
-    query = Project.query
-    if q:
-        like = f"%{q}%"
-        query = query.filter(db.or_(Project.title.ilike(like),
-                                    Project.slug.ilike(like),
-                                    Project.summary.ilike(like),
-                                    Project.submitter_email.ilike(like),
-                                    Project.submitter_org.ilike(like)))
-    if status in STATUS_ORDER:
-        query = query.filter(Project.status == status)
-
-    total = query.count()
-    pages = max(1, -(-total // PER_PAGE))
-    page = min(page, pages)
-    shown = (query.order_by(Project.created_at.desc(), Project.id.desc())
-             .limit(PER_PAGE).offset((page - 1) * PER_PAGE).all())
-
-    by_status = dict(db.session.query(Project.status,
-                                      db.func.count(Project.id))
-                     .group_by(Project.status).all())
-    return render_template(
-        "admin/projects.html", projects=shown, counts={
-            p.id: item_counts(p) for p in shown},
-        q=q, status=status, statuses=STATUS_ORDER, by_status=by_status,
-        total=total, page=page, pages=pages,
-        window=page_window(page, pages), admin_email=current_admin())
-
-
-@admin.route("/project/<int:project_id>")
-@require_admin
-def project(project_id):
-    proj = db.session.get(Project, project_id)
-    if not proj:
-        flash("No such project.", "error")
-        return redirect(url_for("admin.dashboard"))
-    previews = {code: proj.preview(code, limit=8)
-                for code in proj.language_codes}
-    return render_template("admin/project.html", project=proj,
-                           previews=previews, counts=item_counts(proj),
-                           admin_email=current_admin())
-
-
-@admin.route("/project/<int:project_id>/decide", methods=["POST"])
-@require_admin
-def decide(project_id):
-    proj = db.session.get(Project, project_id)
-    if not proj:
-        flash("No such project.", "error")
-        return redirect(url_for("admin.dashboard"))
-
-    action = request.form.get("action")
-    note = (request.form.get("note") or "").strip()[:600]
-
-    if action == "approve":
-        if not proj.item_count():
-            flash("That project has no items loaded, so there is nothing to "
-                  "approve.", "error")
-            return redirect(url_for("admin.project", project_id=proj.id))
-        proj.status = "approved"
-        proj.approved_at = datetime.utcnow()
-        proj.review_note = note
-        # An exclusive run is asked for at submission and starts when the
-        # project does, not when it was uploaded: a window that began while the
-        # project sat in the queue would be half spent before anyone saw it.
-        if proj.exclusive_requested and proj.exclusive_until is None:
-            proj.start_exclusive(proj.exclusive_days)
-            db.session.commit()
-            flash(f"Approved, and exclusive until "
-                  f"{proj.exclusive_until:%-d %B} - it is the only project "
-                  f"going out in its languages until then.", "ok")
-        else:
-            db.session.commit()
-            flash("Approved. It is in the queue and its items start going "
-                  "out with the rest.", "ok")
-    elif action == "reject":
-        proj.status = "rejected"
-        proj.review_note = note
-        db.session.commit()
-        flash("Rejected. The note is kept with the project.", "ok")
-    elif action == "pause":
-        proj.status = "paused"
-        db.session.commit()
-        flash("Paused. No more items from it go out.", "ok")
-    elif action == "resume":
-        proj.status = "approved"
-        db.session.commit()
-        flash("Live again.", "ok")
-    elif action in ("exclusive", "extend"):
-        if proj.status != "approved":
-            flash("Only a live project can run exclusively.", "error")
-            return redirect(url_for("admin.project", project_id=proj.id))
-        try:
-            days = int(request.form.get("days") or proj.exclusive_days or 30)
-        except ValueError:
-            days = 30
-        days = max(1, min(days, 365))
-        # Extending adds to whatever is left rather than restarting, so a nudge
-        # part-way through a run does not quietly shorten it.
-        proj.start_exclusive(days, extend=(action == "extend"))
-        db.session.commit()
-        flash(f"Exclusive until {proj.exclusive_until:%-d %B}. It is the only "
-              f"project going out in its languages until then.", "ok")
-    elif action == "end-exclusive":
-        proj.exclusive_until = None
-        proj.exclusive_requested = False
-        db.session.commit()
-        flash("Exclusive run ended. It now takes its turn with the others.",
-              "ok")
-    else:
-        flash("Unknown action.", "error")
-    return redirect(url_for("admin.project", project_id=proj.id))
 
 
 @admin.route("/flag/<int:flag_id>", methods=["POST"])

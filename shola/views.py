@@ -23,7 +23,8 @@ from flask import (Blueprint, Response, abort, current_app, flash, jsonify,
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 
-from .config import ANSWER_LANGUAGES, canonical_language
+from .config import (COUNTRY_NAMES, canonical_language, find_languages,
+                     resolve_language)
 from . import consensus
 from .assignment import leaderboard, record_verdict
 from .tiers import (VOTES_TO_SETTLE, active_tier, answers_needed, daily_quota,
@@ -34,10 +35,8 @@ from .mailer import build_otp_email, can_send as mailer_can_send, make_token, \
 from .models import (Assignment, Candidate, Flag, PendingSignup, Project,
                      ProjectLanguage, Volunteer, Word, WordState, db,
                      site_stats)
-from . import importer
 from . import scoreboard
-from .projects import (active_for, approved_projects, exclusive_project,
-                       item_counts)
+from .projects import active_for, approved_projects, item_counts
 
 main = Blueprint("main", __name__)
 
@@ -62,44 +61,6 @@ def volunteer_from_token(token, require_active=True):
     if require_active and not volunteer.active:
         return None
     return volunteer
-
-
-ITEM_FORMATS = {
-    "word": "Words or short phrases",
-    "sentence": "Sentences",
-    "paragraph": "Paragraphs",
-}
-
-
-def unique_slug(title):
-    """A readable, stable id from the title, with a suffix only if needed."""
-    base = re.sub(r"[^a-z0-9]+", "-", title.lower()).strip("-")[:60] or "project"
-    slug, n = base, 1
-    while Project.query.filter_by(slug=slug).first() is not None:
-        n += 1
-        slug = f"{base}-{n}"
-    return slug
-
-
-def notify_admins_of_submission(project, total):
-    """Tell the admins there is something waiting, without failing the submit.
-
-    A submission that is safely stored must not be reported as a failure
-    because an email did not go out; the dashboard shows it either way.
-    """
-    from .admin import admin_emails, make_link
-    from .mailer import build_link_email, send
-
-    for email in admin_emails():
-        try:
-            subject, text, html = build_link_email(
-                None, make_link(email),
-                f"“{project.title}” was submitted with {total:,} items in "
-                f"{len(project.language_codes)} language(s), waiting for a "
-                f"decision.", name="there")
-            send(email, f"New SHOLA project: {project.title}", text, html)
-        except Exception as exc:      # noqa: BLE001
-            current_app.logger.warning("admin notice failed: %s", exc)
 
 
 def language_info(code):
@@ -235,10 +196,10 @@ def brand():
     site = current_app.config["SITE_HOST"]
     captions = [
         ("Short", f"Keep your language alive. Two minutes a day. {site}"),
-        ("Short", f"{n} Ghanaian languages, and yours is one of them. A few "
+        ("Short", f"{n:,} African languages, and yours is one of them. A few "
                   "words a day helps build accurate translations everyone can "
                   f"use. {site}"),
-        ("Pidgin", "You fit speak any Ghanaian language? Give am 2 minutes "
+        ("Pidgin", "You fit speak any African language? Give am 2 minutes "
                    f"every day make we keep your language alive. {site}"),
         ("Starting a language", "Nobody has added words in your language yet? "
                                "Then you go be the first. Whatever you type "
@@ -307,7 +268,9 @@ def join():
     email = (request.form.get("email") or "").strip().lower()
     language = request.form.get("language") or ""
     if language == "other":
-        language = request.form.get("other_language") or ""
+        # A code from the search box, or whatever was typed if the search never
+        # ran - so the form still works with JavaScript off.
+        language = resolve_language(request.form.get("other_language") or "")
     # An old code in a bookmarked link or a shared form still resolves.
     language = canonical_language(language)
     days = request.form.getlist("days")
@@ -524,15 +487,10 @@ def as_cards(assignments, language):
         word = assignment.word
         project = word.project
         noun = project.item_noun if project else "word"
-        # The language the answer is written in, which is the speaker's own
-        # unless the project says otherwise.
-        _code, answer_name = (project.answers_in(language) if project
-                              else (language, speaker_name))
-        answer_name = answer_name or speaker_name
-
-        # What the item itself is in. Filed under a language means it is
-        # written in it; filed under none means it is the English prompt every
-        # language answers.
+        # A word goes out in English and comes back in the speaker's own
+        # language. That is the only direction there is now, so nothing has to
+        # be asked about it.
+        answer_name = speaker_name
         source_name = language_label(word.language) if word.language else "English"
 
         items.append({
@@ -747,26 +705,6 @@ def settings(token):
     return redirect(url_for("main.settings", token=token))
 
 
-def page_window(page, pages, span=2):
-    """Page numbers to show, with None where a gap is elided.
-
-    Listing every page is fine for two and unusable for forty, which is the same
-    mistake the whole page was making before it was paged at all.
-    """
-    if pages <= 7:
-        return list(range(1, pages + 1))
-    keep = {1, pages}
-    keep.update(n for n in range(page - span, page + span + 1)
-                if 1 <= n <= pages)
-    out, last = [], 0
-    for n in sorted(keep):
-        if last and n > last + 1:
-            out.append(None)
-        out.append(n)
-        last = n
-    return out
-
-
 FLAG_REASONS = {
     "not-english": "The item is not in the language it should be",
     "nonsense": "The item makes no sense",
@@ -821,31 +759,21 @@ def flag_item(token, word_id):
     return redirect(url_for("main.evaluate", token=token))
 
 
-@main.route("/template.csv")
-def template_csv():
-    """The example file, so nobody has to retype the header from a screenshot."""
-    # Codes come from the config, not written out here: a template carrying a
-    # code our own validator rejects is worse than no template, and that is
-    # exactly what shipped when this file said "gaa" while the stored code was
-    # still "ga".
-    seeded = [c for c in current_app.config["LANGUAGES"]][:3]
-    while len(seeded) < 3:
-        seeded.append(next(iter(current_app.config["ALL_LANGUAGES"])))
-    # model1/model2 are optional and say what wrote each option. Named, the
-    # scoreboard reports how often speakers agree with each system; left blank,
-    # the option counts as a person's.
-    rows = [
-        ["Where is the market?", seeded[0], "1", "first way to say it",
-         "second way", "", "some-model-v1", "another-model-v2"],
-        ["Where is the market?", seeded[1], "1", "how it goes here", "", "",
-         "some-model-v1", ""],
-        ["Where is the market?", seeded[2], "1", "", "", "", "", ""],
-        ["How much is this?", "all", "2", "", "", "", "", ""],
-    ]
-    return _csv_response(
-        ["text", "language", "priority", "option1", "option2", "option3",
-         "model1", "model2"],
-        rows, "shola-template")
+@main.route("/languages.json")
+def languages_json():
+    """Languages matching a search, for the sign-up box.
+
+    There are over two thousand. Rendering them all into a <select> would be a
+    megabyte of markup nobody can scroll on a phone, so the page asks for the
+    handful that match what somebody typed.
+    """
+    hits = find_languages(request.args.get("q", ""), limit=25)
+    return jsonify([{
+        "code": code,
+        "name": info["name"],
+        "note": info.get("note", ""),
+        "where": [COUNTRY_NAMES.get(c, c) for c in info.get("countries", ())][:3],
+    } for code, info in hits])
 
 
 @main.route("/languages.csv")
@@ -865,96 +793,6 @@ def languages_csv():
 
 
 
-
-
-@main.route("/submit", methods=["GET", "POST"])
-def submit_project():
-    """Anyone can propose a body of work. An admin decides whether it runs."""
-    if request.method == "GET":
-        return render_template("submit.html", formats=ITEM_FORMATS,
-                               ANSWER_LANGUAGES=ANSWER_LANGUAGES,
-                               languages=current_app.config["ALL_LANGUAGES"])
-
-    title = (request.form.get("title") or "").strip()[:160]
-    summary = (request.form.get("summary") or "").strip()[:600]
-    item_format = request.form.get("item_format") or "word"
-
-    name = (request.form.get("name") or "").strip()[:120]
-    email = (request.form.get("email") or "").strip().lower()[:255]
-    org = (request.form.get("org") or "").strip()[:160]
-    try:
-        threshold = int(request.form.get("votes_to_settle") or VOTES_TO_SETTLE)
-    except ValueError:
-        threshold = VOTES_TO_SETTLE
-
-    # Blank means answers come in the speaker's own language, which is the
-    # usual direction and the default.
-    answer_language = (request.form.get("answer_language") or "").strip()
-    if answer_language and answer_language not in ANSWER_LANGUAGES:
-        answer_language = ""
-
-    errors = []
-    if len(title) < 8:
-        errors.append("Give it a title that says what a volunteer will do, "
-                      "like “Translate everyday Ghanaian words”.")
-    if item_format not in ITEM_FORMATS:
-        errors.append("Choose whether the items are words, sentences or "
-                      "paragraphs.")
-    if "@" not in email or "." not in email.split("@")[-1]:
-        errors.append("We need an email address to tell you the outcome.")
-    if not 2 <= threshold <= 20:
-        errors.append("Each item needs between 2 and 20 answers.")
-
-    # One file, parsed before anything is written: a project that is half
-    # imported is worse than one that was refused.
-    all_languages = current_app.config["ALL_LANGUAGES"]
-    upload = request.files.get("file")
-    items, problems, meta = [], [], {}
-    if upload is None or not upload.filename:
-        problems.append("Choose the CSV file.")
-    else:
-        items, problems, meta = importer.parse(upload.stream,
-                                               known_languages=set(all_languages))
-
-    # The file decides which languages the project collects. `all` on any row
-    # means every language, which is what the translation project is.
-    languages = sorted(meta.get("languages") or ())
-    if meta.get("any_language"):
-        languages = sorted(all_languages)
-
-    if errors or problems or not items:
-        for e in errors + problems[:20]:
-            flash(e, "error")
-        return render_template("submit.html", formats=ITEM_FORMATS,
-                               ANSWER_LANGUAGES=ANSWER_LANGUAGES,
-                               languages=all_languages,
-                               form=request.form), 400
-
-    has_options = any(item["options"] for item in items)
-
-    project = Project(
-        slug=unique_slug(title), title=title, summary=summary,
-        item_format=item_format, votes_to_settle=threshold,
-        has_options=has_options, status="pending",
-        # Asked for, not granted. The window opens on approval, if we agree.
-        exclusive_requested=bool(request.form.get("exclusive")),
-        answer_language=answer_language,
-        submitter_name=name, submitter_email=email, submitter_org=org,
-        sort_order=100)
-    db.session.add(project)
-    db.session.flush()
-    for code in languages:
-        db.session.add(ProjectLanguage(project_id=project.id, language=code))
-    db.session.flush()
-
-    total, options_made = importer.import_items(project, items)
-
-    current_app.logger.info("project %s submitted: %s items, %s options, %s",
-                            project.slug, total, options_made,
-                            ",".join(languages))
-    notify_admins_of_submission(project, total)
-    return render_template("submitted.html", project=project, total=total,
-                           options=options_made, languages=languages)
 
 
 @main.route("/w/<token>/done")

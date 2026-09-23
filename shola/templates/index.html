@@ -11,8 +11,8 @@
         alive.
       </p>
       <p class="lede">
-        Your contribution here helps us build accurate data in your language —
-        words, sentences and whatever else people need.
+        Every word you check builds open data in your language, free for
+        anyone to use.
       </p>
       <div class="hero-actions">
         <a class="btn" href="{{ url_for('main.join') }}">Start with your language</a>
@@ -62,7 +62,7 @@
 
 <section class="section">
   <div class="wrap">
-    <p class="eyebrow">{{ LANGUAGE_COUNT }} Ghanaian languages</p>
+    <p class="eyebrow">{{ LANGUAGE_COUNT | thousands }} African languages</p>
     <h2>Which one do you speak?</h2>
     <div class="cards" style="margin-top:22px">
       {% for code, lang in LANGUAGES.items() %}
@@ -74,10 +74,10 @@
       {% endfor %}
     </div>
     <p class="hint" style="margin-top:16px">
-      These four already have translations to check. Speak another of the
-      {{ LANGUAGE_COUNT }}? <a href="{{ url_for('main.join') }}">Sign up</a> and
-      you can start it off — what you type becomes the first option others vote
-      on.
+      These four already have translations to check. Speak any of the other
+      {{ (LANGUAGE_COUNT - 4) | thousands }}?
+      <a href="{{ url_for('main.join') }}">Sign up</a> and you start it off —
+      what you type becomes the first option others vote on.
     </p>
   </div>
 </section>

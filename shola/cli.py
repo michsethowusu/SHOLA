@@ -287,21 +287,6 @@ def send_daily(window, dry_run, force):
         sys.exit(1)
 
 
-@shola_cli.command("projects")
-def projects_cmd():
-    """Every project, its state and its size."""
-    from .models import Project
-    from .projects import item_counts
-
-    for project in Project.query.order_by(Project.sort_order,
-                                          Project.id).all():
-        counts = item_counts(project)
-        click.echo(f"{project.status:9s} {project.slug:28s} "
-                   f"{project.item_count():>8,} items  "
-                   f"{'options' if project.has_options else 'typed  '}  "
-                   + ", ".join(f"{k}:{v:,}" for k, v in counts.items()))
-
-
 @shola_cli.command("export-typed")
 @click.option("--slug", required=True)
 @click.option("--language", required=True)
@@ -431,118 +416,60 @@ def languages_cmd():
         click.echo(f"  {info['name']:24s} {n:>4} volunteers   {mark}")
 
 
-@shola_cli.command("import-project")
-@click.option("--csv", "csv_path", type=click.Path(exists=True), required=True,
-              help="One file in the template format.")
-@click.option("--title", required=True, help="What a volunteer will be doing.")
-@click.option("--slug", default=None, help="Defaults to a slug of the title.")
-@click.option("--summary", default="", help="One line for the projects page.")
-@click.option("--format", "item_format", default="sentence",
-              type=click.Choice(["word", "sentence", "paragraph"]))
-@click.option("--answers", "threshold", default=None, type=int,
-              help="Answers wanted per item. Defaults to the site setting.")
-@click.option("--status", default="pending",
-              type=click.Choice(["pending", "approved", "paused"]),
-              help="`pending` waits for the admin dashboard, as an upload does.")
-@click.option("--answer-language", "answer_language", default="",
-              help="Language answers are written in, e.g. 'en' for a project "
-                   "that sends Ghanaian text out and wants English back. "
-                   "Blank means the speaker's own language.")
-@click.option("--check", is_flag=True,
-              help="Validate the file and report, writing nothing.")
-def import_project_cmd(csv_path, title, slug, summary, item_format, threshold,
-                       status, answer_language, check):
-    """Load a project from a CSV, for files too large to upload in a browser.
+@shola_cli.command("drop-project")
+@click.option("--slug", required=True)
+@click.option("--yes", is_flag=True, help="Do it, rather than counting first.")
+def drop_project_cmd(slug, yes):
+    """Delete a project and everything hanging off it.
 
-    The same parser and the same rules as the web form - this exists because a
-    45,000 row file does not survive a browser upload, not to skip validation.
-    Nothing is written unless the whole file parses.
+    For taking down work SHOLA no longer collects. It will not touch the words
+    project: that is the one thing here, and deleting it by mistyping a slug
+    is not a mistake worth leaving available.
     """
-    from .config import ANSWER_LANGUAGES
-    from .importer import import_items, parse
-    from .models import Project, ProjectLanguage
-    from .tiers import ANSWERS_PER_ITEM
-    from .views import unique_slug
+    from .models import (CORE_PROJECT, Assignment, Candidate, Evaluation,
+                         Flag, Project, ProjectLanguage, Word, WordState)
 
-    answer_language = (answer_language or "").strip()
-    if answer_language and answer_language not in ANSWER_LANGUAGES:
+    if slug == CORE_PROJECT["slug"]:
         raise click.ClickException(
-            f"--answer-language {answer_language!r} is not one of: "
-            f"{', '.join(ANSWER_LANGUAGES)}.")
-
-    all_languages = current_app.config["ALL_LANGUAGES"]
-    with open(csv_path, "rb") as fh:
-        items, problems, meta = parse(fh.read(), set(all_languages))
-
-    if problems:
-        click.echo(f"{len(problems)} problem(s):")
-        for line in problems:
-            click.echo(f"  {line}")
-        raise click.ClickException("Nothing imported. Fix the file and re-run.")
-    if not items:
-        raise click.ClickException("The file has no rows in it.")
-
-    languages = sorted(meta.get("languages") or ())
-    if meta.get("any_language"):
-        languages = sorted(all_languages)
-    options = sum(len(o) for item in items for o in item["options"].values())
-
-    click.echo(f"{len(items):,} items, {options:,} options, "
-               f"{len(languages)} language(s): {', '.join(languages)}")
-    click.echo("answers in " + (ANSWER_LANGUAGES[answer_language]
-                                if answer_language
-                                else "the speaker's own language"))
-    if check:
-        click.echo("--check given; nothing written.")
-        return
-
-    project = Project(
-        slug=slug or unique_slug(title), title=title, summary=summary,
-        item_format=item_format, has_options=bool(options), status=status,
-        answer_language=answer_language or None,
-        votes_to_settle=threshold or ANSWERS_PER_ITEM,
-        sort_order=50)
-    db.session.add(project)
-    db.session.flush()
-    for code in languages:
-        db.session.add(ProjectLanguage(project_id=project.id, language=code))
-    db.session.commit()
-
-    made, options_made = import_items(project, items)
-    click.echo(f"imported {made:,} items and {options_made:,} options into "
-               f"{project.slug!r} ({project.status}).")
-    if project.status == "pending":
-        click.echo("It is pending: approve it in the admin dashboard and it "
-                   "joins the queue.")
-
-
-@shola_cli.command("answer-language")
-@click.option("--project", "slug", required=True)
-@click.option("--code", default="",
-              help="Language answers are written in, e.g. 'en'. Blank means "
-                   "the speaker's own language.")
-def answer_language_cmd(slug, code):
-    """Set which way a project's translation runs.
-
-    Blank is the usual direction: an English item goes out and answers come
-    back in the speaker's language. A code means answers are always in that
-    language - a Twi sentence goes out and English comes back.
-    """
-    from .config import ANSWER_LANGUAGES
-    from .models import Project
-
+            f"{slug} is the words project. It cannot be dropped here.")
     project = Project.query.filter_by(slug=slug).first()
     if project is None:
         raise click.ClickException(f"No project with slug {slug!r}.")
-    code = (code or "").strip()
-    if code and code not in ANSWER_LANGUAGES:
-        raise click.ClickException(
-            f"{code!r} is not one of: {', '.join(ANSWER_LANGUAGES)}.")
-    project.answer_language = code or None
+
+    ids = [row[0] for row in
+           db.session.query(Word.id).filter(Word.project_id == project.id)]
+    counts = {"items": len(ids)}
+    for label, model in (("options", Candidate), ("answers", Evaluation),
+                         ("assignments", Assignment), ("states", WordState),
+                         ("reports", Flag)):
+        counts[label] = (model.query.filter(model.word_id.in_(ids)).count()
+                         if ids else 0)
+    click.echo(f"{project.title}:")
+    for label, n in counts.items():
+        click.echo(f"  {label:12} {n:>8,}")
+    if not yes:
+        click.echo("\nRe-run with --yes to delete all of it.")
+        return
+
+    # Chunked, and children before parents: one statement over a hundred
+    # thousand rows is what filled the disk the last time.
+    for model in (Flag, WordState, Assignment, Evaluation, Candidate):
+        done = 0
+        for start in range(0, len(ids), 5000):
+            chunk = ids[start:start + 5000]
+            done += (model.query.filter(model.word_id.in_(chunk))
+                     .delete(synchronize_session=False))
+            db.session.commit()
+        if done:
+            click.echo(f"  deleted {done:,} {model.__name__.lower()} rows")
+    for start in range(0, len(ids), 5000):
+        chunk = ids[start:start + 5000]
+        Word.query.filter(Word.id.in_(chunk)).delete(synchronize_session=False)
+        db.session.commit()
+    ProjectLanguage.query.filter_by(project_id=project.id).delete()
+    db.session.delete(project)
     db.session.commit()
-    click.echo(f"{project.title}: answers in "
-               + (ANSWER_LANGUAGES[code] if code
-                  else "the speaker's own language"))
+    click.echo(f"Dropped {slug!r}.")
 
 
 @shola_cli.command("name-model")

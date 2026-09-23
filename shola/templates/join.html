@@ -46,20 +46,19 @@
         </div>
 
         <div id="other-picker" hidden style="margin-top:12px">
-          <label for="other_language">Which one?</label>
+          <label for="lang-search">Which one?</label>
           <p class="hint">
-            Nobody has added anything in most of these yet, so you will type
-            the wording yourself and speakers after you vote on it.
+            Type its name, another name it goes by, or your country. Most of
+            these have nothing in them yet — you would be the first speaker,
+            and what you write becomes what everyone after you votes on.
           </p>
-          <select id="other_language" name="other_language">
-            <option value="">Choose a language</option>
-            {% for code, name, alt in OTHER_LANGUAGES %}
-              <option value="{{ code }}"
-                {% if form and form.other_language == code %}selected{% endif %}>
-                {{ name }}{% if alt %} ({{ alt | join(', ') }}){% endif %}
-              </option>
-            {% endfor %}
-          </select>
+          <input type="search" id="lang-search" autocomplete="off"
+                 placeholder="Yoruba, Bamanankan, Nigeria…"
+                 value="{{ form.other_language if form else '' }}">
+          <input type="hidden" id="other_language" name="other_language"
+                 value="{{ form.other_language if form else '' }}">
+          <div id="lang-hits" class="stack" style="margin-top:10px"></div>
+          <p class="hint" id="lang-chosen" hidden></p>
         </div>
       </div>
 
@@ -111,20 +110,62 @@
       <button class="btn wide" type="submit">Join SHOLA</button>
 
       <script>
-        // Reveal the long list only when it is wanted, so the common case
-        // stays four taps.
+        // Reveal the search only when it is wanted, so the common case stays
+        // four taps, and ask the server for matches rather than shipping two
+        // thousand languages into the page.
         (function () {
           var picker = document.getElementById("other-picker");
-          var select = document.getElementById("other_language");
+          var search = document.getElementById("lang-search");
+          var field = document.getElementById("other_language");
+          var hits = document.getElementById("lang-hits");
+          var chosen = document.getElementById("lang-chosen");
+
           function sync() {
             var other = document.querySelector('input[name=language][value=other]');
             picker.hidden = !(other && other.checked);
-            select.required = !picker.hidden;
           }
           document.querySelectorAll('input[name=language]').forEach(function (r) {
             r.addEventListener("change", sync);
           });
           sync();
+
+          function pick(lang) {
+            field.value = lang.code;
+            search.value = lang.name;
+            hits.innerHTML = "";
+            chosen.hidden = false;
+            chosen.textContent = "Chosen: " + lang.name;
+          }
+
+          function show(list) {
+            hits.innerHTML = "";
+            list.forEach(function (lang) {
+              var b = document.createElement("button");
+              b.type = "button";
+              b.className = "btn ghost small";
+              b.style.cssText = "display:block;width:100%;text-align:left;margin:4px 0";
+              b.textContent = lang.name
+                + (lang.where.length ? "  ·  " + lang.where.join(", ") : "");
+              b.addEventListener("click", function () { pick(lang); });
+              hits.appendChild(b);
+            });
+          }
+
+          var timer = null;
+          search.addEventListener("input", function () {
+            // The typed text is no longer a chosen language until they pick.
+            field.value = "";
+            chosen.hidden = true;
+            clearTimeout(timer);
+            var q = search.value.trim();
+            if (q.length < 2) { hits.innerHTML = ""; return; }
+            timer = setTimeout(function () {
+              fetch("{{ url_for('main.languages_json') }}?q=" + encodeURIComponent(q))
+                .then(function (r) { return r.json(); })
+                .then(show)
+                .catch(function () { hits.innerHTML = ""; });
+            }, 180);
+          });
         })();
       </script>
       <p class="hint center" style="margin-top:14px">

@@ -362,51 +362,16 @@ def lease_from_project(volunteer, project, count, today=None):
     return given
 
 
-def project_order(volunteer, projects, today):
-    """Which project this list comes from, and whether it is a new list.
-
-    Returns `(order, fresh)`. `order` is the projects to try, best first;
-    `fresh` says whether this is the start of a new list, which is when the
-    rotation cursor should advance.
-
-    One list, one project. Five items arriving as three nouns and two sentences
-    asks somebody to change task mid-list for no reason - translating a word
-    and translating a sentence are different jobs, and five of one is easier
-    than two of one and three of the other.
-
-    The next list comes from a different project. Not the next day: the next
-    *list*. Somebody who answers their five and asks for more straight away
-    should get the other project, the same as if they had waited for tomorrow's
-    email. That is why the cursor counts lists rather than reading the date -
-    keying it on the date meant a volunteer working through four lists in one
-    sitting saw the same project four times.
-
-    A list already in progress is not a new list. Where items are still
-    outstanding, the top-up that fills the list stays with the project those
-    items came from, otherwise a list would end up mixed after all - which is
-    what happens when somebody opens the site having answered two of the five
-    in their email.
-    """
-    from .projects import rotate
-
-    outstanding = {a.word.project_id for a in volunteer.pending_today(today)}
-    if outstanding:
-        held = [p for p in projects if p.id in outstanding]
-        if held:
-            return held, False
-
-    # Offset by id as well as by count, so two volunteers starting out are not
-    # both sent the same project on their first list.
-    cursor = (volunteer.lists_taken or 0) + volunteer.id
-    return rotate(projects, cursor), True
-
-
 def lease_words(volunteer, count, today=None):
-    """Hand a volunteer up to `count` items, all from one project.
+    """Hand a volunteer up to `count` words, and return how many.
 
-    Returns how many were leased. A project too dry to fill the list makes for
-    a short list rather than a mixed one; the next list moves on to another
-    project regardless.
+    One project, so there is nothing to choose between. This used to rotate
+    between projects and keep a list from mixing two of them; with a single
+    body of work both questions answer themselves.
+
+    `lists_taken` still counts. It is no longer routing anything - it is how a
+    mail says which list it was about, so that following an older one lands on
+    the current list and says so rather than silently showing different words.
     """
     if count <= 0:
         return 0
@@ -417,21 +382,13 @@ def lease_words(volunteer, count, today=None):
     if not projects:
         return 0
 
-    order, fresh = project_order(volunteer, projects, today)
-    for project in order:
-        given = lease_from_project(volunteer, project, count, today=today)
-        if given:
-            if fresh:
-                # Advanced only once a list has actually been handed over, so a
-                # request that could be filled from nowhere does not silently
-                # skip a project's turn.
-                volunteer.lists_taken = (volunteer.lists_taken or 0) + 1
-                db.session.commit()
-            return given
-        # Nothing there for this speaker - every item done, or leased to
-        # somebody else. Try the next project rather than send an empty list;
-        # the list is still drawn from one project, just not the first choice.
-    return 0
+    # A new list, rather than a top-up filling one already in progress.
+    fresh = not volunteer.pending_today(today).count()
+    given = lease_from_project(volunteer, projects[0], count, today=today)
+    if given and fresh:
+        volunteer.lists_taken = (volunteer.lists_taken or 0) + 1
+        db.session.commit()
+    return given
 
 
 def daily_quota(volunteer=None):

@@ -173,7 +173,7 @@ class Project(db.Model):
     slug = db.Column(db.String(80), nullable=False, unique=True, index=True)
 
     # Phrased as the job being asked of a volunteer, because this is what they
-    # choose from: "Translate everyday Ghanaian words", not "Word corpus v2".
+    # choose from: "Translate everyday words", not "Word corpus v2".
     title = db.Column(db.String(160), nullable=False)
     summary = db.Column(db.String(600), default="", nullable=False)
 
@@ -199,28 +199,6 @@ class Project(db.Model):
     status = db.Column(db.String(20), default="pending", nullable=False,
                        index=True)
     review_note = db.Column(db.String(600), default="", nullable=False)
-
-    # An exclusive run: while `exclusive_until` is in the future this project is
-    # the only one anybody is sent, in every language it covers. Somebody with a
-    # deadline can have the whole pool for a month rather than a slice of it,
-    # and when the window closes the project takes its turn with the rest.
-    #
-    # A date rather than a flag, so it ends by itself. A flag would depend on
-    # something remembering to clear it, and the thing that forgets is us.
-    # Which way the translation goes. Blank - the usual case - means answers
-    # are written in the volunteer's own language: an English word goes out and
-    # Twi speakers say it in Twi. A code here means answers are always in that
-    # one language whoever writes them, which is the other direction: a Twi
-    # sentence goes out and the answer wanted is English.
-    #
-    # Without this the interface guessed, and guessed wrong for the second
-    # kind - it asked a Twi speaker "What should this be in Asante Twi?" about
-    # a sentence already in Asante Twi.
-    answer_language = db.Column(db.String(20))
-
-    exclusive_requested = db.Column(db.Boolean, default=False, nullable=False)
-    exclusive_days = db.Column(db.Integer, default=30, nullable=False)
-    exclusive_until = db.Column(db.Date)
 
     submitter_name = db.Column(db.String(120), default="", nullable=False)
     submitter_email = db.Column(db.String(255), default="", nullable=False)
@@ -256,51 +234,6 @@ class Project(db.Model):
     @property
     def approved(self):
         return self.status == "approved"
-
-    def answers_in(self, speaker_language=None):
-        """(code, name) of the language answers are written in.
-
-        Falls back to the speaker's own language, which is what most projects
-        want and what every project did before this column existed.
-        """
-        from flask import current_app
-
-        from .config import ANSWER_LANGUAGES
-
-        code = self.answer_language or speaker_language
-        if not code:
-            return None, None
-        if code in ANSWER_LANGUAGES:
-            return code, ANSWER_LANGUAGES[code]
-        info = current_app.config["ALL_LANGUAGES"].get(code)
-        return code, info["name"] if info else code
-
-    @property
-    def is_exclusive(self):
-        """Whether an exclusive run is live right now."""
-        return bool(self.exclusive_until
-                    and self.exclusive_until >= date.today())
-
-    @property
-    def exclusive_days_left(self):
-        if not self.is_exclusive:
-            return 0
-        return (self.exclusive_until - date.today()).days
-
-    def start_exclusive(self, days=None, extend=False, today=None):
-        """Begin or lengthen an exclusive run, returning the end date.
-
-        Extending adds to what is left rather than starting again, so nudging a
-        run along part-way through cannot accidentally shorten it.
-        """
-        today = today or date.today()
-        days = int(days or self.exclusive_days or 30)
-        base = (self.exclusive_until
-                if extend and self.exclusive_until
-                and self.exclusive_until > today else today)
-        self.exclusive_until = base + timedelta(days=days)
-        self.exclusive_days = days
-        return self.exclusive_until
 
     def item_count(self, language=None):
         q = Word.query.filter(Word.project_id == self.id)
@@ -650,10 +583,6 @@ def ensure_columns():
                        "problem": "BOOLEAN NOT NULL DEFAULT 0"},
         "pending_signups": {"project_ids": "VARCHAR(200) NOT NULL DEFAULT ''",
                             "exclusive_project_id": "INTEGER"},
-        "projects": {"answer_language": "VARCHAR(20)",
-                     "exclusive_requested": "BOOLEAN NOT NULL DEFAULT 0",
-                     "exclusive_days": "INTEGER NOT NULL DEFAULT 30",
-                     "exclusive_until": "DATE"},
         "words": {"project_id": "INTEGER",
                   "language": "VARCHAR(20)",
                   "position": "INTEGER NOT NULL DEFAULT 0"},
@@ -714,7 +643,7 @@ def ensure_indexes():
 
 CORE_PROJECT = {
     "slug": "everyday-words",
-    "title": "Translate everyday Ghanaian words",
+    "title": "Translate everyday words",
     "summary": ("Machine translation proposed three ways to say each common "
                 "English word. Choose the one you would actually use, or type "
                 "your own."),

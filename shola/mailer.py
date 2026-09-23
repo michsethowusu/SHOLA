@@ -106,23 +106,6 @@ def list_nouns(words):
     return noun, noun + "s"
 
 
-def answer_language_name(volunteer, words):
-    """The language this list is to be answered in.
-
-    A list comes from one project, so the project decides: usually the
-    volunteer's own language, but the other way round for a project that sends
-    Ghanaian text out and wants English back. Told the wrong one, the mail says
-    "start translating them to Asante Twi" about sentences already in Asante
-    Twi.
-    """
-    fallback = current_app.config["ALL_LANGUAGES"][volunteer.language]["name"]
-    for word in words:
-        if word.project is not None:
-            _code, name = word.project.answers_in(volunteer.language)
-            return name or fallback
-    return fallback
-
-
 def build_daily_email(volunteer, words, overdue_count=0):
     """Return (subject, text, html) for today's list."""
     shown = words[:MAX_WORDS_IN_EMAIL]
@@ -144,11 +127,8 @@ def build_daily_email(volunteer, words, overdue_count=0):
            "overdue_count": overdue_count,
            "noun": noun, "plural": plural,
            "settings_link": settings_link(volunteer),
-           # The language they signed up with, for "you get this because…",
-           # and the language the answers go in, which is not always the same.
            "language_name": current_app.config["ALL_LANGUAGES"][
-               volunteer.language]["name"],
-           "answer_language": answer_language_name(volunteer, words)}
+               volunteer.language]["name"]}
     text = render_template("email/daily.txt", **ctx)
     html = render_template("email/daily.html", **ctx)
     return subject, text, html

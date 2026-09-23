@@ -44,11 +44,17 @@ LANGUAGES = {
     },
 }
 
-from .languages import OTHER_BY_CODE, OTHER_LANGUAGES   # noqa: E402,F401
+from .languages import (COUNTRY_NAMES, OTHER_BY_CODE,   # noqa: E402,F401
+                        OTHER_LANGUAGES)
 
-# Characters a phone keyboard hides, across the Ghanaian orthographies. Used for
-# every language that does not have its own set listed above: better to offer a
-# few unneeded letters than to leave a speaker unable to type their own.
+# Characters a phone keyboard hides, across the West African Latin
+# orthographies. Used for every language without its own set listed above:
+# better to offer a few unneeded letters than to leave a speaker unable to type
+# their own.
+#
+# It does nothing for a language written in Ge'ez, Arabic or Tifinagh, which is
+# a real gap now the list is continental rather than Ghanaian - those speakers
+# need their own keyboard, not a row of Latin extras.
 # Two of the four languages SHOLA started with were seeded by hand with codes
 # that are not their ISO 639-3 ones: Ga is stored as "ga" where ISO says "gaa",
 # and Dagbani as "dagbani" where ISO says "dag". The other 84 always used ISO
@@ -97,13 +103,56 @@ ISO_CODES = {
 }
 
 
-# Languages a project can collect answers in that are not one of the Ghanaian
-# languages a volunteer signs up with. English is here because a project can
-# run the other way round: Ghanaian text out, English translation back.
-ANSWER_LANGUAGES = {
-    "en": "English",
-    "fr": "French",
-}
+def find_languages(query, limit=25):
+    """Languages matching what somebody typed, best match first.
+
+    Searched over the name, every alternative name, the code and the countries
+    it is spoken in. All four matter at two thousand languages: plenty of
+    people know their language by a name no standards body chose, and plenty
+    will reach for their country before its name.
+    """
+    q = (query or "").strip().casefold()
+    if not q:
+        return []
+    hits = []
+    for code, info in ALL_LANGUAGES.items():
+        name = info["name"].casefold()
+        alts = [a.casefold() for a in info.get("alt", ())]
+        countries = [c.casefold() for c in info.get("countries", ())]
+        where = [COUNTRY_NAMES.get(c, "").casefold()
+                 for c in info.get("countries", ())]
+        if name == q or code == q:
+            rank = 0
+        elif name.startswith(q):
+            rank = 1
+        elif any(a == q or a.startswith(q) for a in alts):
+            rank = 2
+        elif q in name:
+            rank = 3
+        elif any(q in a for a in alts):
+            rank = 4
+        elif q in countries or any(n == q for n in where):
+            rank = 5
+        elif any(n.startswith(q) for n in where if n):
+            rank = 6
+        else:
+            continue
+        hits.append((rank, info["name"], code, info))
+    hits.sort(key=lambda h: (h[0], h[1]))
+    return [(code, info) for _rank, _name, code, info in hits[:limit]]
+
+
+def resolve_language(text):
+    """A code, given a code or a name somebody typed. Empty if unknown.
+
+    So that a form filled in without JavaScript, where there is nothing to
+    turn a name into a code, still works.
+    """
+    code = canonical_language(text)
+    if code in ALL_LANGUAGES:
+        return code
+    hits = find_languages(text, limit=1)
+    return hits[0][0] if hits else ""
 
 
 def canonical_language(code):
@@ -122,10 +171,16 @@ DEFAULT_LONGPRESS = {"d": ["ɖ", "Ɖ"], "e": ["ɛ", "Ɛ"], "f": ["ƒ", "Ƒ"],
 # translations to check; the rest start empty, and the first speakers to arrive
 # type the options everyone after them votes on.
 ALL_LANGUAGES = dict(LANGUAGES)
-for _code, _name, _alt in OTHER_LANGUAGES:
+for _code, _name, _alt, _countries in OTHER_LANGUAGES:
     ALL_LANGUAGES[_code] = {
         "name": _name,
         "note": _alt[0] if _alt else "",
+        # Every name this language goes by, and where it is spoken. Both are
+        # search terms: at two thousand languages a speaker will not scroll to
+        # find theirs, and many will look for a name a standards body did not
+        # choose, or simply for their country.
+        "alt": _alt,
+        "countries": _countries,
         "special": DEFAULT_SPECIAL,
         "longpress": DEFAULT_LONGPRESS,
         "seeded": False,
