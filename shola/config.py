@@ -314,7 +314,7 @@ class Config:
     # Where a reply goes. The sender address is send-only, so leaving this
     # empty would point volunteers at a mailbox nobody reads.
     MAIL_REPLY_TO = os.environ.get("SHOLA_MAIL_REPLY_TO",
-                                   "ghanaopenai@gmail.com")
+                                   "shola@afrispeech.org")
 
     # Gmail SMTP, the fallback. Use a Google app password, not the account
     # password.

@@ -107,7 +107,7 @@ For a language nobody has started yet:
 **Local-language captions:** we have deliberately not written these. Copy in a
 African language should be written by a speaker, not translated by us —
 getting it slightly wrong in a campaign about language accuracy would undercut
-the whole point. If you write one, send it to ghanaopenai@gmail.com and we will add
+the whole point. If you write one, send it to shola@afrispeech.org and we will add
 it here with credit.
 
 ## Hashtags
@@ -156,4 +156,4 @@ and the volunteers.
 
 ## Contact
 
-ghanaopenai@gmail.com · [afrispeech.org](https://www.afrispeech.org/)
+shola@afrispeech.org · [afrispeech.org](https://www.afrispeech.org/)
