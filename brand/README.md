@@ -151,9 +151,9 @@ else.
 
 **What if I do not know a word?** Skip it. Somebody else will see it.
 
-**Who owns the result?** It is public, under CC BY 4.0, credited to Ghana Open Data
+**Who owns the result?** It is public, under CC BY 4.0, credited to AfriSpeech
 and the volunteers.
 
 ## Contact
 
-ghanaopenai@gmail.com · [ghananlp.org](https://ghananlp.org)
+ghanaopenai@gmail.com · [afrispeech.org](https://www.afrispeech.org/)

@@ -509,7 +509,7 @@ The **words** collected through SHOLA â€” the translations volunteers confirm â€
 are released under
 [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), the same licence as
 [GhanaNouns](https://github.com/GhanaNLP/GhanaNouns). Use them for anything,
-including commercially, as long as you credit SHOLA and Ghana Open Data.
+including commercially, as long as you credit SHOLA and AfriSpeech.
 
 Two licences because they cover different things: MIT is a software licence and
 says nothing sensible about a word list, while CC BY is written for data and
