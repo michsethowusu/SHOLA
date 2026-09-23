@@ -429,6 +429,47 @@ def languages_cmd():
         click.echo(f"  {info['name']:24s} {n:>4} volunteers   {mark}")
 
 
+@shola_cli.command("reset-backoff")
+@click.option("--email", default=None,
+              help="One volunteer. Everyone, if left out.")
+@click.option("--yes", is_flag=True, help="Do it, rather than listing first.")
+def reset_backoff_cmd(email, yes):
+    """Clear the back-off state after an outage on our side.
+
+    Back-off assumes a quiet volunteer chose to be quiet. When the sends
+    themselves have been failing, that assumption is wrong and the people who
+    were owed a list get their next one pushed further away for it. Missing
+    days was never supposed to cost anybody anything; being charged for our
+    downtime is worse than that.
+    """
+    q = Volunteer.query.filter(
+        db.or_(Volunteer.missed_in_a_row > 0,
+               Volunteer.backoff_days > 0,
+               Volunteer.next_send_on.isnot(None)))
+    if email:
+        q = q.filter(Volunteer.email == email.strip().lower())
+
+    affected = q.all()
+    if not affected:
+        click.echo("Nobody is backed off.")
+        return
+    for v in affected:
+        click.echo(f"  {v.email:36} missed={v.missed_in_a_row} "
+                   f"backoff={v.backoff_days}d "
+                   f"next={v.next_send_on or '-'}")
+    if not yes:
+        click.echo(f"\n{len(affected)} volunteer(s). Re-run with --yes to "
+                   "clear it and send them on their normal schedule.")
+        return
+    for v in affected:
+        v.missed_in_a_row = 0
+        v.backoff_days = 0
+        v.next_send_on = None
+        v.nudged_on = None
+    db.session.commit()
+    click.echo(f"\nCleared for {len(affected)} volunteer(s).")
+
+
 @shola_cli.command("drop-project")
 @click.option("--slug", required=True)
 @click.option("--yes", is_flag=True, help="Do it, rather than counting first.")
