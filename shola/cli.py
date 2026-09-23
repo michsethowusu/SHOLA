@@ -472,7 +472,12 @@ def reset_backoff_cmd(email, yes):
         # changes nothing: the next send looks at that same stale date, sees no
         # answer since, and backs the volunteer off again. Forgetting the send
         # is what makes it a clean slate.
-        v.last_emailed_on = None
+        #
+        # Only an older one, though. The same field stops a volunteer being
+        # emailed twice in a day, and clearing it wholesale sent three people a
+        # second list minutes after their first.
+        if v.last_emailed_on and v.last_emailed_on < date.today():
+            v.last_emailed_on = None
     db.session.commit()
     click.echo(f"\nCleared for {len(affected)} volunteer(s).")
 
