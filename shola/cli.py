@@ -528,7 +528,11 @@ def add_options_cmd(path, source, yes):
 
     added = skipped = unknown_word = unknown_lang = 0
     pending = []
-    with open(path, encoding="utf-8") as fh:
+    # Gzip transparently: these files run to hundreds of thousands of lines and
+    # travel compressed, and making somebody gunzip 44 MB onto a container disk
+    # first is a step with nothing in it.
+    opener = gzip.open if path.endswith(".gz") else open
+    with opener(path, "rt", encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
             if not line:
