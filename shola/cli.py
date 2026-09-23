@@ -445,7 +445,8 @@ def reset_backoff_cmd(email, yes):
     q = Volunteer.query.filter(
         db.or_(Volunteer.missed_in_a_row > 0,
                Volunteer.backoff_days > 0,
-               Volunteer.next_send_on.isnot(None)))
+               Volunteer.next_send_on.isnot(None),
+               Volunteer.last_emailed_on.isnot(None)))
     if email:
         q = q.filter(Volunteer.email == email.strip().lower())
 
@@ -466,6 +467,12 @@ def reset_backoff_cmd(email, yes):
         v.backoff_days = 0
         v.next_send_on = None
         v.nudged_on = None
+        # The one that actually matters. A miss is "we emailed you and you did
+        # not answer", read off last_emailed_on, so clearing the counters alone
+        # changes nothing: the next send looks at that same stale date, sees no
+        # answer since, and backs the volunteer off again. Forgetting the send
+        # is what makes it a clean slate.
+        v.last_emailed_on = None
     db.session.commit()
     click.echo(f"\nCleared for {len(affected)} volunteer(s).")
 
