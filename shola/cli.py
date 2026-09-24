@@ -530,7 +530,7 @@ def add_options_cmd(path, source, yes):
         raise click.ClickException("No words project to attach to.")
 
     known = current_app.config["ALL_LANGUAGES"]
-    # One phrase -> id map is unavoidable and affordable: 478,822 short strings.
+    # One phrase -> id map is unavoidable and affordable: 71,014 short strings.
     words = {phrase.casefold(): wid for wid, phrase in
              db.session.query(Word.id, Word.phrase)
              .filter(Word.project_id == core.id)}

@@ -16,8 +16,9 @@ records the wording they would actually use.
 
 The words come from [GhanaNouns](https://github.com/GhanaNLP/GhanaNouns):
 478,822 English nouns drawn from Ghanaian news, research and speech, with three
-candidate translations per language. All of them are loaded into the live
-deployment.
+candidate translations per language. The 71,014 seen five or more times are
+loaded into the live deployment; the rest are below `MIN_OCCURRENCES` and are
+not collected — see the groups table below.
 
 ## How it works
 
@@ -40,7 +41,7 @@ SHOLA collects words, and only words. It briefly had a platform for hosting
 other people's datasets - submission, approval, exclusive runs, sentences and
 paragraphs - and every part of it was a question somebody had to answer before
 anyone could check a word. It is gone. A `Project` row survives as the thing
-words hang off, because `Word.project_id` is on 478,822 rows and rebuilding
+words hang off, because `Word.project_id` is on every word row and rebuilding
 that table in SQLite to drop a column nobody sees is not worth it.
 
 Machine translation seeded four languages with candidate translations. The
@@ -370,7 +371,8 @@ SHOLA_ADMINS          comma-separated addresses that may approve projects
 ```
 
 On first boot the container fetches the published dataset and imports it —
-38 MB down, a few minutes to load 478,822 words. It is skipped on later boots,
+38 MB down, a few minutes to load the 71,014 words above the floor. It is
+skipped on later boots,
 so a redeploy is quick. `SHOLA_SKIP_SEED=1` disables it entirely.
 
 Scheduled tasks, as Coolify scheduled tasks on the same container:
@@ -447,7 +449,7 @@ The backup prints how much is left on disk and warns below 5 GB free.
 | App | Coolify application `fj2jijjl9gavv683vcfuhuep`, dockerfile build pack |
 | Server | gunicorn, 3 gthread workers, port 8000 in the container |
 | Public address | Cloudflare proxied A record → the VPS; Coolify terminates and routes by hostname |
-| Database | SQLite on a persistent volume at `instance/shola.db`, all 478,822 words loaded |
+| Database | SQLite on a persistent volume at `instance/shola.db`, 71,014 words loaded |
 | Email | Brevo transactional API, sending as `michseth@sholaproject.org` |
 | Schedule | Coolify scheduled tasks: `send-daily` at 07:00 / 13:00 / 18:00, `release-leases` 04:00, `backup` 01:15 |
 

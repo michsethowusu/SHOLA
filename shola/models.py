@@ -270,7 +270,7 @@ class Project(db.Model):
         that is simply items done out of items; across a project it is the share
         of (items x languages) finished, reported as a percentage rather than a
         count - "42,136,336 items" would be a nonsense number to put on a page
-        when the project has 478,822 items in it.
+        when the project has tens of thousands of items in it.
 
         Counted from WordState, which only holds rows for items somebody has
         answered, so the cost follows work done rather than corpus size.
@@ -617,7 +617,7 @@ def ensure_indexes():
     a file uploaded twice.
 
     Cheap because it was a standalone index rather than a table constraint -
-    dropping it needs no rebuild of the 478k rows.
+    dropping it needs no rebuild of the word table.
     """
     from sqlalchemy import inspect, text
 

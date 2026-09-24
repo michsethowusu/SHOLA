@@ -8,7 +8,7 @@ project, it collects words, and every speaker of every language it covers is
 sent from it.
 
 The `Project` row survives as the thing words hang off. It is an internal
-anchor, not a feature: `Word.project_id` is on 478,822 rows with 1.4 million
+anchor, not a feature: `Word.project_id` is on every word row with a million
 candidates beside them, and rebuilding that table in SQLite to delete a column
 nobody sees is a worse idea than leaving it.
 """

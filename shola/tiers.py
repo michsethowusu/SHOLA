@@ -230,7 +230,7 @@ def tier_progress_all(languages, project_id=None):
 
     The slow version joins every item to its vote state, once per language, and
     the join is over the whole corpus - four languages cost four scans of
-    478,822 rows, and every language that opens adds another. Here the item
+    every word row, and every language that opens adds another. Here the item
     totals are counted once and the closed counts come from WordState, which
     only has rows for items somebody has answered.
 
