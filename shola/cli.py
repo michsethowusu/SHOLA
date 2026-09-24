@@ -951,8 +951,13 @@ def check_databases_cmd():
         try:
             socket.gethostbyname(u.hostname)
         except OSError:
-            click.echo(f"    host {u.hostname} does not resolve from this "
-                       "container - attach it to the 'coolify' network")
+            if not str(d["status"]).startswith("running"):
+                # Docker's DNS has no entry for a stopped container. Nothing is
+                # wrong with the network, and the backup skips this one anyway.
+                click.echo("    stopped, so no DNS entry - not dumped")
+            else:
+                click.echo(f"    host {u.hostname} does not resolve from this "
+                           "container - attach it to the 'coolify' network")
             continue
         port = u.port or (5432 if "postgres" in d["kind"] else 3306)
         try:
