@@ -1249,7 +1249,13 @@ def coolify_databases():
                     "kind": (d.get("database_type") or ""),
                     "image": d.get("image") or "",
                     "status": d.get("status") or "",
-                    "dsn": dsn})
+                    "dsn": dsn,
+                    # A backup wants more rights than an application user has.
+                    # Coolify's connection string is the one the app uses -
+                    # for MySQL that is the site's own account, which is
+                    # granted what the site needs and not what mysqldump
+                    # --routines needs.
+                    "root_password": d.get("mysql_root_password") or ""})
     return out
 
 
@@ -1277,14 +1283,20 @@ def dump_database(db, out_dir, stamp):
                (u.path or "/").lstrip("/")]
     elif "mysql" in db["kind"] or "maria" in db["kind"] or \
             u.scheme.startswith(("mysql", "maria")):
+        # root where Coolify has it, and the application's own account only as
+        # a fallback. The app user is granted what the site needs; mysqldump
+        # --routines reads stored programs, and on MySQL 8 that needs rights a
+        # Joomla account is not given. Falling back rather than insisting means
+        # a database Coolify has no root password for still gets dumped.
+        user = db.get("root_password") and "root" or unquote(u.username or "root")
+        password = db.get("root_password") or unquote(u.password or "")
         # Through the environment, not -p on the command line: an argument is
         # visible in `ps` to every user on the host, and this one is a root
         # database password.
-        env["MYSQL_PWD"] = unquote(u.password or "")
+        env["MYSQL_PWD"] = password
         cmd = ["mysqldump", "--single-transaction", "--routines", "--triggers",
                "--no-tablespaces", "-h", u.hostname, "-P", str(u.port or 3306),
-               "-u", unquote(u.username or "root"),
-               (u.path or "/").lstrip("/")]
+               "-u", user, (u.path or "/").lstrip("/")]
     else:
         raise RuntimeError(f"no dumper for {db['kind'] or u.scheme!r}")
 
