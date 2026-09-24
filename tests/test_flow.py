@@ -23,7 +23,7 @@ from shola.tiers import (MAX_VERDICTS_BEFORE_CONTESTED,           # noqa: E402
                          lease_words, refresh_word, release_expired,
                          release_stale,
                          answers_needed, recruitment, state_for,
-                         tier_for, tier_progress, top_up)
+                         MIN_OCCURRENCES, tier_for, tier_progress, top_up)
 from shola.models import (Assignment, Candidate, Evaluation,      # noqa: E402
                           PendingSignup, Volunteer, Word, db)
 
@@ -55,9 +55,10 @@ def seed(n_words=30, project=None):
     project = project or core_project()
     for i in range(n_words):
         # Descending frequency, so word 0 is the commonest.
-        w = Word(phrase=f"word {i}", frequency=float(n_words - i),
-                 occurrences=n_words - i, tier=tier_for(n_words - i),
-                 project_id=project.id)
+        # Kept clear of MIN_OCCURRENCES: nothing rarer than that is imported.
+        n = n_words - i + MIN_OCCURRENCES
+        w = Word(phrase=f"word {i}", frequency=float(n), occurrences=n,
+                 tier=tier_for(n), project_id=project.id)
         db.session.add(w)
         db.session.flush()
         for lang in LANGS:
@@ -243,15 +244,18 @@ def main():
         db.session.commit()
         ok &= check("thresholds map counts to tiers",
                     (tier_for(100), tier_for(30), tier_for(12),
-                     tier_for(6), tier_for(1)) == (1, 2, 3, 4, 5))
+                     tier_for(6)) == (1, 2, 3, 4))
+        ok &= check("and a count under the floor belongs to no tier",
+                    tier_for(MIN_OCCURRENCES - 1) is None,
+                    str(tier_for(MIN_OCCURRENCES - 1)))
         # Give the seeded words a clean spread across two tiers.
         for i, w in enumerate(Word.query.order_by(Word.id).all()):
-            w.occurrences = 100 if i < 10 else 1
+            w.occurrences = 100 if i < 10 else MIN_OCCURRENCES
         db.session.commit()
         assign_tiers()
         counts = {r["tier"]: r["total"] for r in tier_progress("twi")}
         ok &= check("words land in the right tiers",
-                    counts.get(1) == 10 and counts.get(5) == 20, str(counts))
+                    counts.get(1) == 10 and counts.get(4) == 20, str(counts))
         ok &= check("tier 1 is the one being worked", active_tier("twi") == 1)
 
     print("\nwork is leased from the active tier, not reserved at signup")
@@ -331,7 +335,8 @@ def main():
         for w in Word.query.filter(Word.tier == 1).all():
             state_for(w.id, "twi").done = True
         db.session.commit()
-        ok &= check("tier 2 opens once tier 1 closes", active_tier("twi") == 5,
+        ok &= check("the next tier opens once tier 1 closes",
+                    active_tier("twi") == 4,
                     f"active={active_tier('twi')}")
 
     print("\nleases expire so words are never stuck")

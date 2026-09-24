@@ -104,11 +104,18 @@ actually use is settled first and a half-finished project is still usable.
 | 2 | 20–49 | 11,184 |
 | 3 | 10–19 | 16,466 |
 | 4 | 5–9 | 32,158 |
-| 5 | 1–4 | 407,808 |
 
 Bands come from raw occurrence counts, not the percentage column in the source
 dataset: that is rounded to four decimals, so 91% of words tie at 0.0000 and it
 cannot order the long tail.
+
+Anything seen fewer than five times is not collected at all. There was a fifth
+group holding it — 407,808 phrases, over 122,000 of them appearing exactly once
+in the corpus. These are extracted noun phrases, so the tail is mostly parser
+noise rather than vocabulary, and it would have sat in the queue for ever
+because group 4 never finishes and group 5 never opens. `MIN_OCCURRENCES` in
+`shola/tiers.py` is the floor; `flask shola drop-rare` removes anything below
+it.
 
 ### Work is leased, not allocated
 

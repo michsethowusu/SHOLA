@@ -411,8 +411,9 @@ class Word(db.Model):
     occurrences = db.Column(db.Integer, default=0, nullable=False, index=True)
 
     # Which band of commonness this word sits in. Tier 1 is worked to
-    # completion before tier 2 opens.
-    tier = db.Column(db.Integer, default=5, nullable=False, index=True)
+    # completion before tier 2 opens. Tier 0 is set by an admin withdrawing a
+    # reported item, which takes it out of the queue for good.
+    tier = db.Column(db.Integer, default=1, nullable=False, index=True)
 
     # Superseded by WordState, which tracks these per language. Left in place
     # so existing databases still load; nothing reads them.

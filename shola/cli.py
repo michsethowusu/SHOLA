@@ -75,8 +75,13 @@ def _upsert_word(phrase, per_language, seen, freq=(0.0, 0), project_id=None):
         seen.add(phrase)
         return False
     pct, occurrences = freq
+    tier = tier_for(occurrences)
+    if tier is None:
+        # Under MIN_OCCURRENCES: too rare in the corpus to be worth an answer.
+        seen.add(phrase)
+        return False
     word = Word(phrase=phrase, frequency=pct, occurrences=occurrences,
-                tier=tier_for(occurrences), project_id=project_id)
+                tier=tier, project_id=project_id)
     db.session.add(word)
     db.session.flush()
     for language, variants in per_language.items():
@@ -695,6 +700,73 @@ def drop_project_cmd(slug, yes):
     db.session.delete(project)
     db.session.commit()
     click.echo(f"Dropped {slug!r}.")
+
+
+@shola_cli.command("drop-rare")
+@click.option("--below", type=int, default=None,
+              help="Occurrence floor. Defaults to MIN_OCCURRENCES.")
+@click.option("--yes", is_flag=True, help="Do it, rather than counting first.")
+def drop_rare_cmd(below, yes):
+    """Delete items too rare in the corpus to be worth an answer.
+
+    This is what took tier 5 out: 407,808 phrases seen fewer than five times,
+    over 122,000 of them exactly once. Without it they sit in the queue for
+    ever, because tier 4 never finishes and tier 5 never opens.
+
+    It counts first and prints what it would delete. Answers already given on
+    those items are part of that count - read it before passing --yes, because
+    those are somebody's evenings and they do not come back.
+    """
+    from .models import (Assignment, Candidate, Evaluation, Flag, Word,
+                         WordState)
+    from .tiers import MIN_OCCURRENCES
+
+    floor = MIN_OCCURRENCES if below is None else below
+    ids = [row[0] for row in
+           db.session.query(Word.id).filter(Word.occurrences < floor)]
+    kept = Word.query.filter(Word.occurrences >= floor).count()
+
+    counts = {"items": len(ids)}
+    for label, model in (("options", Candidate), ("answers", Evaluation),
+                         ("assignments", Assignment), ("states", WordState),
+                         ("reports", Flag)):
+        n = 0
+        for start in range(0, len(ids), 5000):
+            n += (model.query
+                  .filter(model.word_id.in_(ids[start:start + 5000])).count())
+        counts[label] = n
+
+    click.echo(f"Items seen fewer than {floor} times:")
+    for label, n in counts.items():
+        click.echo(f"  {label:12} {n:>9,}")
+    click.echo(f"\n  {kept:,} items stay.")
+    if counts["answers"]:
+        click.echo(f"  {counts['answers']:,} answers volunteers have already "
+                   "given would go with them.")
+    if not yes:
+        click.echo("\nRe-run with --yes to delete all of it.")
+        return
+    if not ids:
+        return
+
+    # Chunked, children before parents: one statement over 400,000 rows is what
+    # filled the disk the last time.
+    for model in (Flag, WordState, Assignment, Evaluation, Candidate):
+        done = 0
+        for start in range(0, len(ids), 5000):
+            done += (model.query
+                     .filter(model.word_id.in_(ids[start:start + 5000]))
+                     .delete(synchronize_session=False))
+            db.session.commit()
+        if done:
+            click.echo(f"  deleted {done:,} {model.__name__.lower()} rows")
+    for start in range(0, len(ids), 5000):
+        (Word.query.filter(Word.id.in_(ids[start:start + 5000]))
+         .delete(synchronize_session=False))
+        db.session.commit()
+    click.echo(f"Deleted {len(ids):,} items. {kept:,} left.")
+    click.echo("Run `flask shola assign-tiers` to confirm the bands, then "
+               "VACUUM to give the disk back.")
 
 
 @shola_cli.command("name-model")

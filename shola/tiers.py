@@ -4,7 +4,7 @@ Work is done tier by tier rather than item by item. In the translation project
 tier 1 is the commonest ~11k words; none of tier 2 is handed out until every
 word in tier 1 has enough speakers agreeing. That way the words people actually
 use are settled first, and a half-finished project is still a usable resource
-rather than a thin scatter across half a million entries. Projects uploaded as a
+rather than a thin scatter across the whole vocabulary. Projects uploaded as a
 file have no frequency data, so all their items land in one tier and the gate
 does nothing - they are worked in the order the file gave.
 
@@ -30,8 +30,16 @@ TIER_THRESHOLDS = [
     (2, 20),      # 20-49               ~11,184
     (3, 10),      # 10-19               ~16,466
     (4, 5),       # 5-9                 ~32,158
-    (5, 0),       # everything else     ~407,808
 ]
+
+# Below this, a phrase is not worth anyone's time. There used to be a tier 5
+# holding everything under five occurrences - 407,808 entries, of which over
+# 122,000 appeared exactly once in the whole corpus. These are extracted noun
+# phrases, so the long tail is mostly parser noise rather than vocabulary
+# ("systems energy", "auditors base"), and asking a speaker to translate that
+# wastes the one thing the project cannot buy more of. Anything under the floor
+# is not imported and not handed out.
+MIN_OCCURRENCES = TIER_THRESHOLDS[-1][1]
 
 # How many answers an item wants in each language before it stops being handed
 # out. The default; each project carries its own. Read it through
@@ -84,10 +92,11 @@ def project_of(word_id):
 
 
 def tier_for(occurrences):
+    """The band this count belongs in, or None if it is too rare to collect."""
     for tier, floor in TIER_THRESHOLDS:
         if occurrences >= floor:
             return tier
-    return TIER_THRESHOLDS[-1][0]
+    return None
 
 
 def normalise(text):
