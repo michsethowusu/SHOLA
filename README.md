@@ -516,10 +516,21 @@ The **code** in this repository is MIT licensed; see `LICENSE`.
 
 The **words** collected through SHOLA — the translations volunteers confirm —
 are released under
-[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), the same licence as
-[GhanaNouns](https://github.com/GhanaNLP/GhanaNouns). Use them for anything,
-including commercially, as long as you credit SHOLA and AfriSpeech.
+[CC BY-NC 4.0](https://creativecommons.org/licenses/by-nc/4.0/). Use them for
+any non-commercial purpose, as long as you credit SHOLA and AfriSpeech.
 
 Two licences because they cover different things: MIT is a software licence and
-says nothing sensible about a word list, while CC BY is written for data and
+says nothing sensible about a word list, while CC BY-NC is written for data and
 asks for the attribution the volunteers deserve.
+
+### Why non-commercial
+
+It was CC BY 4.0, matching
+[GhanaNouns](https://github.com/GhanaNLP/GhanaNouns). The options speakers
+choose between now include NLLB-200's, and NLLB-200's weights are CC-BY-NC-4.0
+under Meta's original release — so an answer that is NLLB's wording carries
+that restriction, and the corpus is published under it throughout rather than
+asking every user to reason about which row came from where.
+
+The change binds copies distributed from here on. Anyone who took the data
+under CC BY 4.0 keeps those terms for that copy.
