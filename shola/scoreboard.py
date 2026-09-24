@@ -33,6 +33,17 @@ from .models import Candidate, Evaluation, Project, Word, db
 # on the board as the baseline every model is being compared against.
 HUMAN = "human"
 
+# Names that are on an option but are not a system being scored.
+#
+# `volunteer` is a wording somebody typed, which becomes an option for the next
+# speaker but was not on screen for the answer that created it.
+#
+# `retracted` is an option whose system has withdrawn its claim to it - see
+# `shola retract-options`. The option stays, because a speaker may already have
+# picked it and deleting the row would erase their answer, but nothing is
+# scored for it either way.
+NOT_SCORED = {"volunteer", "retracted"}
+
 
 def split_sources(source):
     """The systems behind one option.
@@ -101,7 +112,7 @@ def scores(project_id=None, language=None, min_offered=1):
             present |= sources
         # A wording a volunteer typed becomes an option for the next speaker.
         # It was not on screen for this answer, so it is not scored here.
-        present.discard("volunteer")
+        present -= NOT_SCORED
         if not present:
             continue
         for name in present:
@@ -109,7 +120,7 @@ def scores(project_id=None, language=None, min_offered=1):
         chosen = normalise(a.custom_text or a.option_text or "")
         if not chosen:
             continue
-        winners = by_text.get(chosen, set()) - {"volunteer"}
+        winners = by_text.get(chosen, set()) - NOT_SCORED
         for name in winners:
             picked[name] += 1
         if len(winners) == 1:
@@ -142,7 +153,7 @@ def head_to_head(project_id=None, language=None):
         by_text = options.get((a.word_id, a.language)) or {}
         owner = {}
         for text, sources in by_text.items():
-            for name in sources - {"volunteer"}:
+            for name in sources - NOT_SCORED:
                 owner.setdefault(name, set()).add(text)
         names = sorted(owner)
         chosen = normalise(a.custom_text or a.option_text or "")
@@ -185,7 +196,7 @@ def named_models(project_id=None):
     found = set()
     for row in q.all():
         found |= split_sources(row[0])
-    return sorted(found - {"volunteer"})
+    return sorted(found - NOT_SCORED)
 
 
 def project_scores(slug, **kwargs):

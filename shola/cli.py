@@ -498,6 +498,83 @@ def reset_backoff_cmd(email, yes):
     click.echo(f"\nCleared for {len(affected)} volunteer(s).")
 
 
+@shola_cli.command("retract-options")
+@click.option("--source", required=True,
+              help="The system withdrawing its options, e.g. 'gemini-3.6-flash'.")
+@click.option("--language", multiple=True,
+              help="Limit to these languages. Default: all of them.")
+@click.option("--yes", is_flag=True, help="Do it, rather than counting first.")
+def retract_options_cmd(source, language, yes):
+    """Take a system's name off every option it proposed.
+
+    For replacing one system's output with a fresh run rather than adding to
+    it. Gemini was asked for three wordings per word while Google, Gemma and
+    NLLB each give one, so it had three chances to match what a speaker says -
+    its pick rate measured the extra chances as much as the translation. This
+    clears the old claim so a one-wording run can be imported over it.
+
+    It does not delete options a speaker has already answered against. Deleting
+    a Candidate a verdict points at would erase that answer's wording and take
+    the other systems' scores down with it. Those rows stay, marked `retracted`
+    so nothing is scored for them. An option nobody has touched and nobody else
+    claims is deleted outright.
+
+    Run `add-options` with the new file afterwards. A wording that comes back
+    identical is credited again, so the system keeps that score; one that comes
+    back different does not.
+    """
+    from .models import Candidate, Evaluation
+
+    q = db.session.query(Candidate.id, Candidate.source, Candidate.language)
+    if language:
+        q = q.filter(Candidate.language.in_(language))
+    mine, freed, kept = [], [], 0
+    for cid, src, lang in q:
+        names = [p.strip() for p in (src or "").split(";") if p.strip()]
+        if source not in names:
+            continue
+        rest = [n for n in names if n != source]
+        mine.append((cid, ";".join(rest)))
+        if rest:
+            kept += 1
+        else:
+            freed.append(cid)
+
+    # Of the ones left with no owner, which has a verdict pointing at it.
+    answered = set()
+    for start in range(0, len(freed), 5000):
+        chunk = freed[start:start + 5000]
+        answered |= {row[0] for row in
+                     db.session.query(Evaluation.candidate_id)
+                     .filter(Evaluation.candidate_id.in_(chunk)).distinct()}
+
+    click.echo(f"{source}:")
+    click.echo(f"  options claimed      {len(mine):>9,}")
+    click.echo(f"  shared with others   {kept:>9,}  (name removed, option stays)")
+    click.echo(f"  sole, unanswered     {len(freed) - len(answered):>9,}  (deleted)")
+    click.echo(f"  sole, answered       {len(answered):>9,}  (kept, marked retracted)")
+    if not yes:
+        click.echo("\nRe-run with --yes to do it, then add-options with the "
+                   "new file.")
+        return
+    if not mine:
+        return
+
+    to_delete = [cid for cid in freed if cid not in answered]
+    delete_set = set(to_delete)
+    updates = [{"id": cid, "source": rest or "retracted"}
+               for cid, rest in mine if cid not in delete_set]
+    for start in range(0, len(updates), 5000):
+        db.session.bulk_update_mappings(Candidate, updates[start:start + 5000])
+        db.session.commit()
+    for start in range(0, len(to_delete), 5000):
+        (Candidate.query.filter(Candidate.id.in_(to_delete[start:start + 5000]))
+         .delete(synchronize_session=False))
+        db.session.commit()
+    click.echo(f"Deleted {len(to_delete):,}, re-labelled "
+               f"{len(updates):,}. {source} now claims nothing.")
+
+
 @shola_cli.command("add-options")
 @click.option("--jsonl", "path", type=click.Path(exists=True), required=True,
               help='One object per line: {"phrase","language","text"}.')

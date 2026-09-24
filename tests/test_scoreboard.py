@@ -259,6 +259,101 @@ def test_api(app):
     check("and links to it from the footer", b"/models" in r.data)
 
 
+def test_retraction(app):
+    """Replacing a system's options must not rewrite anyone else's score.
+
+    The case that matters: Gemini was asked for three wordings while the others
+    gave one, so it had three chances to match. Retracting is how that is
+    undone. An option a speaker already picked cannot simply be deleted - the
+    verdict points at it, and losing the row loses the wording the other
+    systems are being compared against.
+    """
+    print("\nWithdrawing a system's options")
+    with app.app_context():
+        from shola.cli import retract_options_cmd  # noqa: F401
+        from shola.models import Candidate, Evaluation
+
+        # model-a offered three wordings, model-b one. A speaker picked the
+        # second of model-a's.
+        # The core words project: add-options attaches only to that one, and
+        # this test has to exercise the real re-import path.
+        from shola.projects import core_project
+        project = core_project()
+        word = Word(phrase="greeting", project_id=project.id, position=1,
+                    occurrences=99, frequency=0.0, tier=1)
+        db.session.add(word)
+        db.session.flush()
+        for slot, (text, src) in enumerate(
+                [("agoo", "model-a"), ("mema wo akye", "model-a"),
+                 ("wo ho te sen", "model-a"), ("agoo", "model-b")], start=1):
+            db.session.add(Candidate(word_id=word.id, language="twi",
+                                     position=slot, text=text, source=src))
+        db.session.commit()
+        # build() writes "agoo" twice; keep one row carrying both names, which
+        # is how a shared wording is actually stored.
+        dupe = (Candidate.query.join(Word, Candidate.word_id == Word.id)
+                .filter(Word.project_id == project.id,
+                        Candidate.text == "agoo").all())
+        dupe[0].source = "model-a;model-b"
+        db.session.delete(dupe[1])
+        db.session.commit()
+
+        v = speaker("picked@example.com")
+        opt = option(project, "mema wo akye")
+        record_verdict(v, opt.word_id, candidate_id=opt.id)
+        db.session.commit()
+
+        rows = {r["name"]: r for r in scoreboard.scores(project.id)}
+        check("before: the three-option system is picked",
+              rows["model-a"]["picked"] == 1, str(rows.get("model-a")))
+
+        runner = app.test_cli_runner()
+        runner.invoke(args=["shola", "retract-options",
+                            "--source", "model-a", "--yes"])
+        db.session.expire_all()
+
+        check("a wording shared with another system keeps that system",
+              (Candidate.query.filter_by(text="agoo").first().source
+               == "model-b"))
+        check("a sole wording nobody answered is deleted",
+              Candidate.query.filter_by(text="wo ho te sen").first() is None)
+        answered = Candidate.query.filter_by(text="mema wo akye").first()
+        check("a sole wording somebody answered is kept, not deleted",
+              answered is not None)
+        check("and is marked so nothing is scored for it",
+              answered is not None and answered.source == "retracted",
+              answered.source if answered else "gone")
+        check("the verdict still points at a real option",
+              db.session.query(Evaluation).filter_by(
+                  candidate_id=answered.id).count() == 1 if answered else False)
+
+        rows = {r["name"]: r for r in scoreboard.scores(project.id)}
+        check("after: the retracted system scores nothing",
+              "model-a" not in rows, str(sorted(rows)))
+        check("and `retracted` is not itself a system on the board",
+              "retracted" not in rows, str(sorted(rows)))
+        check("the other system is still offered and still measured",
+              rows["model-b"]["offered"] == 1 and rows["model-b"]["picked"] == 0,
+              str(rows.get("model-b")))
+
+        # Re-importing the same wording gives the credit back; that is what
+        # "keeps its score if it says the same thing" means.
+        from shola.cli import add_options_cmd  # noqa: F401
+        import json as _json
+        import tempfile as _tempfile
+        fp = _tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False,
+                                          encoding="utf-8")
+        fp.write(_json.dumps({"phrase": "greeting", "language": "twi",
+                              "text": "mema wo akye"}) + "\n")
+        fp.close()
+        runner.invoke(args=["shola", "add-options", "--jsonl", fp.name,
+                            "--source", "model-a", "--yes"])
+        db.session.expire_all()
+        rows = {r["name"]: r for r in scoreboard.scores(project.id)}
+        check("re-proposing the same wording wins the credit back",
+              rows.get("model-a", {}).get("picked") == 1, str(rows.get("model-a")))
+
+
 def main():
     app = make_app()
     print("Model attribution and the scoreboard")
@@ -266,6 +361,7 @@ def main():
     test_credit_and_baseline(make_app())
     test_shared_wording(make_app())
     test_api(make_app())
+    test_retraction(make_app())
     failed = PASSED.count(False)
     print(f"\n{len(PASSED)} checks, {failed} failed")
     return 1 if failed else 0
