@@ -370,10 +370,18 @@ def stats_cmd():
 @shola_cli.command("assign-tiers")
 def assign_tiers_cmd():
     """Recompute every word's tier from its occurrence count."""
+    from sqlalchemy import func
+
     n = assign_tiers()
     click.echo(f"tiered {n:,} words")
-    for row in tier_progress():
-        click.echo(f"  tier {row['tier']}  {row['total']:>8,} words")
+    # Totals across the whole table. tier_progress() answers this per language,
+    # which is not the question here: a tier holds the same words whoever is
+    # working on it.
+    rows = (db.session.query(Word.tier, func.count(Word.id))
+            .group_by(Word.tier).order_by(Word.tier).all())
+    for tier, total in rows:
+        label = "withdrawn" if tier == 0 else f"tier {tier}   "
+        click.echo(f"  {label}  {total:>8,} words")
 
 
 @shola_cli.command("tier-status")
