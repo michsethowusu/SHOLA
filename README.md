@@ -405,8 +405,26 @@ SHOLA_S3_PREFIX       shola          (default)
 Without `SHOLA_S3_BUCKET` the backup stays local and says so.
 
 Coolify's scheduled backups only cover the databases it manages, so nothing
-backs up a SQLite file inside an application volume. `shola backup` writes two
-things into `instance/backups`:
+backs up a SQLite file inside an application volume — and its own managed
+backups record success when the helper container is missing and nothing has
+left the machine.
+
+So `shola backup` also dumps every managed Postgres and MySQL database on the
+server: `africateachers-db`, `education-au-db` and the rest. Nothing is
+configured for this. The connection strings come from the Coolify API, which
+this command already reads for the configuration export, so there is no second
+copy of four sets of database credentials to leak or keep in step. A database
+that will not dump does not cost the backup of everything that will, but the
+command exits non-zero, because a green tick over a missing database is the
+problem this replaces.
+
+`pg_dump` comes from PGDG rather than Debian: it refuses a server newer than
+itself, Debian ships client 15, and the servers here are Postgres 16 and 18.
+
+`flask shola check-databases` reports whether the dump tools are present, and
+whether each database is reachable from inside the container.
+
+`shola backup` writes into `instance/backups`:
 
 - a consistent compressed copy of the database, made through SQLite's backup
   API rather than by copying a file that may be mid-write

@@ -9,8 +9,29 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # curl is needed by the entrypoint to fetch the word list on first boot.
+#
+# pg_dump and mysqldump are for `shola backup`, which dumps the other
+# applications' managed databases. Coolify's own scheduled backup records
+# success when its helper container is missing and nothing has left the
+# machine; this command uploads directly and verifies the stored object.
+#
+# postgresql-client comes from PGDG, not Debian. pg_dump refuses a server newer
+# than itself, Debian bookworm ships client 15, and the servers here are
+# Postgres 16 and 18 - the distribution package would fail on both of the
+# databases that most need backing up. mariadb-client provides mysqldump.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl \
+ && apt-get install -y --no-install-recommends curl ca-certificates gnupg \
+ && install -d /usr/share/postgresql-common/pgdg \
+ && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+      -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc \
+ && echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc]" \
+      "http://apt.postgresql.org/pub/repos/apt" \
+      "$(. /etc/os-release && echo $VERSION_CODENAME)-pgdg main" \
+      > /etc/apt/sources.list.d/pgdg.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends postgresql-client-18 \
+      mariadb-client \
+ && apt-get purge -y gnupg && apt-get autoremove -y \
  && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

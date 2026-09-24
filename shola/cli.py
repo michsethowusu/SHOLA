@@ -12,6 +12,7 @@ import glob
 import gzip
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from datetime import date, datetime, time, timedelta
@@ -910,6 +911,57 @@ def name_model_cmd(slug, model, was, language, yes):
     click.echo(f"Recorded {done:,} options as {model!r}.")
 
 
+@shola_cli.command("check-databases")
+def check_databases_cmd():
+    """Say whether the backup could dump the other applications' databases.
+
+    Reports the three things that actually stop it - no dump tool in the image,
+    the database host not resolvable from this container, wrong credentials -
+    separately, because they have different fixes and one message saying
+    "failed" would not tell you which.
+    """
+    import shutil as _shutil
+    import socket
+    import subprocess
+
+    for tool in ("pg_dump", "mysqldump"):
+        where = _shutil.which(tool)
+        click.echo(f"{tool:11s} {where or 'NOT INSTALLED - rebuild the image'}")
+        if where:
+            try:
+                v = subprocess.run([tool, "--version"], capture_output=True,
+                                   text=True, timeout=20).stdout.strip()
+                click.echo(f"            {v}")
+            except Exception as exc:          # noqa: BLE001
+                click.echo(f"            could not run it: {exc}")
+
+    try:
+        found = coolify_databases()
+    except Exception as exc:                  # noqa: BLE001
+        raise click.ClickException(f"cannot reach the Coolify API: {exc}")
+    if not found:
+        click.echo("\nNo databases found. Is SHOLA_COOLIFY_TOKEN set?")
+        return
+
+    from urllib.parse import urlparse
+    click.echo(f"\n{len(found)} managed databases:")
+    for d in found:
+        u = urlparse(d["dsn"])
+        click.echo(f"\n  {d['name']}  ({d['image']}, {d['status']})")
+        try:
+            socket.gethostbyname(u.hostname)
+        except OSError:
+            click.echo(f"    host {u.hostname} does not resolve from this "
+                       "container - attach it to the 'coolify' network")
+            continue
+        port = u.port or (5432 if "postgres" in d["kind"] else 3306)
+        try:
+            with socket.create_connection((u.hostname, port), timeout=10):
+                click.echo(f"    reachable on {u.hostname}:{port}")
+        except OSError as exc:
+            click.echo(f"    cannot connect to {u.hostname}:{port}: {exc}")
+
+
 @shola_cli.command("backup")
 @click.option("--out", default="instance/backups", show_default=True)
 @click.option("--keep-db", default=3, show_default=True,
@@ -922,7 +974,9 @@ def name_model_cmd(slug, model, was, language, yes):
                    "so few, and only as a fallback for a failed upload.")
 @click.option("--keep-config", default=30, show_default=True,
               help="Coolify configuration exports to retain.")
-def backup(out, keep_db, keep_people, keep_dirs, keep_config):
+@click.option("--keep-external", default=14, show_default=True,
+              help="dumps of each managed Postgres/MySQL database to retain.")
+def backup(out, keep_db, keep_people, keep_dirs, keep_config, keep_external):
     """Back up the database, the volunteers, any mounted directories and the
     deployment configuration.
 
@@ -1025,6 +1079,39 @@ def backup(out, keep_db, keep_people, keep_dirs, keep_config):
         note = f"  (without {', '.join(excludes)})" if excludes else ""
         click.echo(f"files     {os.path.getsize(arc)//1048576} MB  {label}{note}")
 
+    # --- other applications' databases ------------------------------------
+    # Coolify's own scheduled backups record success when its helper container
+    # is missing and nothing has left the machine, which is how four databases
+    # went five days with no off-site copy while the dashboard stayed green.
+    # These are dumped here instead: through the same path that verifies the
+    # stored object's size afterwards, and loudly enough that a failure cannot
+    # be mistaken for a backup.
+    #
+    # Nothing is configured. The connection strings come from the Coolify API,
+    # which this command already talks to.
+    failed_dbs = []
+    try:
+        discovered = coolify_databases()
+    except Exception as exc:          # noqa: BLE001
+        click.echo(f"databases skipped: cannot reach Coolify: {exc}", err=True)
+        discovered = []
+    for entry in discovered:
+        if not str(entry["status"]).startswith("running"):
+            click.echo(f"database  {entry['name']}: {entry['status']}, "
+                       "not dumped")
+            continue
+        try:
+            path = dump_database(entry, out_dir, stamp)
+        except Exception as exc:      # noqa: BLE001
+            failed_dbs.append(entry["name"])
+            click.echo(f"database  {entry['name']} FAILED: {exc}", err=True)
+            continue
+        label = re.sub(r"[^A-Za-z0-9_.-]", "-", entry["name"])
+        made.append((path, f"db-{label}-", keep_external))
+        click.echo(f"database  {entry['name']}  "
+                   f"{max(1, os.path.getsize(path)//1048576)} MB  "
+                   f"{entry['image']}")
+
     # --- deployment configuration ----------------------------------------
     # The environment variables, domains and schedules of every application.
     # They are inside Coolify's own database dump too, but restoring from a
@@ -1090,6 +1177,13 @@ def backup(out, keep_db, keep_people, keep_dirs, keep_config):
         click.echo("WARNING: under 5 GB free. SQLite needs room for a journal "
                    "as large as the rows a transaction touches.", err=True)
 
+    # Last, so a database that would not dump does not cost the backup of
+    # everything that would - but non-zero, so the run is not recorded as a
+    # success. A green tick over a missing database is the whole problem.
+    if failed_dbs:
+        click.echo(f"FAILED to dump: {', '.join(failed_dbs)}", err=True)
+        raise SystemExit(1)
+
 
 ORPHAN_DAYS = 7
 
@@ -1121,6 +1215,90 @@ def prune_local(out_dir, made, orphan_days=ORPHAN_DAYS):
                        f"({os.path.getsize(path)//1048576} MB, no longer "
                        "backed up)")
             os.remove(path)
+
+
+def coolify_databases():
+    """Every managed database Coolify knows about, with how to reach it.
+
+    Discovered rather than configured: the connection strings are already in
+    Coolify's API, and a second copy of four sets of database credentials in
+    this app's environment is four more things to leak and to keep in step.
+    Returns [] when no token is set.
+    """
+    url = (os.environ.get("SHOLA_COOLIFY_URL") or "").rstrip("/")
+    token = os.environ.get("SHOLA_COOLIFY_TOKEN")
+    if not (url and token):
+        return []
+    import httpx
+
+    with httpx.Client(timeout=30,
+                      headers={"Authorization": f"Bearer {token}"}) as http:
+        rows = http.get(f"{url}/api/v1/databases").json()
+    out = []
+    for d in rows if isinstance(rows, list) else []:
+        dsn = d.get("internal_db_url")
+        if not dsn:
+            continue
+        out.append({"name": d.get("name") or d.get("uuid"),
+                    "uuid": d.get("uuid"),
+                    "kind": (d.get("database_type") or ""),
+                    "image": d.get("image") or "",
+                    "status": d.get("status") or "",
+                    "dsn": dsn})
+    return out
+
+
+def dump_database(db, out_dir, stamp):
+    """One managed database to a gzipped SQL file. Returns the path, or None.
+
+    Raises on failure so the caller can report it and exit non-zero. A backup
+    that skips a database quietly is the failure mode this whole command
+    exists to avoid.
+    """
+    import gzip as _gzip
+    import subprocess
+    from urllib.parse import urlparse, unquote
+
+    u = urlparse(db["dsn"])
+    name = re.sub(r"[^A-Za-z0-9_.-]", "-", db["name"])
+    path = os.path.join(out_dir, f"db-{name}-{stamp}.sql.gz")
+    env = dict(os.environ)
+
+    if "postgres" in db["kind"] or u.scheme.startswith("postgres"):
+        env["PGPASSWORD"] = unquote(u.password or "")
+        cmd = ["pg_dump", "--no-owner", "--no-privileges", "--clean",
+               "--if-exists", "-h", u.hostname, "-p", str(u.port or 5432),
+               "-U", unquote(u.username or "postgres"),
+               (u.path or "/").lstrip("/")]
+    elif "mysql" in db["kind"] or "maria" in db["kind"] or \
+            u.scheme.startswith(("mysql", "maria")):
+        # Through the environment, not -p on the command line: an argument is
+        # visible in `ps` to every user on the host, and this one is a root
+        # database password.
+        env["MYSQL_PWD"] = unquote(u.password or "")
+        cmd = ["mysqldump", "--single-transaction", "--routines", "--triggers",
+               "--no-tablespaces", "-h", u.hostname, "-P", str(u.port or 3306),
+               "-u", unquote(u.username or "root"),
+               (u.path or "/").lstrip("/")]
+    else:
+        raise RuntimeError(f"no dumper for {db['kind'] or u.scheme!r}")
+
+    with _gzip.open(path, "wb", compresslevel=6) as gz:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, env=env)
+        for chunk in iter(lambda: proc.stdout.read(1 << 20), b""):
+            gz.write(chunk)
+        err = proc.stderr.read().decode(errors="replace").strip()
+        code = proc.wait()
+    if code != 0:
+        os.path.exists(path) and os.remove(path)
+        raise RuntimeError(err.splitlines()[-1] if err else f"exit {code}")
+    # An empty dump is a failed dump that exited zero, which is exactly the
+    # shape of the bug this replaces.
+    if os.path.getsize(path) < 200:
+        os.remove(path)
+        raise RuntimeError("dump was empty")
+    return path
 
 
 def export_coolify_config():
