@@ -502,6 +502,12 @@ def add_options_cmd(path, source, yes):
 
     Skips anything already there - same word, same language, same wording - so
     re-running after an interrupted pass costs nothing.
+
+    Works a slice of the file at a time and asks the database only about the
+    words in that slice. The first version read every existing option into a
+    dictionary first, which is fine against a fresh database and was killed by
+    the OOM reaper against a real one: six million candidates do not fit in a
+    container's memory, and the failure came with no message beyond "Killed".
     """
     from .config import canonical_language
     from .models import CORE_PROJECT, Candidate, Project, Word
@@ -511,45 +517,53 @@ def add_options_cmd(path, source, yes):
         raise click.ClickException("No words project to attach to.")
 
     known = current_app.config["ALL_LANGUAGES"]
+    # One phrase -> id map is unavoidable and affordable: 478,822 short strings.
     words = {phrase.casefold(): wid for wid, phrase in
              db.session.query(Word.id, Word.phrase)
              .filter(Word.project_id == core.id)}
     click.echo(f"{len(words):,} words in the project")
 
-    # What each word/language already has, so positions continue rather than
-    # collide and duplicates are not written twice.
-    taken = {}
-    for wid, lang, pos, text in db.session.query(
-            Candidate.word_id, Candidate.language,
-            Candidate.position, Candidate.text):
-        slot = taken.setdefault((wid, lang), {"max": 0, "texts": set()})
-        slot["max"] = max(slot["max"], pos or 0)
-        slot["texts"].add((text or "").strip().casefold())
-
-    added = skipped = unknown_word = unknown_lang = 0
-    pending = []
-    # Gzip transparently: these files run to hundreds of thousands of lines and
-    # travel compressed, and making somebody gunzip 44 MB onto a container disk
+    # Gzip transparently: these files run to tens of millions of lines and
+    # travel compressed, and making somebody gunzip them onto a container disk
     # first is a step with nothing in it.
     opener = gzip.open if path.endswith(".gz") else open
-    with opener(path, "rt", encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                row = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            text = (row.get("text") or "").strip()
-            lang = canonical_language(row.get("language") or "")
-            wid = words.get((row.get("phrase") or "").strip().casefold())
-            if not text or wid is None:
-                unknown_word += 1 if wid is None else 0
-                continue
-            if lang not in known:
-                unknown_lang += 1
-                continue
+
+    def rows():
+        with opener(path, "rt", encoding="utf-8") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    yield json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+
+    SLICE = 50_000
+    added = skipped = unknown_word = unknown_lang = 0
+
+    def flush(batch):
+        """Write one slice, skipping whatever is already there."""
+        nonlocal added, skipped
+        wanted = {}
+        for wid, lang, text in batch:
+            wanted.setdefault(wid, []).append((lang, text))
+        ids = list(wanted)
+
+        # Only the rows this slice could collide with.
+        taken = {}
+        for start in range(0, len(ids), 5000):
+            chunk = ids[start:start + 5000]
+            for wid, lang, pos, text in db.session.query(
+                    Candidate.word_id, Candidate.language,
+                    Candidate.position, Candidate.text).filter(
+                    Candidate.word_id.in_(chunk)):
+                slot = taken.setdefault((wid, lang), {"max": 0, "texts": set()})
+                slot["max"] = max(slot["max"], pos or 0)
+                slot["texts"].add((text or "").strip().casefold())
+
+        pending = []
+        for wid, lang, text in batch:
             slot = taken.setdefault((wid, lang), {"max": 0, "texts": set()})
             if text.casefold() in slot["texts"] or slot["max"] >= MAX_OPTIONS:
                 skipped += 1
@@ -559,9 +573,38 @@ def add_options_cmd(path, source, yes):
             pending.append({"word_id": wid, "language": lang,
                             "position": slot["max"], "text": text[:400],
                             "source": source})
-            added += 1
+        if pending and yes:
+            db.session.bulk_insert_mappings(Candidate, pending)
+            db.session.commit()
+        added += len(pending)
 
-    click.echo(f"  to add       {added:,}")
+    batch = []
+    seen_lines = 0
+    for row in rows():
+        seen_lines += 1
+        text = (row.get("text") or "").strip()
+        lang = canonical_language(row.get("language") or "")
+        wid = words.get((row.get("phrase") or "").strip().casefold())
+        if wid is None:
+            unknown_word += 1
+            continue
+        if not text:
+            continue
+        if lang not in known:
+            unknown_lang += 1
+            continue
+        batch.append((wid, lang, text))
+        if len(batch) >= SLICE:
+            flush(batch)
+            batch = []
+            click.echo(f"  {seen_lines:,} read | {added:,} "
+                       f"{'written' if yes else 'to add'} | "
+                       f"{skipped:,} already there")
+    if batch:
+        flush(batch)
+
+    click.echo(f"\n  read         {seen_lines:,}")
+    click.echo(f"  {'written' if yes else 'to add':12} {added:,}")
     click.echo(f"  already there{skipped:>9,}")
     if unknown_word:
         click.echo(f"  no such word {unknown_word:,}")
@@ -570,51 +613,7 @@ def add_options_cmd(path, source, yes):
     if not yes:
         click.echo("\nRe-run with --yes to write them.")
         return
-
-    # Chunked: this runs to hundreds of thousands of rows, and one statement
-    # that size is what filled the disk the last time.
-    for start in range(0, len(pending), 5000):
-        db.session.bulk_insert_mappings(Candidate, pending[start:start + 5000])
-        db.session.commit()
-        click.echo(f"  written {min(start + 5000, len(pending)):,} / {len(pending):,}")
     click.echo(f"Added {added:,} options as {source!r}.")
-
-
-@shola_cli.command("send-test")
-@click.option("--to", "to_email", required=True, help="Where to send it.")
-def send_test_cmd(to_email):
-    """Send one message down the real path, to check the mail set-up.
-
-    Uses the same sender, reply-to and transport as a volunteer's daily list,
-    so it proves the thing that matters: that mail configured here arrives, and
-    that a reply to it lands somewhere a person reads. Configuration has moved
-    three times in a day - sender, reply-to, domain - and each time the only
-    way to know was to wait for the next send.
-    """
-    from .mailer import can_send, send
-
-    cfg = current_app.config
-    via = can_send()
-    if not via:
-        raise click.ClickException(
-            "Nothing is configured to send: no Brevo key and no SMTP password.")
-
-    click.echo(f"  via        {via}")
-    click.echo(f"  from       {cfg['MAIL_FROM_NAME']} <{cfg['MAIL_FROM']}>")
-    click.echo(f"  reply-to   {cfg.get('MAIL_REPLY_TO') or '(none)'}")
-    click.echo(f"  to         {to_email}")
-
-    when = datetime.utcnow().isoformat(timespec="seconds")
-    text = (f"This is a test from SHOLA, sent {when} UTC.\n\n"
-            f"It went out as {cfg['MAIL_FROM']} and a reply to it should reach "
-            f"{cfg.get('MAIL_REPLY_TO') or 'nobody - reply-to is unset'}.\n\n"
-            f"If you are reading this, that path works.\n")
-    try:
-        send(to_email, f"SHOLA test, {when}", text,
-             f"<p>{text.replace(chr(10) + chr(10), '</p><p>')}</p>")
-    except Exception as exc:      # noqa: BLE001 - the whole point is the error
-        raise click.ClickException(f"Send failed: {exc}")
-    click.echo("\nSent. Check the inbox, and reply to it to test the routing.")
 
 
 @shola_cli.command("drop-project")
