@@ -540,42 +540,66 @@ def add_options_cmd(path, source, yes):
                     continue
 
     SLICE = 50_000
-    added = skipped = unknown_word = unknown_lang = 0
+    added = skipped = shared = unknown_word = unknown_lang = 0
 
     def flush(batch):
         """Write one slice, skipping whatever is already there."""
-        nonlocal added, skipped
+        nonlocal added, skipped, shared
         wanted = {}
         for wid, lang, text in batch:
             wanted.setdefault(wid, []).append((lang, text))
         ids = list(wanted)
 
-        # Only the rows this slice could collide with.
+        # Only the rows this slice could collide with. The candidate id and
+        # source come too: where this source has produced a wording somebody
+        # else already proposed, the row is not written again but the name is
+        # added to it.
         taken = {}
         for start in range(0, len(ids), 5000):
             chunk = ids[start:start + 5000]
-            for wid, lang, pos, text in db.session.query(
-                    Candidate.word_id, Candidate.language,
-                    Candidate.position, Candidate.text).filter(
+            for cid, wid, lang, pos, text, src in db.session.query(
+                    Candidate.id, Candidate.word_id, Candidate.language,
+                    Candidate.position, Candidate.text,
+                    Candidate.source).filter(
                     Candidate.word_id.in_(chunk)):
-                slot = taken.setdefault((wid, lang), {"max": 0, "texts": set()})
+                slot = taken.setdefault((wid, lang), {"max": 0, "texts": {}})
                 slot["max"] = max(slot["max"], pos or 0)
-                slot["texts"].add((text or "").strip().casefold())
+                slot["texts"][(text or "").strip().casefold()] = (cid, src or "")
 
-        pending = []
+        pending, credit = [], []
         for wid, lang, text in batch:
-            slot = taken.setdefault((wid, lang), {"max": 0, "texts": set()})
-            if text.casefold() in slot["texts"] or slot["max"] >= MAX_OPTIONS:
+            slot = taken.setdefault((wid, lang), {"max": 0, "texts": {}})
+            key = text.casefold()
+            if key in slot["texts"]:
+                # Somebody already proposed this wording. Two systems agreeing
+                # is not a reason to show a speaker the same option twice, and
+                # it is not a reason to credit only whichever was imported
+                # first - the scoreboard reads a semicolon-separated list and
+                # credits every name on it.
+                cid, src = slot["texts"][key]
+                if source not in {p.strip() for p in src.split(";")}:
+                    credit.append({"id": cid,
+                                   "source": f"{src};{source}" if src else source})
+                    slot["texts"][key] = (cid, f"{src};{source}")
+                    shared += 1
+                else:
+                    skipped += 1
+                continue
+            if slot["max"] >= MAX_OPTIONS:
                 skipped += 1
                 continue
             slot["max"] += 1
-            slot["texts"].add(text.casefold())
+            slot["texts"][key] = (None, source)
             pending.append({"word_id": wid, "language": lang,
                             "position": slot["max"], "text": text[:400],
                             "source": source})
-        if pending and yes:
-            db.session.bulk_insert_mappings(Candidate, pending)
-            db.session.commit()
+        if yes:
+            if pending:
+                db.session.bulk_insert_mappings(Candidate, pending)
+            if credit:
+                db.session.bulk_update_mappings(Candidate, credit)
+            if pending or credit:
+                db.session.commit()
         added += len(pending)
 
     batch = []
@@ -599,12 +623,13 @@ def add_options_cmd(path, source, yes):
             batch = []
             click.echo(f"  {seen_lines:,} read | {added:,} "
                        f"{'written' if yes else 'to add'} | "
-                       f"{skipped:,} already there")
+                       f"{shared:,} shared | {skipped:,} already there")
     if batch:
         flush(batch)
 
     click.echo(f"\n  read         {seen_lines:,}")
     click.echo(f"  {'written' if yes else 'to add':12} {added:,}")
+    click.echo(f"  shared with another system {shared:>9,}")
     click.echo(f"  already there{skipped:>9,}")
     if unknown_word:
         click.echo(f"  no such word {unknown_word:,}")
