@@ -25,6 +25,7 @@ from flask import current_app
 from flask.cli import AppGroup
 
 from . import consensus
+from .scoreboard import split_sources
 from .models import Candidate, Evaluation, Volunteer, Word, db, site_stats
 from .tiers import (active_tier, assign_tiers, daily_quota, refresh_word,
                     release_expired, tier_for, tier_progress, top_up)
@@ -574,6 +575,70 @@ def retract_options_cmd(source, language, yes):
         db.session.commit()
     click.echo(f"Deleted {len(to_delete):,}, re-labelled "
                f"{len(updates):,}. {source} now claims nothing.")
+
+
+@shola_cli.command("sources")
+@click.option("--language", help="Break one language down by tier instead.")
+def sources_cmd(language):
+    """What each system has actually put in the database.
+
+    For checking an import landed. `add-options` reports what it wrote, but
+    only this says what is there afterwards - and the two differ whenever a
+    wording was already present, which is most of them once four systems are
+    translating the same word list.
+    """
+    from sqlalchemy import func
+
+    from .models import Candidate, Word
+
+    if language:
+        rows = (db.session.query(Word.tier, Candidate.source,
+                                 func.count(Candidate.id))
+                .join(Word, Candidate.word_id == Word.id)
+                .filter(Candidate.language == language)
+                .group_by(Word.tier, Candidate.source).all())
+        if not rows:
+            click.echo(f"No options in {language!r}.")
+            return
+        per = {}
+        for tier, src, n in rows:
+            for name in split_sources(src):
+                per.setdefault(name, {}).setdefault(tier, 0)
+                per[name][tier] += n
+        tiers = sorted({t for d in per.values() for t in d})
+        click.echo(f"{language} — options per tier\n")
+        click.echo("  " + f"{'system':22s}" +
+                   "".join(f"{'tier ' + str(t):>12s}" for t in tiers) +
+                   f"{'total':>12s}")
+        for name in sorted(per, key=lambda k: -sum(per[k].values())):
+            d = per[name]
+            click.echo("  " + f"{name:22s}" +
+                       "".join(f"{d.get(t, 0):>12,}" for t in tiers) +
+                       f"{sum(d.values()):>12,}")
+        return
+
+    # Grouping by the raw source string keeps this to one aggregate over the
+    # candidate table. There are a handful of distinct strings even with four
+    # systems, because a shared wording stores both names in one row, so the
+    # semicolons are split afterwards over those few rows rather than over
+    # millions.
+    rows = (db.session.query(Candidate.source, Candidate.language,
+                             func.count(Candidate.id))
+            .group_by(Candidate.source, Candidate.language).all())
+    if not rows:
+        click.echo("No options at all.")
+        return
+    totals, langs = {}, {}
+    for src, lang, n in rows:
+        for name in split_sources(src):
+            totals[name] = totals.get(name, 0) + n
+            langs.setdefault(name, set()).add(lang)
+    click.echo(f"{sum(n for _, _, n in rows):,} options in the database\n")
+    click.echo(f"  {'system':22s} {'options':>12s} {'languages':>10s}")
+    for name in sorted(totals, key=lambda k: -totals[k]):
+        click.echo(f"  {name:22s} {totals[name]:>12,} {len(langs[name]):>10,}")
+    click.echo("\nA wording two systems both proposed is stored once with both "
+               "names on it,\nso these add up to more than the row count.")
 
 
 @shola_cli.command("add-options")
