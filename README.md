@@ -154,8 +154,9 @@ would have handed them to someone else.
 
 ### When agreement never comes
 
-Voting between the three options always resolves: the worst case is one vote
-each and the fourth verdict has to create a pair. Typed answers are free text
+Voting between the offered options always resolves: with a fixed set of
+wordings, enough verdicts must eventually put two on the same one. Typed
+answers are free text
 and unbounded, though, so five speakers can each write a different wording and
 no pair ever forms. After `MAX_VERDICTS_BEFORE_CONTESTED` such answers the word
 is closed as contested, every variant is kept, and the group can finish.

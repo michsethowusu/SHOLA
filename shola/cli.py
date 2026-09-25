@@ -17,8 +17,6 @@ import sys
 from pathlib import Path
 from datetime import date, datetime, time, timedelta
 
-# A word shows at most this many options; more is a wall, not a choice.
-MAX_OPTIONS = 5
 
 import click
 from flask import current_app
@@ -740,9 +738,6 @@ def add_options_cmd(path, source, yes):
                     shared += 1
                 else:
                     skipped += 1
-                continue
-            if slot["max"] >= MAX_OPTIONS:
-                skipped += 1
                 continue
             slot["max"] += 1
             slot["texts"][key] = (None, source)
