@@ -639,6 +639,61 @@ def sources_cmd(language):
                "names on it,\nso these add up to more than the row count.")
 
 
+@shola_cli.command("coverage")
+@click.option("--language", required=True, help="Which language to look at.")
+def coverage_cmd(language):
+    """Which systems had an option on the items speakers have answered.
+
+    The scoreboard's `rate` is only comparable between two systems that were
+    offered on the same items. When one covers a language the other does not,
+    or produced nothing for some words, they are being marked on different
+    papers and the rates cannot be read side by side. This says who was on the
+    paper.
+    """
+    from sqlalchemy import func
+
+    from .config import canonical_language
+    from .models import Candidate, Evaluation, Word
+
+    code = canonical_language(language) or language
+    answered = [r[0] for r in db.session.query(Evaluation.word_id)
+                .filter(Evaluation.language == code,
+                        Evaluation.skipped.is_(False)).distinct()]
+    if not answered:
+        click.echo(f"No answers in {code!r} yet.")
+        return
+
+    have = {}
+    for start in range(0, len(answered), 5000):
+        chunk = answered[start:start + 5000]
+        for wid, src in db.session.query(Candidate.word_id, Candidate.source) \
+                .filter(Candidate.word_id.in_(chunk),
+                        Candidate.language == code):
+            for name in split_sources(src):
+                have.setdefault(name, set()).add(wid)
+
+    total = len(answered)
+    click.echo(f"{code}: {total:,} items answered\n")
+    click.echo(f"  {'system':22s} {'had an option':>14s} {'missing':>9s}")
+    for name in sorted(have, key=lambda k: -len(have[k])):
+        n = len(have[name])
+        click.echo(f"  {name:22s} {n:>14,} {total - n:>9,}")
+
+    click.echo("\nItems where a system had nothing, by tier:")
+    for name in sorted(have, key=lambda k: -len(have[k])):
+        missing = [w for w in answered if w not in have[name]]
+        if not missing:
+            continue
+        rows = (db.session.query(Word.tier, func.count(Word.id))
+                .filter(Word.id.in_(missing[:5000]))
+                .group_by(Word.tier).order_by(Word.tier).all())
+        spread = "  ".join(f"tier {t}: {n:,}" for t, n in rows)
+        click.echo(f"  {name:22s} {spread}")
+
+    click.echo("\nA system missing from an item was never shown to that "
+               "speaker,\nso it is neither credited nor blamed for it.")
+
+
 @shola_cli.command("add-options")
 @click.option("--jsonl", "path", type=click.Path(exists=True), required=True,
               help='One object per line: {"phrase","language","text"}.')
