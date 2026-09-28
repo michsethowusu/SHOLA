@@ -93,7 +93,11 @@ def create_app(config_object=Config):
         # Everything collected before projects existed becomes a project, so no
         # code downstream needs a special case for "the original words".
         _core, adopted, joined_up = adopt_orphan_items()
-        if adopted or joined_up:
+        if adopted == -1:
+            app.logger.warning(
+                "could not adopt orphan items: the database was locked by "
+                "another writer. Serving anyway; the next boot will do it.")
+        elif adopted or joined_up:
             app.logger.info("adopted %s items and %s volunteers into %s",
                             adopted, joined_up, _core.slug)
 

@@ -18,6 +18,7 @@ from sqlalchemy import text
 
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import func
+from sqlalchemy.exc import OperationalError
 
 db = SQLAlchemy()
 
@@ -695,7 +696,22 @@ def adopt_orphan_items():
             [{"pid": core.id, "code": code} for code in missing])
         db.session.commit()
 
-    adopted = (Word.query.filter(Word.project_id.is_(None))
-               .update({"project_id": core.id}, synchronize_session=False))
-    db.session.commit()
+    # A read first, unlike the inserts above. There the check-then-insert race
+    # was the problem; here the write is. This ran unconditionally at every
+    # boot, taking an exclusive lock on a database that is now tens of
+    # gigabytes - and there is nothing to adopt after the first boot, so the
+    # lock bought nothing. An import holding the write lock for longer than
+    # busy_timeout then killed every worker on startup.
+    adopted = 0
+    if db.session.query(Word.id).filter(Word.project_id.is_(None)).first():
+        try:
+            adopted = (Word.query.filter(Word.project_id.is_(None))
+                       .update({"project_id": core.id},
+                               synchronize_session=False))
+            db.session.commit()
+        except OperationalError:
+            # Losing to a writer is not a reason to refuse to serve. The rows
+            # are still there and the next boot adopts them.
+            db.session.rollback()
+            adopted = -1
     return core, adopted, len(missing)
