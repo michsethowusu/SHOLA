@@ -20,6 +20,10 @@ candidate translations per language. The 71,014 seen five or more times are
 loaded into the live deployment; the rest are below `MIN_OCCURRENCES` and are
 not collected — see the groups table below.
 
+For the interface itself — who it is built for, the screens, the user journey
+and the constraints behind them — see
+[docs/front-end.md](docs/front-end.md).
+
 ## How it works
 
 1. A volunteer signs up: name, email, language, the weekdays they are free, and
