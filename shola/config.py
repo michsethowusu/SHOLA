@@ -200,8 +200,13 @@ def _is_sign_language(code, name):
 # translations to check; the rest start empty, and the first speakers to arrive
 # type the options everyone after them votes on.
 ALL_LANGUAGES = dict(LANGUAGES)
+# Their names are kept even though the languages are not offered: a volunteer
+# who chose one has to be told which language has gone, and "gse is no longer
+# on SHOLA" tells them nothing.
+WITHDRAWN_NAMES = {}
 for _code, _name, _alt, _countries in OTHER_LANGUAGES:
     if _is_sign_language(_code, _name):
+        WITHDRAWN_NAMES[_code] = _name
         continue
     ALL_LANGUAGES[_code] = {
         "name": _name,

@@ -24,23 +24,7 @@
                value="{{ form.email if form }}">
       </div>
 
-      <div class="field">
-        <label for="lang-search">Which language do you speak best?</label>
-        <p class="hint">
-          Type its name, another name it goes by, or your country. All
-          {{ LANGUAGE_COUNT | thousands }} are open. You will only ever be
-          asked about this one.
-        </p>
-        {% set chosen = (form.language if form else request.args.get('language')) %}
-        <input type="search" id="lang-search" autocomplete="off" required
-               placeholder="Hausa, Kiswahili, Bamanankan, Nigeria…"
-               value="{{ (ALL_LANGUAGES[chosen].name
-                          if chosen in ALL_LANGUAGES else chosen) or '' }}">
-        <input type="hidden" id="other_language" name="language"
-               value="{{ chosen or '' }}">
-        <div id="lang-hits" class="stack" style="margin-top:10px"></div>
-          <p class="hint" id="lang-chosen" hidden></p>
-      </div>
+      {% include "_language_picker.html" %}
 
       <div class="field">
         <span class="label">Which days are you usually free?</span>
@@ -89,61 +73,6 @@
 
       <button class="btn wide" type="submit">Join SHOLA</button>
 
-      <script>
-        // Two thousand languages will not fit in a <select>, so the page asks
-        // the server for the handful that match what somebody typed.
-        (function () {
-          var search = document.getElementById("lang-search");
-          var field = document.getElementById("other_language");
-          var hits = document.getElementById("lang-hits");
-          var chosen = document.getElementById("lang-chosen");
-
-          function pick(lang) {
-            field.value = lang.code;
-            search.value = lang.name;
-            hits.innerHTML = "";
-            chosen.hidden = false;
-            chosen.textContent = "Chosen: " + lang.name
-              + (lang.where.length ? " · " + lang.where.join(", ") : "");
-          }
-
-          function show(list) {
-            hits.innerHTML = "";
-            if (!list.length) {
-              chosen.hidden = false;
-              chosen.textContent = "Nothing matches that yet — try another "
-                + "spelling, or your country.";
-              return;
-            }
-            list.forEach(function (lang) {
-              var b = document.createElement("button");
-              b.type = "button";
-              b.className = "btn ghost small";
-              b.style.cssText = "display:block;width:100%;text-align:left;margin:4px 0";
-              b.textContent = lang.name
-                + (lang.where.length ? "  ·  " + lang.where.join(", ") : "");
-              b.addEventListener("click", function () { pick(lang); });
-              hits.appendChild(b);
-            });
-          }
-
-          var timer = null;
-          search.addEventListener("input", function () {
-            // Typed text is not a chosen language until they pick one.
-            field.value = "";
-            chosen.hidden = true;
-            clearTimeout(timer);
-            var q = search.value.trim();
-            if (q.length < 2) { hits.innerHTML = ""; return; }
-            timer = setTimeout(function () {
-              fetch("{{ url_for('main.languages_json') }}?q=" + encodeURIComponent(q))
-                .then(function (r) { return r.json(); })
-                .then(show)
-                .catch(function () { hits.innerHTML = ""; });
-            }, 180);
-          });
-        })();
-      </script>
       <p class="hint center" style="margin-top:14px">
         Already signed up? <a href="{{ url_for('main.resend') }}">Request a link</a>.
       </p>

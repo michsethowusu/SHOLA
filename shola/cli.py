@@ -190,8 +190,14 @@ def send_daily(window, dry_run, force):
     query = query.filter(db.or_(Volunteer.paused_until.is_(None),
                                 Volunteer.paused_until <= today))
 
-    sent = skipped = failed = backing_off = 0
+    sent = skipped = failed = backing_off = withdrawn = 0
     for volunteer in query.all():
+        # Their language is no longer collected - the sign languages. Sending
+        # them words they cannot answer would be worse than silence; they are
+        # asked to choose again next time they open their link.
+        if volunteer.language not in cfg["ALL_LANGUAGES"]:
+            withdrawn += 1
+            continue
         if not force and volunteer.last_emailed_on == today:
             skipped += 1
             continue
@@ -291,7 +297,9 @@ def send_daily(window, dry_run, force):
             click.echo(f"  failed {volunteer.email}: {exc}", err=True)
 
     click.echo(f"sent {sent}, skipped {skipped}, "
-               f"backing off {backing_off}, failed {failed}")
+               f"backing off {backing_off}, failed {failed}"
+               + (f", waiting to pick a language again {withdrawn}"
+                  if withdrawn else ""))
 
     # A dated marker, the same idea as the backup one, for the same reason.
     # Every scheduled task on this deployment failed silently for a week - the

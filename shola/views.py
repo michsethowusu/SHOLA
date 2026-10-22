@@ -70,7 +70,22 @@ def language_info(code):
 
 def language_label(code):
     info = language_info(code)
-    return info["name"] if info else code
+    if info:
+        return info["name"]
+    from .config import WITHDRAWN_NAMES
+    return WITHDRAWN_NAMES.get(code, code)
+
+
+def language_withdrawn(volunteer):
+    """True when this volunteer's language is no longer one SHOLA collects.
+
+    The sign languages are why: they were offered, they cannot be written down,
+    and they have been taken off the list. A volunteer who chose one is not at
+    fault and is not deleted - they are asked to choose again, and nothing is
+    sent to them until they do.
+    """
+    return bool(volunteer and volunteer.language
+                and volunteer.language not in current_app.config["ALL_LANGUAGES"])
 
 
 def remembered_token():
@@ -528,6 +543,10 @@ def evaluate(token):
     # Remembered only so the nav bar can offer a way back; never trusted.
     session["token"] = token
 
+    # Their language has been withdrawn: nothing here can be answered in it.
+    if language_withdrawn(volunteer):
+        return redirect(url_for("main.choose_language", token=token))
+
     # Which list the mail they followed was about. Absent for a link that
     # predates the stamp, or for somebody arriving from the nav.
     came_from = request.args.get("list", type=int)
@@ -621,6 +640,38 @@ def go_weekly(token):
     day = current_app.config["DAY_NAMES"][chosen]
     flash(f"Done — one email a week now, on {day}.", "ok")
     return redirect(url_for("main.settings", token=token))
+
+
+@main.route("/w/<token>/language", methods=["GET", "POST"])
+def choose_language(token):
+    """Pick a language again, after the first one was withdrawn.
+
+    Reachable only by someone whose language is gone: anyone else is sent back
+    to their words, so this cannot become a way to switch language casually.
+    Changing language is not a thing SHOLA offers - a speaker answers for one.
+    """
+    volunteer = volunteer_from_token(token)
+    if not volunteer:
+        flash("That link is not valid any more. We can email you a new one.",
+              "error")
+        return redirect(url_for("main.resend"))
+    if not language_withdrawn(volunteer):
+        return redirect(url_for("main.evaluate", token=token))
+
+    old_label = language_label(volunteer.language)
+    if request.method == "POST":
+        code = canonical_language((request.form.get("language") or "").strip())
+        if not code or code not in current_app.config["ALL_LANGUAGES"]:
+            flash("Please pick a language from the list.", "error")
+        else:
+            volunteer.language = code
+            db.session.commit()
+            flash(f"Thank you. You are answering for "
+                  f"{language_label(code)} now.", "ok")
+            return redirect(url_for("main.evaluate", token=token))
+
+    return render_template("language.html", volunteer=volunteer, token=token,
+                           old_label=old_label)
 
 
 @main.route("/w/<token>/settings", methods=["GET", "POST"])

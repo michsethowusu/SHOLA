@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Choose your language{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap narrow">
+    <p class="eyebrow">{{ volunteer.name }}</p>
+    <h1 style="font-size:clamp(1.8rem,6vw,2.4rem)">Please choose your language again</h1>
+
+    <p class="lede" style="max-width:54ch">
+      {{ old_label }} is no longer on SHOLA. It is a sign language, and SHOLA
+      can only collect languages that are written down — a typed box was never
+      going to capture it, and we would rather say so than keep pretending.
+    </p>
+
+    <p class="muted" style="max-width:54ch">
+      Your account is untouched and nothing you did is held against you. Pick
+      the language you would like to answer for and your words start again.
+      Until you do, we have stopped sending you anything.
+    </p>
+
+    <form method="post" class="card" style="margin-top:24px; text-align:left">
+      {% set picker_chosen = '' %}
+      {% include "_language_picker.html" %}
+      <button class="btn wide" type="submit">Save and start</button>
+    </form>
+
+    <p class="hint" style="margin-top:18px">
+      Would rather stop altogether?
+      <a href="{{ url_for('main.settings', token=token) }}">Your settings</a>.
+    </p>
+  </div>
+</section>
+{% endblock %}
