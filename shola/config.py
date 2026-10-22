@@ -167,11 +167,42 @@ DEFAULT_LONGPRESS = {"d": ["ɖ", "Ɖ"], "e": ["ɛ", "Ɛ"], "f": ["ƒ", "Ƒ"],
                      "g": ["ɣ", "Ɣ"], "n": ["ŋ", "Ŋ"], "o": ["ɔ", "Ɔ"],
                      "v": ["ʋ", "Ʋ"], "z": ["ʒ", "Ʒ"]}
 
+# Sign languages, which SHOLA cannot collect and so does not offer.
+#
+# The language list is every African language afriso records, and 33 of them are
+# sign languages. A sign language has no written form, so "how would you say
+# this in Ghanaian Sign Language?" with a text box has no answer a signer could
+# give. What it got instead, before this was noticed, was keystrokes off the
+# special-character palette: "government" answered as "ɛƐɔ", "support" as
+# "zzzzzzzzz" - published through the open API as that language's leading
+# translation, under its community's name.
+#
+# Collecting these properly means recording video, which is a different
+# application, not a variation on this one. Until that exists, offering the
+# option claims a capability SHOLA does not have.
+#
+# Matched on the name as well as listed by code: the codes are what the current
+# dataset holds, and the name check catches any that a later afriso release
+# adds.
+SIGN_LANGUAGES = frozenset({
+    "ads", "ajs", "asp", "ase", "bog", "lsb", "cds", "esl", "eth", "fsl",
+    "gse", "lgs", "gus", "hsl", "xki", "lbs", "mzc", "lws", "lsy", "xms",
+    "mzy", "nbs", "nsi", "rsn", "lsw", "sgx", "sfs", "tza", "tsy", "tse",
+    "ugn", "zsl", "zib",
+})
+
+
+def _is_sign_language(code, name):
+    return code in SIGN_LANGUAGES or "sign language" in (name or "").lower()
+
+
 # Every language a volunteer can sign up for. The four above start with machine
 # translations to check; the rest start empty, and the first speakers to arrive
 # type the options everyone after them votes on.
 ALL_LANGUAGES = dict(LANGUAGES)
 for _code, _name, _alt, _countries in OTHER_LANGUAGES:
+    if _is_sign_language(_code, _name):
+        continue
     ALL_LANGUAGES[_code] = {
         "name": _name,
         # No note. It used to be the first alternative name, which reads fine

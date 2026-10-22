@@ -847,6 +847,75 @@ def add_options_cmd(path, source, yes):
     click.echo(f"Added {added:,} options as {source!r}.")
 
 
+@shola_cli.command("drop-language")
+@click.option("--code", required=True, multiple=True,
+              help="Language code to withdraw. Repeat for several.")
+@click.option("--yes", is_flag=True, help="Do it, rather than counting first.")
+def drop_language_cmd(code, yes):
+    """Withdraw everything collected in a language.
+
+    For a language SHOLA should not have been offering. The sign languages are
+    why this exists: a signed language has no written form, so a text box asking
+    how you would say "government" in Ghanaian Sign Language has no answer, and
+    what it collected was keystrokes - published through the open API as that
+    language's leading translation, under its community's name.
+
+    Volunteers are not deleted. Somebody signed up in good faith and the right
+    thing is to write to them, not to remove them quietly, so this lists who
+    they are and leaves the accounts alone.
+    """
+    from .models import Assignment, Candidate, Evaluation, Volunteer, WordState
+
+    codes = list(code)
+    rows = []
+    for c in codes:
+        people = Volunteer.query.filter_by(language=c).all()
+        # A lease carries no language of its own: it is a volunteer and a word,
+        # and the language is whichever the volunteer speaks.
+        ids = [v.id for v in people]
+        leases = (Assignment.query.filter(Assignment.volunteer_id.in_(ids))
+                  .count() if ids else 0)
+        counts = {
+            "answers": Evaluation.query.filter_by(language=c).count(),
+            "options": Candidate.query.filter_by(language=c).count(),
+            "states": WordState.query.filter_by(language=c).count(),
+            "leases": leases,
+        }
+        rows.append((c, people, counts))
+
+    total = sum(sum(r[2].values()) for r in rows)
+    for c, people, counts in rows:
+        line = "  ".join(f"{k} {v:,}" for k, v in counts.items())
+        click.echo(f"{c}: {line}")
+        for v in people:
+            click.echo(f"    volunteer: {v.name} <{v.email}> "
+                       f"(joined {v.joined_at.date() if v.joined_at else '?'})")
+    click.echo(f"\n{total:,} rows would go. Volunteers are left alone.")
+    if not yes:
+        click.echo("Re-run with --yes to withdraw them.")
+        return
+    if not total:
+        return
+
+    for c, people, _counts in rows:
+        ids = [v.id for v in people]
+        if ids:
+            n = (Assignment.query.filter(Assignment.volunteer_id.in_(ids))
+                 .delete(synchronize_session=False))
+            db.session.commit()
+            if n:
+                click.echo(f"  {c}: deleted {n:,} lease rows")
+        for model in (Evaluation, WordState, Candidate):
+            n = model.query.filter_by(language=c).delete(
+                synchronize_session=False)
+            db.session.commit()
+            if n:
+                click.echo(f"  {c}: deleted {n:,} "
+                           f"{model.__name__.lower()} rows")
+    click.echo("Done. Write to the volunteers above: they signed up in good "
+               "faith and should hear why their language is no longer listed.")
+
+
 @shola_cli.command("drop-project")
 @click.option("--slug", required=True)
 @click.option("--yes", is_flag=True, help="Do it, rather than counting first.")

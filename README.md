@@ -200,6 +200,27 @@ project ahead of the year, not behind it.
 At the time of writing that is 75 volunteers per language for group 1, 300
 across all four.
 
+## Sign languages are not collected
+
+The language list is every African language afriso records, and 33 of them are
+sign languages. SHOLA offered them, and it should not have: a signed language
+has no written form, so "how would you say this in Ghanaian Sign Language?" with
+a text box has no answer a signer could give.
+
+What it collected instead was keystrokes off the special-character palette —
+`government` answered as `ɛƐɔ`, `support` as `zzzzzzzzz` — served through the
+open API as that language's leading translation, under its community's name.
+That is worse than collecting nothing.
+
+`SIGN_LANGUAGES` in `shola/config.py` keeps them out of the list, by code and by
+name, so a later afriso release cannot quietly add more. `flask shola
+drop-language --code gse` withdraws what was already collected; it leaves the
+volunteers alone, because somebody signed up in good faith and should be written
+to rather than deleted.
+
+Collecting these properly means recording video, which is a different
+application rather than a variation on this one.
+
 ## Setup
 
 ```bash
