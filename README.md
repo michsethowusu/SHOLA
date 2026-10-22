@@ -221,6 +221,14 @@ to rather than deleted.
 Collecting these properly means recording video, which is a different
 application rather than a variation on this one.
 
+A volunteer who had already chosen one is not stranded. Their language name is
+kept in `WITHDRAWN_NAMES` so they can be told which language has gone — "gse is
+no longer on SHOLA" tells nobody anything — and the evaluate screen sends them
+to `/w/<token>/language` to pick again. Nothing is emailed to them until they
+do; `send-daily` reports them as waiting. That page is reachable only by
+somebody in that position, so it cannot become a way to switch language
+casually.
+
 ## Setup
 
 ```bash
