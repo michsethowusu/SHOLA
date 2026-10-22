@@ -856,10 +856,13 @@ def add_options_cmd(path, source, yes):
 
 
 @shola_cli.command("drop-language")
-@click.option("--code", required=True, multiple=True,
+@click.option("--code", multiple=True,
               help="Language code to withdraw. Repeat for several.")
+@click.option("--withdrawn", is_flag=True,
+              help="Every language no longer on the list, which today means "
+                   "the 33 sign languages.")
 @click.option("--yes", is_flag=True, help="Do it, rather than counting first.")
-def drop_language_cmd(code, yes):
+def drop_language_cmd(code, withdrawn, yes):
     """Withdraw everything collected in a language.
 
     For a language SHOLA should not have been offering. The sign languages are
@@ -872,9 +875,14 @@ def drop_language_cmd(code, yes):
     thing is to write to them, not to remove them quietly, so this lists who
     they are and leaves the accounts alone.
     """
+    from .config import WITHDRAWN_NAMES
     from .models import Assignment, Candidate, Evaluation, Volunteer, WordState
 
     codes = list(code)
+    if withdrawn:
+        codes = sorted(set(codes) | set(WITHDRAWN_NAMES))
+    if not codes:
+        raise click.UsageError("Give --code, or --withdrawn for all of them.")
     rows = []
     for c in codes:
         people = Volunteer.query.filter_by(language=c).all()
@@ -893,12 +901,16 @@ def drop_language_cmd(code, yes):
 
     total = sum(sum(r[2].values()) for r in rows)
     for c, people, counts in rows:
+        if not sum(counts.values()) and not people:
+            continue        # nothing was ever collected in it; say nothing
+        label = WITHDRAWN_NAMES.get(c, c)
         line = "  ".join(f"{k} {v:,}" for k, v in counts.items())
-        click.echo(f"{c}: {line}")
+        click.echo(f"{c} ({label}): {line}")
         for v in people:
             click.echo(f"    volunteer: {v.name} <{v.email}> "
                        f"(joined {v.joined_at.date() if v.joined_at else '?'})")
-    click.echo(f"\n{total:,} rows would go. Volunteers are left alone.")
+    click.echo(f"\n{total:,} rows across {len(codes)} language(s) would go. "
+               "Volunteers are left alone.")
     if not yes:
         click.echo("Re-run with --yes to withdraw them.")
         return

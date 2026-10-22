@@ -214,7 +214,7 @@ That is worse than collecting nothing.
 
 `SIGN_LANGUAGES` in `shola/config.py` keeps them out of the list, by code and by
 name, so a later afriso release cannot quietly add more. `flask shola
-drop-language --code gse` withdraws what was already collected; it leaves the
+drop-language --withdrawn` withdraws what was already collected in all of them; it leaves the
 volunteers alone, because somebody signed up in good faith and should be written
 to rather than deleted.
 
