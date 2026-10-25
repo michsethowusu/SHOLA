@@ -105,9 +105,15 @@ def main():
               "Quiet One" not in [v.name for v, _n in leaderboard()])
 
     print("\nThe way back in")
-    r = client.get("/resend")
+    r = client.get("/login")
     check("the login page answers", r.status_code == 200, str(r.status_code))
     check("and calls itself Log in", b"Log in" in r.data)
+    # Every email already sent points at the old address.
+    r = client.get("/resend", follow_redirects=False)
+    check("the old address still works", r.status_code == 301, str(r.status_code))
+    check("and points at the new one",
+          r.headers.get("Location", "").endswith("/login"),
+          r.headers.get("Location", ""))
     r = client.get("/")
     check("the footer offers it", b"Log in" in r.data)
     r = client.get("/join")

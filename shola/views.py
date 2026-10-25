@@ -446,11 +446,22 @@ def verify_resend():
     return render_template("verify.html", email=email)
 
 
-@main.route("/resend", methods=["GET", "POST"])
+@main.route("/resend")
 def resend():
+    """Where logging in used to live.
+
+    Kept because it is in every email already sent and in whatever people
+    bookmarked. A redirect rather than a second copy of the page, so there is
+    one address for this and the old one teaches the new one.
+    """
+    return redirect(url_for("main.login"), code=301)
+
+
+@main.route("/login", methods=["GET", "POST"])
+def login():
     """A volunteer who lost the email can ask for a fresh link."""
     if request.method == "GET":
-        return render_template("resend.html")
+        return render_template("login.html")
 
     email = (request.form.get("email") or "").strip().lower()
     volunteer = Volunteer.query.filter_by(email=email).first()
@@ -477,7 +488,7 @@ def resend():
             current_app.logger.warning("resend failed: %s", exc)
     # Same answer either way: never reveal whether an address is registered.
     flash("If that address is signed up, a fresh link is on its way.", "ok")
-    return redirect(url_for("main.resend"))
+    return redirect(url_for("main.login"))
 
 
 @main.route("/start/<token>")
@@ -548,7 +559,7 @@ def evaluate(token):
     if not volunteer:
         flash("That link is not valid any more. We can email you a new one.",
               "error")
-        return redirect(url_for("main.resend"))
+        return redirect(url_for("main.login"))
 
     # Remembered only so the nav bar can offer a way back; never trusted.
     session["token"] = token
@@ -635,7 +646,7 @@ def go_weekly(token):
     if not volunteer:
         flash("That link is not valid any more. We can email you a new one.",
               "error")
-        return redirect(url_for("main.resend"))
+        return redirect(url_for("main.login"))
 
     # Keep the day they already had if they had one, so the change is only to
     # how often. Saturday otherwise - most people's freest day.
@@ -664,7 +675,7 @@ def choose_language(token):
     if not volunteer:
         flash("That link is not valid any more. We can email you a new one.",
               "error")
-        return redirect(url_for("main.resend"))
+        return redirect(url_for("main.login"))
     if not language_withdrawn(volunteer):
         return redirect(url_for("main.evaluate", token=token))
 
@@ -695,7 +706,7 @@ def settings(token):
     if not volunteer:
         flash("That link is not valid any more. We can email you a new one.",
               "error")
-        return redirect(url_for("main.resend"))
+        return redirect(url_for("main.login"))
 
     if request.method == "GET":
         if volunteer.active:

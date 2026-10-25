@@ -587,7 +587,7 @@ deploy.
   leaderboard. Volunteers who skip it get their initials. The consent tick is
   stored separately from the file, so unticking it hides the photo without
   deleting anything.
-- **`/resend` never reveals whether an address is registered** — it gives the
+- **`/login` never reveals whether an address is registered** — it gives the
   same answer either way.
 - **SQLite is the default.** It is fine for a few hundred volunteers; point
   `SHOLA_DATABASE_URL` at Postgres before you go wider, since every verdict is

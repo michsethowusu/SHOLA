@@ -574,7 +574,7 @@ def main():
             record_verdict(vol, a.word_id, custom_text="done for today")
         ok &= check("nothing left for today", vol.pending_today().count() == 0)
 
-    fresh.post("/resend", data={"email": "ama@example.com"})
+    fresh.post("/login", data={"email": "ama@example.com"})
     ok &= check("an email went out", captured.get("to") == "ama@example.com")
     ok &= check("it does not announce zero words",
                 "0 " not in captured.get("subject", ""),
@@ -588,7 +588,7 @@ def main():
 
     print("\na speaker of an unseeded language is emailed words too")
     captured.clear()
-    fresh.post("/resend", data={"email": "kwesi@example.com"})
+    fresh.post("/login", data={"email": "kwesi@example.com"})
     ok &= check("they are emailed too", captured.get("to") == "kwesi@example.com")
     ok &= check("with words, not a holding message",
                 "TODAY'S LIST" in captured.get("text", ""),

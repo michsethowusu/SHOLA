@@ -26,7 +26,7 @@
        "longpress": lang.longpress,
        "submitUrl": url_for("main.submit", token=token, word_id=0),
        "doneUrl": url_for("main.done", token=token),
-       "resendUrl": url_for("main.resend"),
+       "resendUrl": url_for("main.login"),
        "flagUrl": url_for("main.flag_item", token=token, word_id=0),
        "reasons": flag_reasons
      } | tojson }}'>
