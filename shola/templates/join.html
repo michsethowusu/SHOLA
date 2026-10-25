@@ -57,19 +57,33 @@
       </div>
 
       <div class="field">
-        <label for="photo">A photo of you (optional)</label>
-        <p class="hint">
-          Shown in one place only: the champions leaderboard, beside your name
-          and the number of items you have checked. Leave it out and we show
-          your initials instead.
-        </p>
-        <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp">
-        <label class="switch" style="margin-top:14px">
-          <input type="checkbox" name="photo_consent" value="1" checked>
+        <label class="switch">
+          <input type="checkbox" id="photo-on" name="photo_consent" value="1"
+                 {% if form and form.photo_consent %}checked{% endif %}>
           <span class="sw" aria-hidden="true"></span>
           <span class="t">Show my photo</span>
         </label>
-        <p class="hint">On the leaderboard, beside your name.</p>
+        <p class="hint">
+          On the champions leaderboard, beside your name. Without one we show
+          your initials.
+        </p>
+        <div id="photo-pick">
+          <input type="file" id="photo" name="photo"
+                 accept="image/jpeg,image/png,image/webp">
+        </div>
+        <script>
+          // The file picker is only asked for once somebody says they want a
+          // photo shown. It starts visible in the markup and is hidden here,
+          // so with no JavaScript the field is simply always there rather
+          // than permanently out of reach.
+          (function () {
+            var on = document.getElementById("photo-on");
+            var pick = document.getElementById("photo-pick");
+            function sync() { pick.hidden = !on.checked; }
+            on.addEventListener("change", sync);
+            sync();
+          })();
+        </script>
       </div>
 
       <div class="field">

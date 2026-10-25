@@ -136,6 +136,14 @@ def main():
     r = client.get("/join")
     check("the sign-up form offers the choice",
           b'name="unlisted"' in r.data)
+    # A photo is shown only if somebody asks for it, so the switch is off and
+    # the file picker waits behind it.
+    import re as _re
+    block = r.data.decode()
+    photo = _re.search(r'id="photo-on"[^>]*>', block).group(0)
+    check("the photo switch starts off", "checked" not in photo, photo)
+    check("and the picker is only revealed by it",
+          'id="photo-pick"' in block and 'pick.hidden' in block)
 
     failed = PASSED.count(False)
     print(f"\n{len(PASSED)} checks, {failed} failed")
