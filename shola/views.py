@@ -293,10 +293,11 @@ def join():
     days = request.form.getlist("days")
     window = request.form.get("time_window") or "anytime"
     consent = bool(request.form.get("photo_consent"))
-    # The form asks the question the way people think about it - "contribute
-    # anonymously" - and the column stores the opposite, because every query
-    # that reads it wants "is this person listed?".
-    listed = not request.form.get("anonymous")
+    # The form asks to be kept off the leaderboard; the column stores whether
+    # they are on it, because every query that reads it wants "is this person
+    # listed?". Not called anonymity: the published answers carry no name
+    # either way, so what this controls is one page, not their data.
+    listed = not request.form.get("unlisted")
 
     errors = []
     if len(name) < 2:
@@ -722,9 +723,9 @@ def settings(token):
                                  current_app.config["TIME_WINDOWS"]
                                  else "anytime")
         # Whether their name appears on the champions page. Both directions
-        # work: somebody who joined anonymously can ask to be credited later,
+        # work: somebody who stayed off it can ask to be credited later,
         # and somebody listed can step back out.
-        volunteer.listed = not request.form.get("anonymous")
+        volunteer.listed = not request.form.get("unlisted")
         # Saving settings is also a way back: someone who paused and then
         # changed their days plainly means to carry on.
         volunteer.active = True

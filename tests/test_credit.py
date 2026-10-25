@@ -1,9 +1,9 @@
-"""Contributing without being named, and changing your mind either way.
+"""Staying off the leaderboard, and changing your mind either way.
 
 The choice is offered at sign-up and again in settings. What must hold is that
-it only ever affects credit: an unlisted volunteer's answers still count, still
-settle items, and still reach the published data. Only the champions page
-changes.
+it only ever affects one page: an unlisted volunteer's answers still count,
+still settle items, and still reach the published data. It is not anonymity -
+the published answers carry no name either way.
 """
 
 import os
@@ -65,7 +65,7 @@ def main():
 
         print("\nThe champions page")
         names = [v.name for v, _n in leaderboard()]
-        check("an anonymous contributor is not listed",
+        check("somebody who stays off it is not listed",
               "Quiet One" not in names, str(names))
         check("everybody else still is", "Named One" in names, str(names))
 
@@ -82,9 +82,9 @@ def main():
     print("\nChanging your mind, from settings")
     client = app.test_client()
     r = client.get(f"/w/{tok_shy}/settings")
-    check("the setting is on the page", b'name="anonymous"' in r.data)
+    check("the setting is on the page", b'name="unlisted"' in r.data)
     check("and shows their current choice",
-          r.data.count(b'name="anonymous"') == 1 and b"checked" in r.data)
+          r.data.count(b'name="unlisted"') == 1 and b"checked" in r.data)
 
     client.post(f"/w/{tok_shy}/settings",
                 data={"action": "save", "days": ["0", "1"],
@@ -97,7 +97,7 @@ def main():
 
     client.post(f"/w/{tok_shy}/settings",
                 data={"action": "save", "days": ["0", "1"],
-                      "time_window": "anytime", "anonymous": "1"})
+                      "time_window": "anytime", "unlisted": "1"})
     with app.app_context():
         again = Volunteer.query.filter_by(email="q@example.com").first()
         check("and ticking it again steps back out", again.listed is False)
@@ -118,7 +118,7 @@ def main():
     check("the footer offers it", b"Log in" in r.data)
     r = client.get("/join")
     check("the sign-up form offers the choice",
-          b'name="anonymous"' in r.data)
+          b'name="unlisted"' in r.data)
 
     failed = PASSED.count(False)
     print(f"\n{len(PASSED)} checks, {failed} failed")

@@ -64,20 +64,22 @@
           your initials instead.
         </p>
         <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp">
-        <label class="choice" style="margin-top:12px">
+        <label class="switch" style="margin-top:12px">
           <input type="checkbox" name="photo_consent" value="1" checked>
+          <span class="sw" aria-hidden="true"></span>
           <span class="t">Show my photo on the leaderboard</span>
-          <span class="s">Untick to keep your photo private.</span>
+          <span class="s">Turn off to keep your photo private.</span>
         </label>
       </div>
 
       <div class="field">
-        <label class="choice">
-          <input type="checkbox" name="anonymous" value="1"
-                 {% if form and form.anonymous %}checked{% endif %}>
-          <span class="t">Contribute anonymously</span>
-          <span class="s">Your name stays off the champions page. Your answers
-            count exactly the same, and you can change this later.</span>
+        <label class="switch">
+          <input type="checkbox" name="unlisted" value="1"
+                 {% if form and form.unlisted %}checked{% endif %}>
+          <span class="sw" aria-hidden="true"></span>
+          <span class="t">Keep my name off the leaderboard</span>
+          <span class="s">Your answers count exactly the same. You can change
+            this whenever you like.</span>
         </label>
       </div>
 

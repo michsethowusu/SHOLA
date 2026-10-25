@@ -229,12 +229,17 @@ do; `send-daily` reports them as waiting. That page is reachable only by
 somebody in that position, so it cannot become a way to switch language
 casually.
 
-## Credit is a choice
+## Staying off the leaderboard
 
-A volunteer can contribute without being named. The choice is on the sign-up
-form and again in their settings, and it works in both directions: somebody who
-joined anonymously can ask to be credited later, and somebody listed can step
-back out.
+A volunteer can keep their name off the champions page. The choice is on the
+sign-up form and again in their settings, and it works in both directions:
+somebody who stayed off it can ask to be credited later, and somebody listed
+can step back out.
+
+It is not called anonymity, because it is not anonymity. The published answers
+carry no name either way — the open API serves wordings and vote counts, with
+no field that points at a person. The leaderboard is the only page where a
+contributor is named, and this is the switch for that page.
 
 `Volunteer.listed` holds it, positively, because every query that reads it is
 asking "is this person listed?". It affects one thing — whether their name

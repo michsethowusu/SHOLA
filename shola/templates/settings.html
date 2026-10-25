@@ -68,14 +68,14 @@
 
       <div class="field">
         <h2 style="font-size:1.05rem;margin:0 0 8px">Credit</h2>
-        <label class="choice">
-          <input type="checkbox" name="anonymous" value="1"
+        <label class="switch">
+          <input type="checkbox" name="unlisted" value="1"
                  {% if not volunteer.listed %}checked{% endif %}>
-          <span class="t">Contribute anonymously</span>
-          <span class="s">Your name stays off the
-            <a href="{{ url_for('main.champions') }}">champions page</a>.
-            Your answers count exactly the same either way, and you can change
-            this whenever you like.</span>
+          <span class="sw" aria-hidden="true"></span>
+          <span class="t">Keep my name off the leaderboard</span>
+          <span class="s">You will not appear on the public
+            <a href="{{ url_for('main.champions') }}">leaderboard</a>. Your
+            answers count exactly the same either way.</span>
         </label>
       </div>
 
