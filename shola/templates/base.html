@@ -55,7 +55,11 @@
     <span class="faint">·</span>
     <a href="{{ url_for('main.api_docs') }}">API</a>
     <span class="faint">·</span>
-    <a href="{{ url_for('main.login') }}">Log in</a>
+    {% if session.get('token') %}
+      <a href="{{ url_for('main.logout') }}">Log out</a>
+    {% else %}
+      <a href="{{ url_for('main.login') }}">Log in</a>
+    {% endif %}
     <span class="faint">·</span>
     <a href="{{ url_for('main.privacy') }}">Privacy</a>
     <span class="faint">·</span>

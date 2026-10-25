@@ -64,12 +64,12 @@
           your initials instead.
         </p>
         <input type="file" id="photo" name="photo" accept="image/jpeg,image/png,image/webp">
-        <label class="switch" style="margin-top:12px">
+        <label class="switch" style="margin-top:14px">
           <input type="checkbox" name="photo_consent" value="1" checked>
           <span class="sw" aria-hidden="true"></span>
-          <span class="t">Show my photo on the leaderboard</span>
-          <span class="s">Turn off to keep your photo private.</span>
+          <span class="t">Show my photo</span>
         </label>
+        <p class="hint">On the leaderboard, beside your name.</p>
       </div>
 
       <div class="field">
@@ -78,9 +78,10 @@
                  {% if form and form.unlisted %}checked{% endif %}>
           <span class="sw" aria-hidden="true"></span>
           <span class="t">Keep my name off the leaderboard</span>
-          <span class="s">Your answers count exactly the same. You can change
-            this whenever you like.</span>
         </label>
+        <p class="hint">
+          Your answers count exactly the same. You can change this later.
+        </p>
       </div>
 
       <button class="btn wide" type="submit">Join SHOLA</button>

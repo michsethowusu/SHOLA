@@ -73,10 +73,12 @@
                  {% if not volunteer.listed %}checked{% endif %}>
           <span class="sw" aria-hidden="true"></span>
           <span class="t">Keep my name off the leaderboard</span>
-          <span class="s">You will not appear on the public
-            <a href="{{ url_for('main.champions') }}">leaderboard</a>. Your
-            answers count exactly the same either way.</span>
         </label>
+        <p class="hint">
+          You will not appear on the public
+          <a href="{{ url_for('main.champions') }}">leaderboard</a>. Your
+          answers count exactly the same either way.
+        </p>
       </div>
 
       <button class="btn" type="submit">Save changes</button>

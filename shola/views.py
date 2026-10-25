@@ -498,9 +498,17 @@ def start(token):
     return redirect(url_for("main.evaluate", token=token))
 
 
+@main.route("/logout")
 @main.route("/leave")
-def leave():
+def logout():
+    """Forget the link this browser was remembering.
+
+    Not a sign-out in the usual sense - there is no session to end, and their
+    emailed link keeps working. It clears what the nav was holding, which is
+    what matters on a shared or borrowed phone.
+    """
     session.clear()
+    flash("Logged out. The link in your email still works.", "ok")
     return redirect(url_for("main.index"))
 
 
