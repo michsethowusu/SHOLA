@@ -245,10 +245,12 @@ they opted out of is the credit, not the work.
 It defaults to listed. Everyone who signed up before the choice existed is
 already on the board, and quietly removing them would be the surprising change.
 
-The footer says **Log in** rather than "Request a link". It is the same page and
-there is still no password: it emails the signed link, which opens today's words
-and the settings. "Request a link" described the mechanism; people were looking
-for the word they know.
+Logging in lives at **`/login`** and says so. It emails the signed link; there
+is still no password. The page used to be `/resend`, headed "Request a link",
+with a paragraph explaining that there was no password, that the link went to
+the inbox, and what it opened — a mechanism nobody asked about, answering a
+question the form answers by itself. `/resend` now redirects, because it is in
+every email already sent.
 
 ## Deleting an account
 
