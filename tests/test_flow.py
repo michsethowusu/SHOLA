@@ -576,22 +576,26 @@ def main():
 
     fresh.post("/login", data={"email": "ama@example.com"})
     ok &= check("an email went out", captured.get("to") == "ama@example.com")
-    ok &= check("it does not announce zero words",
-                "0 " not in captured.get("subject", ""),
-                captured.get("subject", ""))
+    # Logging in and being handed work are two different acts. This sends the
+    # link and nothing else; the words are where they always were.
+    ok &= check("it carries a link, not a list",
+                "TODAY'S LIST" not in captured.get("text", ""),
+                captured.get("text", "")[:80])
+    ok &= check("and the link lands on their settings",
+                "/settings" in captured.get("text", ""),
+                captured.get("text", "")[:120])
     with app.app_context():
         vol = Volunteer.query.filter_by(email="ama@example.com").first()
-        ok &= check("fresh words were leased", vol.pending_today().count() > 0,
+        ok &= check("logging in leases them nothing",
+                    vol.pending_today().count() == 0,
                     f"{vol.pending_today().count()} pending")
-    ok &= check("the email lists words rather than an empty list",
-                "TODAY'S LIST" in captured.get("text", ""))
 
-    print("\na speaker of an unseeded language is emailed words too")
+    print("\nthe same for a speaker of an unseeded language")
     captured.clear()
     fresh.post("/login", data={"email": "kwesi@example.com"})
-    ok &= check("they are emailed too", captured.get("to") == "kwesi@example.com")
-    ok &= check("with words, not a holding message",
-                "TODAY'S LIST" in captured.get("text", ""),
+    ok &= check("they get a link too", captured.get("to") == "kwesi@example.com")
+    ok &= check("with no list in it",
+                "TODAY'S LIST" not in captured.get("text", ""),
                 captured.get("text", "")[:80])
 
     print("\nthe header cannot cover the options while checking words")

@@ -459,35 +459,29 @@ def resend():
 
 @main.route("/login", methods=["GET", "POST"])
 def login():
-    """A volunteer who lost the email can ask for a fresh link."""
-    if request.method == "GET":
+    """Email somebody the link that signs them in.
+
+    Only the link. This used to hand out a day's words as well - the thought
+    being that someone asking has time to spare - but logging in and being
+    given work are two different acts, and doing the second uninvited takes
+    the choice away. The link lands on their settings, where they can see
+    where they are and go to their words if that is what they came for.
+    """
+    if request.method != "POST":
         return render_template("login.html")
 
     email = (request.form.get("email") or "").strip().lower()
     volunteer = Volunteer.query.filter_by(email=email).first()
-    if volunteer:
-        from .mailer import (build_daily_email, build_link_email, daily_link,
-                             send)
+    if volunteer and not volunteer.deleted_at:
+        from .mailer import build_link_email, send, settings_link
         try:
-            # Someone asking for a link has time to spare. If they have
-            # already cleared today's list, give them a fresh one rather than
-            # an email announcing zero words.
-            top_up(volunteer)
-            words = [a.word for a in volunteer.pending_today()
-                     .limit(current_app.config["WORDS_PER_DAY"])]
-            if words:
-                message = build_daily_email(volunteer, words)
-            else:
-                message = build_link_email(
-                    volunteer, daily_link(volunteer),
-                    "Nothing is waiting for you right now — every word in "
-                    "your language is either confirmed or with another "
-                    "speaker. We will email you as soon as there is more.")
-            send(volunteer.email, *message)
+            send(volunteer.email, *build_link_email(
+                volunteer, settings_link(volunteer),
+                "Here is your link. It signs you in - there is no password."))
         except Exception as exc:      # noqa: BLE001 - show the operator cause
-            current_app.logger.warning("resend failed: %s", exc)
+            current_app.logger.warning("login link failed: %s", exc)
     # Same answer either way: never reveal whether an address is registered.
-    flash("If that address is signed up, a fresh link is on its way.", "ok")
+    flash("If that address is signed up, a link is on its way.", "ok")
     return redirect(url_for("main.login"))
 
 

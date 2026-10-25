@@ -108,6 +108,21 @@ def main():
     check("and neither do their settings — unlike stopping",
           r.status_code == 302, str(r.status_code))
 
+    print("\nAnd they cannot be mailed a way back in")
+    import shola.mailer as mailer_mod
+    sent = {}
+    original = mailer_mod.send
+    mailer_mod.send = lambda to, *a, **k: sent.setdefault("to", to)
+    try:
+        client.post("/login", data={"email": "bye@example.com"})
+        check("nothing is sent to the erased address", "to" not in sent,
+              str(sent))
+        client.post("/login", data={"email": "stay@example.com"})
+        check("but a current volunteer still gets one",
+              sent.get("to") == "stay@example.com", str(sent))
+    finally:
+        mailer_mod.send = original
+
     print("\nEverybody else is untouched")
     with app.app_context():
         check("the other volunteer is intact",

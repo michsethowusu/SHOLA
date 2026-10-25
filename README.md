@@ -245,8 +245,14 @@ they opted out of is the credit, not the work.
 It defaults to listed. Everyone who signed up before the choice existed is
 already on the board, and quietly removing them would be the surprising change.
 
-Logging in lives at **`/login`** and says so. It emails the signed link; there
-is still no password. The page used to be `/resend`, headed "Request a link",
+Logging in lives at **`/login`** and says so. It emails the signed link and
+nothing else; there is still no password. The link lands on their settings,
+where they can see where they are and go to their words if that is what they
+came for.
+
+It used to hand out a day's words with the link, on the reasoning that someone
+asking for one had time to spare. Logging in and being given work are two
+different acts, and doing the second uninvited takes the choice away. The page used to be `/resend`, headed "Request a link",
 with a paragraph explaining that there was no password, that the link went to
 the inbox, and what it opened — a mechanism nobody asked about, answering a
 question the form answers by itself. `/resend` now redirects, because it is in
