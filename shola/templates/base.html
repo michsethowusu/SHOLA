@@ -56,6 +56,8 @@
     <a href="{{ url_for('main.api_docs') }}">API</a>
     <span class="faint">·</span>
     {% if session.get('token') %}
+      <a href="{{ url_for('main.settings', token=session['token']) }}">Settings</a>
+      <span class="faint">·</span>
       <a href="{{ url_for('main.logout') }}">Log out</a>
     {% else %}
       <a href="{{ url_for('main.login') }}">Log in</a>

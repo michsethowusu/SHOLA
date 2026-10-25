@@ -117,11 +117,14 @@ def main():
     # This client has been to its settings, so the nav is holding its link.
     r = client.get("/")
     check("the footer offers a way out once you are in", b"Log out" in r.data)
+    check("and a way to their settings", b">Settings</a>" in r.data)
     r = client.get("/logout", follow_redirects=False)
     check("logging out redirects away", r.status_code == 302, str(r.status_code))
     r = client.get("/")
     check("and the footer offers the way back in", b"Log in" in r.data)
     check("without still offering to log out", b"Log out" not in r.data)
+    check("or a settings link that would not work",
+          b">Settings</a>" not in r.data)
     r = client.get("/join")
     check("the sign-up form offers the choice",
           b'name="unlisted"' in r.data)
