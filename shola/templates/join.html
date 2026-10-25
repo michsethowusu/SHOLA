@@ -71,10 +71,20 @@
         </label>
       </div>
 
+      <div class="field">
+        <label class="choice">
+          <input type="checkbox" name="anonymous" value="1"
+                 {% if form and form.anonymous %}checked{% endif %}>
+          <span class="t">Contribute anonymously</span>
+          <span class="s">Your name stays off the champions page. Your answers
+            count exactly the same, and you can change this later.</span>
+        </label>
+      </div>
+
       <button class="btn wide" type="submit">Join SHOLA</button>
 
       <p class="hint center" style="margin-top:14px">
-        Already signed up? <a href="{{ url_for('main.resend') }}">Request a link</a>.
+        Already signed up? <a href="{{ url_for('main.resend') }}">Log in</a>.
       </p>
     </form>
   </div>

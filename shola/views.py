@@ -289,6 +289,10 @@ def join():
     days = request.form.getlist("days")
     window = request.form.get("time_window") or "anytime"
     consent = bool(request.form.get("photo_consent"))
+    # The form asks the question the way people think about it - "contribute
+    # anonymously" - and the column stores the opposite, because every query
+    # that reads it wants "is this person listed?".
+    listed = not request.form.get("anonymous")
 
     errors = []
     if len(name) < 2:
@@ -331,6 +335,7 @@ def join():
                            else "anytime")
     pending.photo = photo_name or pending.photo
     pending.photo_consent = consent
+    pending.listed = listed
     pending.sends = 1
     db.session.commit()
 
@@ -389,6 +394,7 @@ def verify():
         name=pending.name, email=pending.email, language=pending.language,
         photo=pending.photo,
         photo_consent=pending.photo_consent and bool(pending.photo),
+        listed=pending.listed,
         available_days=pending.available_days,
         time_window=pending.time_window)
     db.session.add(volunteer)
@@ -706,6 +712,10 @@ def settings(token):
         volunteer.time_window = (window if window in
                                  current_app.config["TIME_WINDOWS"]
                                  else "anytime")
+        # Whether their name appears on the champions page. Both directions
+        # work: somebody who joined anonymously can ask to be credited later,
+        # and somebody listed can step back out.
+        volunteer.listed = not request.form.get("anonymous")
         # Saving settings is also a way back: someone who paused and then
         # changed their days plainly means to carry on.
         volunteer.active = True

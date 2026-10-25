@@ -33,6 +33,12 @@ class Volunteer(db.Model):
     photo = db.Column(db.String(255))
     photo_consent = db.Column(db.Boolean, default=False, nullable=False)
 
+    # Whether this person's name appears on the champions page. Their answers
+    # count either way - this is about credit, not participation. Default True
+    # because everyone who signed up before the choice existed is already
+    # listed, and quietly hiding them would be the surprising change.
+    listed = db.Column(db.Boolean, default=True, nullable=False)
+
     # Weekdays the volunteer chose, as "0,2,4" (Monday = 0). Empty means any.
     available_days = db.Column(db.String(20), default="", nullable=False)
     time_window = db.Column(db.String(20), default="anytime", nullable=False)
@@ -144,6 +150,9 @@ class PendingSignup(db.Model):
     time_window = db.Column(db.String(20), default="anytime", nullable=False)
     photo = db.Column(db.String(255))
     photo_consent = db.Column(db.Boolean, default=False, nullable=False)
+    # Carried through verification so the choice made on the form is the one
+    # the volunteer is created with.
+    listed = db.Column(db.Boolean, default=True, nullable=False)
 
     # Both vestigial: sign-up used to carry a list of chosen projects and
     # possibly one to pin. Nothing is chosen now - a volunteer offers a
@@ -578,6 +587,7 @@ def ensure_columns():
 
     wanted = {
         "volunteers": {"paused_until": "DATE",
+                       "listed": "BOOLEAN NOT NULL DEFAULT 1",
                        "missed_in_a_row": "INTEGER NOT NULL DEFAULT 0",
                        "nudged_on": "DATE",
                        "backoff_days": "INTEGER NOT NULL DEFAULT 0",
@@ -586,6 +596,7 @@ def ensure_columns():
         "word_state": {"skips": "INTEGER NOT NULL DEFAULT 0",
                        "problem": "BOOLEAN NOT NULL DEFAULT 0"},
         "pending_signups": {"project_ids": "VARCHAR(200) NOT NULL DEFAULT ''",
+                            "listed": "BOOLEAN NOT NULL DEFAULT 1",
                             "exclusive_project_id": "INTEGER"},
         "words": {"project_id": "INTEGER",
                   "language": "VARCHAR(20)",

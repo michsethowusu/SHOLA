@@ -66,6 +66,19 @@
         </div>
       </div>
 
+      <div class="field">
+        <h2 style="font-size:1.05rem;margin:0 0 8px">Credit</h2>
+        <label class="choice">
+          <input type="checkbox" name="anonymous" value="1"
+                 {% if not volunteer.listed %}checked{% endif %}>
+          <span class="t">Contribute anonymously</span>
+          <span class="s">Your name stays off the
+            <a href="{{ url_for('main.champions') }}">champions page</a>.
+            Your answers count exactly the same either way, and you can change
+            this whenever you like.</span>
+        </label>
+      </div>
+
       <button class="btn" type="submit">Save changes</button>
     </form>
 

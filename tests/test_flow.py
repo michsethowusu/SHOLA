@@ -515,7 +515,7 @@ def main():
 
     r = fresh.get("/w/not-a-real-token", follow_redirects=True)
     ok &= check("a junk link sends you to get a new one",
-                r.status_code == 200 and b"Request a link" in r.data)
+                r.status_code == 200 and b"Log in" in r.data)
 
     r = nocookie.post(f"/w/{token}/{wid}", data={"choice": "custom",
                                                  "custom_text": ""},

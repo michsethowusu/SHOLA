@@ -176,11 +176,18 @@ def record_verdict(volunteer, word_id, candidate_id=None, custom_text=None,
 
 
 def leaderboard(limit=50):
-    """SHOLA Champions, most verdicts first."""
+    """SHOLA Champions, most verdicts first.
+
+    Anyone who chose to contribute without being named is left out. Their
+    answers still count everywhere else - in the progress figures, in the
+    published data, towards settling an item. What they opted out of is the
+    credit, not the work.
+    """
     rows = (db.session.query(Volunteer,
                              func.count(Evaluation.id).label("n"))
             .outerjoin(Evaluation, Evaluation.volunteer_id == Volunteer.id)
             .filter(Volunteer.active.is_(True))
+            .filter(Volunteer.listed.is_(True))
             .group_by(Volunteer.id)
             .order_by(func.count(Evaluation.id).desc(), Volunteer.joined_at)
             .limit(limit)

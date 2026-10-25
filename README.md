@@ -229,6 +229,27 @@ do; `send-daily` reports them as waiting. That page is reachable only by
 somebody in that position, so it cannot become a way to switch language
 casually.
 
+## Credit is a choice
+
+A volunteer can contribute without being named. The choice is on the sign-up
+form and again in their settings, and it works in both directions: somebody who
+joined anonymously can ask to be credited later, and somebody listed can step
+back out.
+
+`Volunteer.listed` holds it, positively, because every query that reads it is
+asking "is this person listed?". It affects one thing — whether their name
+appears on the champions page. Their answers are recorded, count towards
+settling an item, and reach the published data exactly as anyone else's. What
+they opted out of is the credit, not the work.
+
+It defaults to listed. Everyone who signed up before the choice existed is
+already on the board, and quietly removing them would be the surprising change.
+
+The footer says **Log in** rather than "Request a link". It is the same page and
+there is still no password: it emails the signed link, which opens today's words
+and the settings. "Request a link" described the mechanism; people were looking
+for the word they know.
+
 ## Setup
 
 ```bash
