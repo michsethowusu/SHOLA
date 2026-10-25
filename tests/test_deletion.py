@@ -85,7 +85,10 @@ def main():
         check("the row survives", gone is not None)
         check("their email is gone",
               "bye@example.com" not in gone.email, gone.email)
-        check("their name is gone", gone.name == "", repr(gone.name))
+        check("their name is gone", "Leaving Person" not in gone.name,
+              repr(gone.name))
+        check("replaced by something that says what happened",
+              gone.name == f"deleted_account_{vid}", repr(gone.name))
         check("they are marked erased", gone.deleted_at is not None)
         check("and no longer listed anywhere", gone.listed is False)
         check("no record anywhere holds the address",
@@ -100,6 +103,15 @@ def main():
               str(tally(wid, "twi")["voters"]))
         check("and the wording is still published",
               "nsuo" in tally(wid, "twi")["ranked"][0]["text"])
+
+    print("\nBut they stop being counted as a volunteer")
+    with app.app_context():
+        from shola.models import site_stats
+        stats = site_stats()
+        check("the deleted account is not in the count",
+              stats["volunteers"] == 1, str(stats["volunteers"]))
+        check("while their answer is still in the total",
+              stats["verdicts"] == 2, str(stats["verdicts"]))
 
     print("\nThe link is dead")
     r = client.get(f"/w/{token}", follow_redirects=False)

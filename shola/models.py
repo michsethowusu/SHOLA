@@ -94,12 +94,15 @@ class Volunteer(db.Model):
         row survives and the person does not - every identifying field is
         cleared, and the link stops working.
 
-        The email column is unique and not nullable, so it cannot simply be
-        emptied; it becomes a value that matches nobody and lets them sign up
-        again later with the same address if they want to.
+        The name and email become `deleted_account_<id>` rather than empty.
+        Both columns are not nullable and the email is unique, so they cannot
+        simply be cleared - and a blank name reads as a broken row wherever it
+        surfaces, in an export or an admin view, while this one says plainly
+        what happened to it. The address no longer matches theirs, so they can
+        sign up again later with the same one.
         """
-        self.email = f"erased-{self.id}@removed.invalid"
-        self.name = ""
+        self.email = f"deleted_account_{self.id}@removed.invalid"
+        self.name = f"deleted_account_{self.id}"
         self.photo = None
         self.photo_consent = False
         self.listed = False

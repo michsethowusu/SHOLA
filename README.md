@@ -275,10 +275,22 @@ name anyway — the open API serves wordings and how many speakers agreed, with
 no field that points at a person. So there is nothing to erase from it.
 
 `Volunteer.erase()` does the clearing. The row survives, because the answers
-hang off it. The email becomes `erased-<id>@removed.invalid` rather than empty:
-the column is unique and not nullable, and the placeholder frees their real
-address to sign up again later. Their photo is deleted from disk, and words
-they were holding go back to the queue.
+hang off it. Name and email become `deleted_account_<id>`: neither column is
+nullable, the email is unique, and a blank name reads as a broken row wherever
+it surfaces — in an export, in an admin view — while this one says plainly what
+happened to it. Their real address is freed, so they can sign up again later.
+Their photo is deleted from disk, and words they were holding go back to the
+queue.
+
+The counting follows from `active`, not from `listed`:
+
+- **Somebody who stays off the leaderboard is still a volunteer.** They are in
+  the volunteer count, in the per-language recruitment figures, and their
+  answers are in the totals. The leaderboard is the only thing their choice
+  touches.
+- **A deleted account is not.** It drops out of the volunteer count, because
+  there is nobody there any more — but every answer it gave stays in the
+  totals and in the published data.
 
 Deletion is typed, not ticked — `confirm=delete` — because it is the one thing
 on that page that cannot be undone and the controls around it are reversible.

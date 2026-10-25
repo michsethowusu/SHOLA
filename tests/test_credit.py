@@ -69,6 +69,14 @@ def main():
               "Quiet One" not in names, str(names))
         check("everybody else still is", "Named One" in names, str(names))
 
+        print("\nThey are still counted as a volunteer")
+        from shola.models import site_stats
+        stats = site_stats()
+        check("both people are in the volunteer count",
+              stats["volunteers"] == 2, str(stats["volunteers"]))
+        check("and every answer is in the total",
+              stats["verdicts"] == 5, str(stats["verdicts"]))
+
         print("\nTheir work still counts")
         check("their answers are recorded",
               shy.evaluations.count() == 4, str(shy.evaluations.count()))
