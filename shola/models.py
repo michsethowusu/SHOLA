@@ -54,6 +54,11 @@ class Volunteer(db.Model):
     # break does not depend on remembering to come back.
     paused_until = db.Column(db.Date)
 
+    # When they asked to be erased. The row stays because their answers hang
+    # off it and deleting it would take those with them; what goes is every
+    # field that says who they were. See erase().
+    deleted_at = db.Column(db.DateTime)
+
     # Consecutive sends that went unanswered. Not a penalty - words are never
     # held against anyone - just the signal that their schedule is wrong for
     # them, so we can offer a lighter one.
@@ -79,6 +84,29 @@ class Volunteer(db.Model):
     def paused(self):
         """True while a pause is running."""
         return bool(self.paused_until and self.paused_until > date.today())
+
+    def erase(self):
+        """Forget who this volunteer was, and keep what they contributed.
+
+        Their answers are not theirs to withdraw in the sense that matters: an
+        item they helped settle was settled, other people's answers are counted
+        against theirs, and the published data has no name on it anyway. So the
+        row survives and the person does not - every identifying field is
+        cleared, and the link stops working.
+
+        The email column is unique and not nullable, so it cannot simply be
+        emptied; it becomes a value that matches nobody and lets them sign up
+        again later with the same address if they want to.
+        """
+        self.email = f"erased-{self.id}@removed.invalid"
+        self.name = ""
+        self.photo = None
+        self.photo_consent = False
+        self.listed = False
+        self.active = False
+        self.paused_until = None
+        self.available_days = ""
+        self.deleted_at = datetime.utcnow()
 
     @property
     def receiving(self):
@@ -587,6 +615,7 @@ def ensure_columns():
 
     wanted = {
         "volunteers": {"paused_until": "DATE",
+                       "deleted_at": "DATETIME",
                        "listed": "BOOLEAN NOT NULL DEFAULT 1",
                        "missed_in_a_row": "INTEGER NOT NULL DEFAULT 0",
                        "nudged_on": "DATE",

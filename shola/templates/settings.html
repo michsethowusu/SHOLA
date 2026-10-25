@@ -125,6 +125,30 @@
     </div>
     {% endif %}
 
+    <div class="card" style="margin-top:34px; text-align:left">
+      <h2 style="font-size:1.05rem;margin:0 0 8px">Delete your account</h2>
+      <p class="muted" style="margin-top:0">
+        This removes your name and email from our records for good. It cannot
+        be undone, and your link will stop working.
+      </p>
+      <p class="muted">
+        The translations you confirmed stay in the shared data. They were never
+        published under your name — the open data carries the wordings and how
+        many speakers agreed, and nothing that points back to a person. If you
+        only want the emails to stop, use <strong>Stop sending me
+        anything</strong> above instead; that one you can undo.
+      </p>
+      <form method="post" style="margin-top:14px">
+        <input type="hidden" name="action" value="delete">
+        <div class="field">
+          <label for="confirm">Type <strong>delete</strong> to confirm</label>
+          <input type="text" id="confirm" name="confirm" autocomplete="off"
+                 placeholder="delete">
+        </div>
+        <button class="btn ghost" type="submit">Delete my account</button>
+      </form>
+    </div>
+
     {% if volunteer.active and not volunteer.paused %}
       <p class="hint" style="margin-top:30px">
         <a href="{{ url_for('main.evaluate', token=token) }}">Back to your

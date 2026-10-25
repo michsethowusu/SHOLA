@@ -58,6 +58,10 @@ def volunteer_from_token(token, require_active=True):
     volunteer = db.session.get(Volunteer, vid)
     if not volunteer:
         return None
+    # Erased for good. Unlike stopping, this one is not reversible from the
+    # link: there is nobody left for the link to belong to.
+    if volunteer.deleted_at:
+        return None
     if require_active and not volunteer.active:
         return None
     return volunteer
@@ -760,6 +764,34 @@ def settings(token):
                                 volunteer.id, released)
         flash("Stopped. No more emails. This link still works if you change "
               "your mind.", "ok")
+
+    elif action == "delete":
+        # Typed, not ticked. This is the one thing on the page that cannot be
+        # undone, and a checkbox is too close to the others around it.
+        if (request.form.get("confirm") or "").strip().lower() != "delete":
+            flash("Type the word delete to confirm, or use Stop instead.",
+                  "error")
+            return redirect(url_for("main.settings", token=token))
+
+        # The photo is a file on disk, not a column, so it has to go too.
+        if volunteer.photo:
+            try:
+                (Path(current_app.config["UPLOAD_DIR"])
+                 / volunteer.photo).unlink(missing_ok=True)
+            except OSError as exc:
+                current_app.logger.warning("could not remove photo %s: %s",
+                                           volunteer.photo, exc)
+        # Words they were holding go back to the queue.
+        volunteer.assignments.filter(Assignment.status == "pending").update(
+            {"status": "expired"}, synchronize_session=False)
+        volunteer.erase()
+        db.session.commit()
+        current_app.logger.info("volunteer %s erased", volunteer.id)
+        session.clear()
+        flash("Your account is deleted. Your name and email are gone from our "
+              "records. The translations you confirmed stay in the shared "
+              "data, where they were never attached to your name.", "ok")
+        return redirect(url_for("main.index"))
 
     return redirect(url_for("main.settings", token=token))
 

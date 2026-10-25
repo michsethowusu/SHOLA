@@ -250,6 +250,32 @@ there is still no password: it emails the signed link, which opens today's words
 and the settings. "Request a link" described the mechanism; people were looking
 for the word they know.
 
+## Deleting an account
+
+A volunteer can delete their account from their settings. It clears their name
+and email and stops the link working. It keeps their answers.
+
+That split is deliberate. An item they helped settle was settled; other
+people's answers were counted against theirs, and withdrawing their votes would
+change results that are not theirs alone. The published data never carried a
+name anyway — the open API serves wordings and how many speakers agreed, with
+no field that points at a person. So there is nothing to erase from it.
+
+`Volunteer.erase()` does the clearing. The row survives, because the answers
+hang off it. The email becomes `erased-<id>@removed.invalid` rather than empty:
+the column is unique and not nullable, and the placeholder frees their real
+address to sign up again later. Their photo is deleted from disk, and words
+they were holding go back to the queue.
+
+Deletion is typed, not ticked — `confirm=delete` — because it is the one thing
+on that page that cannot be undone and the controls around it are reversible.
+Stopping remains the reversible option, and says so.
+
+`flask shola erase-volunteer --email <address>` does the same thing for
+somebody who asked by email. It exists because a volunteer who has lost their
+link cannot reach the settings page, and "we cannot delete you unless you can
+log in" is not an answer.
+
 ## Setup
 
 ```bash

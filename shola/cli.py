@@ -855,6 +855,52 @@ def add_options_cmd(path, source, yes):
     click.echo(f"Added {added:,} options as {source!r}.")
 
 
+@shola_cli.command("erase-volunteer")
+@click.option("--email", required=True, help="The address that asked to go.")
+@click.option("--yes", is_flag=True, help="Do it, rather than showing first.")
+def erase_volunteer_cmd(email, yes):
+    """Forget a volunteer who asked by email rather than through the site.
+
+    The same erasure the settings page performs. It exists because somebody
+    who has lost their link cannot reach that page, and "we cannot delete you
+    unless you can log in" is not an answer.
+
+    Their answers stay. The published data never carried a name, an item they
+    helped settle was still settled, and withdrawing their votes would change
+    other people's results.
+    """
+    from .models import Assignment, Volunteer
+
+    volunteer = Volunteer.query.filter_by(email=email).first()
+    if volunteer is None:
+        raise click.ClickException(f"Nobody is signed up as {email!r}.")
+    if volunteer.deleted_at:
+        click.echo(f"Already erased on {volunteer.deleted_at:%Y-%m-%d}.")
+        return
+
+    answers = volunteer.evaluations.count()
+    click.echo(f"{volunteer.name or '(no name)'} <{volunteer.email}>")
+    click.echo(f"  joined   {volunteer.joined_at:%Y-%m-%d}"
+               if volunteer.joined_at else "  joined   ?")
+    click.echo(f"  language {volunteer.language}")
+    click.echo(f"  answers  {answers:,}  (kept)")
+    if not yes:
+        click.echo("\nRe-run with --yes to erase the name and address.")
+        return
+
+    if volunteer.photo:
+        path = Path(current_app.config["UPLOAD_DIR"]) / volunteer.photo
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            click.echo(f"  could not remove the photo: {exc}", err=True)
+    (volunteer.assignments.filter(Assignment.status == "pending")
+     .update({"status": "expired"}, synchronize_session=False))
+    volunteer.erase()
+    db.session.commit()
+    click.echo(f"Erased. {answers:,} answers kept, now attached to nobody.")
+
+
 @shola_cli.command("drop-language")
 @click.option("--code", multiple=True,
               help="Language code to withdraw. Repeat for several.")
