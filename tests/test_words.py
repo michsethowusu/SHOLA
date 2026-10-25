@@ -311,6 +311,19 @@ def main():
         code = app.test_client().get(path).status_code
         ok &= check(f"{path} is gone", code in (404, 302, 403), f"HTTP {code}")
 
+    # The privacy page states facts about the system, so they have to hold.
+    print("\nthe privacy page")
+    client = app.test_client()
+    r = client.get("/privacy")
+    ok &= check("it answers", r.status_code == 200, f"HTTP {r.status_code}")
+    body = r.data.decode()
+    ok &= check("the footer links to it",
+                'href="/privacy"' in client.get("/").data.decode())
+    ok &= check("it gives somewhere to write to", "mailto:" in body)
+    ok &= check("and its claim of no trackers is true",
+                not any(w in body.lower() for w in
+                        ("gtag(", "analytics.js", "plausible.io", "matomo")))
+
     print("\n" + ("ALL CHECKS PASSED" if ok else "SOME CHECKS FAILED"))
     print(f"{sum(PASSED)}/{len(PASSED)} checks passed")
     return 0 if ok else 1

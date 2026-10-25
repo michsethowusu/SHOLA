@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}Privacy — SHOLA{% endblock %}
+
+{% block content %}
+<section class="section">
+  <div class="wrap narrow">
+    <p class="eyebrow">Privacy</p>
+    <h1 style="font-size:clamp(1.9rem,6vw,2.6rem)">What we hold, and what we publish</h1>
+    <p class="lede" style="max-width:56ch">
+      SHOLA collects as little as it can. There are no trackers, no analytics
+      and no advertising on this site.
+    </p>
+
+    <h2 style="margin-top:38px">What we ask you for</h2>
+    <ul class="muted" style="padding-left:20px">
+      <li><strong>Your email</strong> — to send you words, and to let you back
+        in. There is no password; the link in your email is how you log in.</li>
+      <li><strong>Your name</strong> — shown on the leaderboard beside the
+        number of items you have checked, unless you turn that off.</li>
+      <li><strong>Your language</strong>, and <strong>which days and what time
+        of day</strong> suit you — so words arrive when you can answer them.</li>
+      <li><strong>A photo</strong>, if you choose to add one. Optional, and
+        shown in one place only: the leaderboard.</li>
+    </ul>
+
+    <h2 style="margin-top:34px">What you give us by answering</h2>
+    <p class="muted">
+      Each answer records the item, the language, what you chose or typed, and
+      when. That is the point of the project — it is the data everyone is here
+      to build.
+    </p>
+
+    <h2 style="margin-top:34px">What is published</h2>
+    <p class="muted">
+      The translations and how many speakers agreed with each one, through an
+      open API and as a public dataset, under
+      <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank"
+         rel="noopener">CC BY-NC 4.0</a>.
+    </p>
+    <p class="muted">
+      <strong>The published data carries no names, no email addresses and no
+      identifiers of any kind.</strong> There is no field in it that points
+      back to a person. The only page where a contributor is named is the
+      <a href="{{ url_for('main.champions') }}">leaderboard</a>, and you can
+      keep yourself off it from your settings, at any time, in either
+      direction.
+    </p>
+
+    <h2 style="margin-top:34px">What we never do</h2>
+    <ul class="muted" style="padding-left:20px">
+      <li>No analytics, no tracking pixels, no advertising.</li>
+      <li>We do not sell your details, or share them for marketing.</li>
+      <li>One cookie, which remembers your link so the menu can offer a way
+        back to your words. Nothing else is stored in your browser.</li>
+    </ul>
+
+    <h2 style="margin-top:34px">Who else handles it</h2>
+    <ul class="muted" style="padding-left:20px">
+      <li><strong>Brevo</strong> delivers our email, so it processes your
+        address.</li>
+      <li><strong>Cloudflare</strong> sits in front of the site and sees the
+        IP addresses of visitors, as any website host does.</li>
+      <li><strong>Hugging Face</strong> hosts the machine-translation files.
+        Those are machine output and contain nothing about you.</li>
+    </ul>
+
+    <h2 style="margin-top:34px">How long we keep it</h2>
+    <p class="muted">
+      Until you delete your account. The database is backed up nightly to
+      off-site storage, so a copy may persist in backups for up to sixty days
+      after you go.
+    </p>
+
+    <h2 style="margin-top:34px">What you can do</h2>
+    <ul class="muted" style="padding-left:20px">
+      <li>Change your days, your time of day, or pause — from your settings.</li>
+      <li>Keep your name off the leaderboard, and put it back later.</li>
+      <li>Stop the emails without deleting anything.</li>
+      <li><strong>Delete your account.</strong> Your name and email are removed
+        from our records for good.</li>
+    </ul>
+    <p class="muted">
+      Deleting keeps the translations you confirmed. An item you helped settle
+      was settled, other speakers' answers were counted against yours, and
+      withdrawing them would change results that are not yours alone. Those
+      answers were never published under your name, so there is no name in them
+      to remove.
+    </p>
+
+    <h2 style="margin-top:34px">Asking us</h2>
+    <p class="muted">
+      Write to <a href="mailto:{{ config.MAIL_REPLY_TO }}">{{ config.MAIL_REPLY_TO }}</a>
+      for a copy of what we hold about you, to correct it, or to have your
+      account deleted if you cannot reach your settings.
+    </p>
+
+    <p class="hint" style="margin-top:34px">Last updated 25 October 2026.</p>
+  </div>
+</section>
+{% endblock %}

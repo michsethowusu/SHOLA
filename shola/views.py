@@ -191,6 +191,12 @@ def models_page():
                            projects=approved_projects())
 
 
+@main.route("/privacy")
+def privacy():
+    """What is held and what is published. Short, because little is held."""
+    return render_template("privacy.html")
+
+
 @main.route("/brand")
 def brand():
     """Media kit. Public on purpose: an influencer should not have to ask."""
